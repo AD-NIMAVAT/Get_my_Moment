@@ -39,13 +39,16 @@ logger = logging.getLogger("getmymoment")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager for startup and shutdown routines."""
-    logger.info("Initializing Get My Moment database and services...")
-    init_db()
+    try:
+        init_db()
+    except Exception as db_err:
+        logger.warning(f"Database initialization warning (will retry on demand): {db_err}")
+
     try:
         from apps.api.services.wireless_ingest import wireless_server
         wireless_server.start()
     except Exception as e:
-        logger.error(f"Could not auto-start wireless camera server: {e}")
+        logger.warning(f"Could not auto-start wireless camera server: {e}")
     logger.info("Get My Moment backend started successfully.")
     yield
     logger.info("Shutting down Get My Moment backend...")
