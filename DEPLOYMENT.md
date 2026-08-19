@@ -1,88 +1,60 @@
-# 🚀 Get My Moment — 1-Click Deployment Guide (Railway Backend + cPanel Frontend)
+# 🚀 Get My Moment — Cloud Deployment Guide (Railway Backend + Vercel Frontend)
 
 This guide provides the exact steps to deploy **Get My Moment** with:
-* **Backend API & AI Engine**: Hosted on **Railway** (`https://api.getmymoment.fun`)
-* **Frontend Web Application**: Hosted on **cPanel** (`https://getmymoment.fun` & `https://www.getmymoment.fun`)
+* **Backend API & AI Engine**: Hosted on **Railway** (`https://web-production-08582.up.railway.app`)
+* **Frontend Web Application**: Hosted on **Vercel** (`https://getmymoment.fun` & `https://www.getmymoment.fun`)
 
 ---
 
-## 📋 Architecture & DNS Routing Matrix
+## 📋 Architecture & DNS Routing Matrix (Hostinger / GoDaddy)
 
-| Domain / Subdomain | Target Service | DNS Record Type | DNS Value / Target |
+| Domain / Subdomain | Target Platform | DNS Record Type | Target / Value |
 | :--- | :--- | :---: | :--- |
-| **`api.getmymoment.fun`** | Railway (FastAPI + AI Engine) | **CNAME** | `<your-railway-cname>.up.railway.app` |
-| **`getmymoment.fun`** | cPanel (Next.js Web UI) | **A** | `YOUR_CPANEL_SERVER_IP` (e.g. `123.45.67.89`) |
-| **`www.getmymoment.fun`** | cPanel Alias | **CNAME** | `getmymoment.fun` |
+| **`getmymoment.fun`** | Vercel (Next.js Frontend) | **A** | `76.76.21.21` |
+| **`www.getmymoment.fun`** | Vercel Alias | **CNAME** | `cname.vercel-dns.com.` |
+| **`api.getmymoment.fun`** *(Optional)* | Railway Backend Alias | **CNAME** | `web-production-08582.up.railway.app` |
 
 ---
 
-## ⚡ STEP 1: Deploy Backend to Railway (2 Minutes)
-
-1. Push this repository to your GitHub account:
-   ```bash
-   git add .
-   git commit -m "feat: complete production readiness and railway configs for getmymoment.fun"
-   git push origin main
-   ```
-2. Log in to [railway.app](https://railway.app) using your GitHub account.
-3. Click **"New Project"** ➡️ Select **"Deploy from GitHub repo"** ➡️ Choose `Get_my_moment`.
-4. Railway will automatically detect the **`Dockerfile`** and start building.
-5. In your Railway Service:
-   * Go to **"Variables"** tab and add:
-     ```env
-     ENVIRONMENT=production
-     DATABASE_URL=sqlite:///./getmymoment.db
-     SECRET_KEY=your_production_secret_key_2026_change_me!
-     BACKEND_CORS_ORIGINS=["https://getmymoment.fun","https://www.getmymoment.fun","http://localhost:3000"]
-     PORT=8000
-     ```
-   * Go to **"Settings"** tab ➡️ Scroll to **"Networking"** ➡️ Click **"Custom Domain"** ➡️ Enter: `api.getmymoment.fun`.
-   * Railway will show you a CNAME record (e.g., `getmymoment-api-production.up.railway.app`).
-   * Add this CNAME in your Domain DNS (Hostinger / GoDaddy / Namecheap).
-6. Test Health Check:
-   Visit `https://api.getmymoment.fun/api/v1/health` in your browser. It will show:
-   `{"status": "healthy", "service": "Get My Moment API", ...}`
+## ⚡ STEP 1: Backend on Railway (ALREADY LIVE! ✅)
+* Live API Endpoint: `https://web-production-08582.up.railway.app/api/v1`
+* Live Health Check: `https://web-production-08582.up.railway.app/api/v1/health`
 
 ---
 
-## 🌐 STEP 2: Deploy Frontend on cPanel
+## 🌐 STEP 2: Deploy Frontend on Vercel (In 1 Minute)
 
-### Option A: Via cPanel "Setup Node.js App" (Recommended)
-1. Open cPanel ➡️ **"Software"** ➡️ **"Setup Node.js App"**.
-2. Click **"Create Application"**:
-   * **Node.js version**: `18.x` or `20.x`
-   * **Application mode**: `Production`
-   * **Application root**: `public_html`
-   * **Application URL**: `getmymoment.fun`
-   * **Application startup file**: `server.js`
-3. Upload the build files to `public_html`:
-   * `.next/`
-   * `public/`
-   * `package.json`
-   * `next.config.js`
-   * `server.js`
-   * `.env.production`
-4. Click **"Run NPM Install"** (if needed) and click **"RESTART"**.
-
-### Option B: Via cPanel AutoSSL
-1. In cPanel ➡️ **"Security"** ➡️ **"SSL/TLS Status"**.
-2. Select `getmymoment.fun` and `www.getmymoment.fun` and click **"Run AutoSSL"**.
+1. Log in to **[vercel.com](https://vercel.com)** with your GitHub account.
+2. Click **"Add New..."** ➡️ **"Project"**.
+3. Select your repository: **`AD-NIMAVAT/Get_my_Moment`** and click **Import**.
+4. In the **Configure Project** screen:
+   * **Framework Preset**: Next.js (automatically detected)
+   * **Root Directory**: Click **Edit** ➡️ Select **`apps/web`** ➡️ Click **Continue**.
+   * **Environment Variables**: Add the following:
+     | Name | Value |
+     | :--- | :--- |
+     | `NEXT_PUBLIC_API_URL` | `https://web-production-08582.up.railway.app/api/v1` |
+     | `NEXT_PUBLIC_APP_URL` | `https://getmymoment.fun` |
+5. Click **"Deploy"**!
+6. Vercel will build and launch your site in ~45 seconds.
 
 ---
 
-## 📱 STEP 3: Flutter Mobile App Sync
+## 🔗 STEP 3: Connect Your Domain (`getmymoment.fun`) on Vercel
 
-The Flutter mobile app (`apps/mobile_flutter`) is pre-configured to connect to `https://api.getmymoment.fun/api/v1`.
-
-To build APK:
-* Run the GitHub Action `.github/workflows/build_flutter_apk.yml` or run `flutter build apk --release`.
+1. In your Vercel Project ➡️ Go to **"Settings"** ➡️ **"Domains"**.
+2. Type `getmymoment.fun` and click **Add**.
+3. Vercel will prompt you to also add `www.getmymoment.fun` (recommended).
+4. In your DNS Provider (Hostinger DNS Table):
+   * Set **A Record** for `@` pointing to: `76.76.21.21`
+   * Set **CNAME Record** for `www` pointing to: `cname.vercel-dns.com.`
+5. Vercel will automatically issue a free SSL/TLS certificate!
 
 ---
 
 ## ✅ Deployment Verification Checklist
 
-- [ ] `https://api.getmymoment.fun/api/v1/health` returns `200 OK`.
-- [ ] `https://getmymoment.fun` loads home landing page.
-- [ ] Studio KYC signup at `https://getmymoment.fun/login` works.
-- [ ] Guest selfie matching and QR standee kiosk works.
-- [ ] 18% GST invoices and WhatsApp quotes generate properly.
+- [x] Backend API Health: `https://web-production-08582.up.railway.app/api/v1/health` returns `200 OK`
+- [ ] Vercel Frontend: `https://getmymoment.fun` loads landing page
+- [ ] Studio Registration & Login at `/login` connects to Railway API
+- [ ] Guest Selfie Search & QR Standee matching connects seamlessly

@@ -6,11 +6,19 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
+        hostname: 'web-production-08582.up.railway.app',
+      },
+      {
+        protocol: 'https',
         hostname: 'api.getmymoment.fun',
       },
       {
         protocol: 'https',
         hostname: 'getmymoment.fun',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.vercel.app',
       },
       {
         protocol: 'http',
