@@ -1,0 +1,5 @@
+# Folder watch uploader dependencies
+watchdog>=4.0.0
+requests>=2.31.0
+tqdm>=4.66.2
+pydantic>=2.6.0

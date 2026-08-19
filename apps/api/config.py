@@ -1,0 +1,93 @@
+"""
+Get My Moment - Configuration Settings
+"""
+
+from typing import List, Union
+from pydantic import AnyHttpUrl, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+import json
+import os
+
+
+class Settings(BaseSettings):
+    ENVIRONMENT: str = "development"
+    LOG_LEVEL: str = "info"
+    SECRET_KEY: str = "dev-secret-key-getmymoment-local-testing-token-2026-32chars"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    API_V1_PREFIX: str = "/api/v1"
+    
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "https://getmymoment.fun",
+        "https://www.getmymoment.fun",
+        "https://api.getmymoment.fun",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+    ]
+
+    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",")]
+        elif isinstance(v, str):
+            return json.loads(v)
+        return v
+
+    # Database
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/getmymoment"
+
+    # Redis & Celery
+    REDIS_URL: str = "redis://localhost:6379/0"
+    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
+
+    # Storage
+    STORAGE_DRIVER: str = "local"
+    STORAGE_LOCAL_ROOT: str = "./storage"
+    MAX_UPLOAD_SIZE_MB: int = 50
+    ALLOWED_EXTENSIONS: List[str] = ["jpg", "jpeg", "png", "webp"]
+
+    # Face Debug Crops (Privacy Protection: disabled by default)
+    FACE_DEBUG_CROPS_ENABLED: bool = False
+
+    # AI & Face Matching
+    AI_DETECTION_MODEL: str = "yunet"
+    AI_RECOGNITION_MODEL: str = "sface"
+    AI_DEVICE: str = "cpu"
+    AI_COSINE_SIMILARITY_THRESHOLD: float = 0.45
+
+    # Guest OTP Provider
+    OTP_PROVIDER: str = "mock"
+    OTP_EXPIRY_SECONDS: int = 300
+
+    # Payment Gateway & Subscription Billing
+    PAYMENT_GATEWAY: str = "razorpay"
+    PAYMENT_MODE: str = "test"  # test or live
+    RAZORPAY_KEY_ID: str = "rzp_test_GMM2026StudioPay"
+    RAZORPAY_KEY_SECRET: str = "secret_GMM2026StudioKeySec"
+    RAZORPAY_WEBHOOK_SECRET: str = "whsec_GMM2026WebhookSec"
+    
+    # Indian GST & Invoicing Settings
+    GST_RATE_PCT: float = 18.0
+    GST_PRICING_MODE: str = "inclusive"  # "inclusive" (MRP) or "exclusive"
+    SELLER_LEGAL_NAME: str = "Get My Moment Media Technologies Pvt Ltd"
+    SELLER_ADDRESS: str = "104, Royal Sapphire Hub, Surat - 395007, Gujarat, India"
+    SELLER_GSTIN: str = "24AAACG1234F1Z5"
+    SELLER_PAN: str = "AAACG1234F"
+    SELLER_STATE: str = "Gujarat"
+    SELLER_STATE_CODE: str = "24"
+    SELLER_SUPPORT_EMAIL: str = "billing@getmymoment.com"
+
+    # Public URLs
+    NEXT_PUBLIC_API_URL: str = "http://localhost:8000/api/v1"
+    NEXT_PUBLIC_APP_URL: str = "http://localhost:3000"
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
+
+
+settings = Settings()

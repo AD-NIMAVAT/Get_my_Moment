@@ -1,0 +1,129 @@
+# ===================================================================
+# Get My Moment - Comprehensive Master .gitignore
+# Covers Python, FastAPI, Next.js, Flutter, Databases & Environment
+# ===================================================================
+
+# --- Operating System & IDEs ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Environment & Secret Credentials ---
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
+!.env.production
+*.pem
+*.key
+*.cert
+*.p12
+*.keystore
+
+# --- Databases & SQLite Local Storage ---
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+getmymoment.db
+getmymoment_backup*.db
+
+# --- Storage & Uploaded Media (Preserve Structure, Ignore Files) ---
+storage/*
+!storage/.gitkeep
+storage/events/*
+!storage/events/.gitkeep
+storage/studios/*
+!storage/studios/.gitkeep
+data/wireless_incoming/*
+!data/wireless_incoming/.gitkeep
+data/uploads/*
+!data/uploads/.gitkeep
+
+# --- Python & Virtual Environments ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# --- Node.js & Next.js ---
+node_modules/
+apps/web/node_modules/
+.next/
+apps/web/.next/
+out/
+apps/web/out/
+.npm
+.yarn/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.turbo/
+
+# --- Flutter, Dart & Android Native ---
+apps/mobile_flutter/.dart_tool/
+apps/mobile_flutter/.flutter-plugins
+apps/mobile_flutter/.flutter-plugins-dependencies
+apps/mobile_flutter/.packages
+apps/mobile_flutter/build/
+apps/mobile_flutter/android/.gradle/
+apps/mobile_flutter/android/local.properties
+apps/mobile_flutter/android/app/build/
+apps/mobile_flutter/ios/.symlinks/
+apps/mobile_flutter/ios/Pods/
+apps/mobile_flutter/ios/Podfile.lock
+*.apk
+*.aab
+*.ipa
+
+# --- Temporary Test & Archive Artifacts ---
+*.log
+*.tmp
+*.bak
+*.zip
+*.tar
+*.gz
+*.rar
+*.7z

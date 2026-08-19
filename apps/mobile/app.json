@@ -1,0 +1,72 @@
+{
+  "expo": {
+    "name": "Get My Moment",
+    "slug": "get-my-moment",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "getmymoment",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F3F1EC"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.getmymoment.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Get My Moment needs camera access for AI selfie facial recognition and scanning event QR codes.",
+        "NSPhotoLibraryUsageDescription": "Get My Moment needs photo library access to save your matched photos to your device.",
+        "NSPhotoLibraryAddUsageDescription": "Get My Moment needs permission to save high-resolution event photos to your gallery."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F3F1EC"
+      },
+      "package": "com.getmymoment.app",
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Get My Moment to access your camera for selfie facial matching and QR scanning."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Get My Moment to save your photos to your camera roll.",
+          "savePhotosPermission": "Allow Get My Moment to save your photos to your camera roll."
+        }
+      ]
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "4551b941-76ee-423c-b066-7b2f7bee0567"
+      }
+    },
+    "owner": "aditya_144"
+  }
+}

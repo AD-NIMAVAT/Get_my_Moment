@@ -1,0 +1,440 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --primary: #E86A5B;
+    --primary-dark: #C94F43;
+    --secondary: #D9A441;
+    --accent: #F3A08F;
+    --bg: #F3F1EC;
+    --surface: #F3F1EC;
+    --text-primary: #1F1F1F;
+    --text-secondary: #6B6B6B;
+    --border: #E2DDD5;
+    --neu-shadow-dark: #D4D0C7;
+    --neu-shadow-light: #FFFFFF;
+    --success: #3FA66B;
+    --warning: #D99A2B;
+    --error: #D9534F;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    font-size: 16px;
+  }
+
+  body {
+    background-color: #F3F1EC;
+    color: #1F1F1F;
+    font-family: 'Poppins', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Poppins', system-ui, sans-serif;
+    color: #1F1F1F;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.25;
+  }
+
+  p, span, label, input, button {
+    letter-spacing: -0.01em;
+  }
+}
+
+/* ========================================================================= */
+/* Neomorphic Soft UI / Extruded Elevation System                            */
+/* ========================================================================= */
+
+.card-elevated, .neu-card, .glass-panel {
+  background: #F3F1EC;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 1.5rem;
+  box-shadow: 9px 9px 18px #D4D0C7, -9px -9px 18px #FFFFFF;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-elevated:hover, .neu-card-hover:hover, .glass-panel-hover:hover {
+  box-shadow: 12px 12px 24px #C8C4BB, -12px -12px 24px #FFFFFF;
+  transform: translateY(-2px);
+}
+
+.neu-raised {
+  background: #F3F1EC;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 1.5rem;
+  box-shadow: 12px 12px 24px #D0CCC3, -12px -12px 24px #FFFFFF;
+}
+
+.neu-flat {
+  background: #F3F1EC;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 6px 6px 12px #D8D4CB, -6px -6px 12px #FFFFFF;
+}
+
+/* Inset / Sunken Elements (Wells, Inputs, Search Bars, Selects) */
+.neu-inset, .gmm-input, .glass-input, .gmm-select, select, .neu-input, input[type="text"], input[type="email"], input[type="tel"], input[type="number"], input[type="date"], input[type="password"], textarea {
+  background: #EBE8E1;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 1rem;
+  box-shadow: inset 4px 4px 8px #D1CDC4, inset -4px -4px 8px #FFFFFF;
+  color: #1F1F1F;
+  font-size: 0.875rem;
+  padding: 0.75rem 1rem;
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  display: block;
+}
+
+select, .gmm-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23E86A5B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1rem;
+  padding-right: 2.5rem;
+  cursor: pointer;
+}
+
+select option {
+  background-color: #F3F1EC;
+  color: #1F1F1F;
+  font-weight: 600;
+  padding: 0.75rem;
+}
+
+.neu-inset:focus, .gmm-input:focus, .glass-input:focus, select:focus, .gmm-select:focus, .neu-input:focus, input:focus, textarea:focus {
+  box-shadow: inset 4px 4px 8px #D1CDC4, inset -4px -4px 8px #FFFFFF, 0 0 0 2px rgba(232, 106, 91, 0.45);
+  border-color: rgba(232, 106, 91, 0.6);
+}
+
+/* Elegant Custom Scrollbar for Modals & Grids */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #EBE8E1;
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #D4D0C7;
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #E86A5B;
+}
+
+/* ========================================================================= */
+/* Neomorphic Buttons & Interactive Controls                                 */
+/* ========================================================================= */
+
+.btn-primary, .neu-btn-primary {
+  background: linear-gradient(145deg, #F07465, #D95748);
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 0.875rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 1rem;
+  box-shadow: 6px 6px 14px #D4D0C7, -6px -6px 14px #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.btn-primary:hover, .neu-btn-primary:hover {
+  background: linear-gradient(145deg, #F38578, #E26354);
+  box-shadow: 8px 8px 18px #CBC7BE, -8px -8px 18px #FFFFFF;
+  transform: translateY(-1px);
+}
+
+.btn-primary:active, .neu-btn-primary:active {
+  box-shadow: inset 3px 3px 6px #B84135, inset -3px -3px 6px #F88A7D;
+  transform: scale(0.98);
+}
+
+.btn-outline, .neu-btn-secondary {
+  background: #F3F1EC;
+  color: #E86A5B;
+  font-weight: 700;
+  font-size: 0.875rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 1rem;
+  box-shadow: 6px 6px 14px #D4D0C7, -6px -6px 14px #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.btn-outline:hover, .neu-btn-secondary:hover {
+  color: #C94F43;
+  box-shadow: 8px 8px 18px #CBC7BE, -8px -8px 18px #FFFFFF;
+  transform: translateY(-1px);
+}
+
+.btn-outline:active, .neu-btn-secondary:active {
+  box-shadow: inset 3px 3px 6px #D1CDC4, inset -3px -3px 6px #FFFFFF;
+  transform: scale(0.98);
+}
+
+.btn-secondary-gold, .neu-btn-gold {
+  background: linear-gradient(145deg, #E6B552, #CA9633);
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 0.875rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 1rem;
+  box-shadow: 6px 6px 14px #D4D0C7, -6px -6px 14px #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.btn-secondary-gold:hover, .neu-btn-gold:hover {
+  background: linear-gradient(145deg, #ECC063, #D49F3D);
+  box-shadow: 8px 8px 18px #CBC7BE, -8px -8px 18px #FFFFFF;
+  transform: translateY(-1px);
+}
+
+.btn-secondary-gold:active, .neu-btn-gold:active {
+  box-shadow: inset 3px 3px 6px #A67520, inset -3px -3px 6px #F5D38A;
+  transform: scale(0.98);
+}
+
+/* Tactile Icon Buttons */
+.neu-icon-btn {
+  background: #F3F1EC;
+  border-radius: 1rem;
+  box-shadow: 5px 5px 10px #D4D0C7, -5px -5px 10px #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+
+.neu-icon-btn:hover {
+  box-shadow: 7px 7px 14px #CBC7BE, -7px -7px 14px #FFFFFF;
+  transform: translateY(-1px);
+}
+
+.neu-icon-btn:active {
+  box-shadow: inset 3px 3px 6px #D1CDC4, inset -3px -3px 6px #FFFFFF;
+  transform: scale(0.96);
+}
+
+/* Tactile Badges & Pills */
+.neu-pill {
+  background: #F3F1EC;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 3px 3px 6px #D4D0C7, -3px -3px 6px #FFFFFF;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+}
+
+.neu-tab {
+  background: transparent;
+  color: #6B6B6B;
+  border-radius: 0.875rem;
+  padding: 0.6rem 1.2rem;
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.neu-tab-active {
+  background: #EBE8E1;
+  color: #E86A5B;
+  box-shadow: inset 3px 3px 6px #D1CDC4, inset -3px -3px 6px #FFFFFF;
+  border-radius: 0.875rem;
+  padding: 0.6rem 1.2rem;
+  font-weight: 700;
+}
+
+.gmm-input::placeholder, .glass-input::placeholder {
+  color: #8E8E8E;
+  font-weight: 400;
+}
+
+/* ========================================================================= */
+/* Micro-Animations & Keyframes                                              */
+/* ========================================================================= */
+
+@keyframes modalLuxurySmooth {
+  0% {
+    opacity: 0;
+    transform: scale(0.94) translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes backdropFadeSmooth {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes tabFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-modal, .animate-modal-smooth {
+  animation: modalLuxurySmooth 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: center center;
+  backface-visibility: hidden;
+  -webkit-font-smoothing: subpixel-antialiased;
+}
+
+.animate-backdrop, .animate-backdrop-smooth {
+  animation: backdropFadeSmooth 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-tab-fade {
+  animation: tabFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes toastSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateX(100%) translateY(10px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) translateY(0) scale(1);
+  }
+}
+
+@keyframes shimmerSweep {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-toast {
+  animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #F0EEEA 25%, #FAFAF8 50%, #F0EEEA 75%);
+  background-size: 200% 100%;
+  animation: shimmerSweep 1.8s infinite;
+}
+
+@keyframes bottomSheetSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-bottom-sheet {
+  animation: bottomSheetSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ========================================================================= */
+/* Mobile App Specific Touch & Safe Area Utilities                           */
+/* ========================================================================= */
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.touch-action-manipulation {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hide scrollbar for clean horizontal tab lists */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Mobile viewport content cushion for fixed bottom bar */
+@media (max-width: 767px) {
+  .mobile-app-container {
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 16px));
+  }
+}
+
+/* ========================================================================= */
+/* Custom Scrollbars                                                         */
+/* ========================================================================= */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #FAF9F7;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D8D4CE;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #C4BFB7;
+}
