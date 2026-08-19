@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
   Wifi, Camera, CheckCircle2, Copy, Check, Sparkles, 
   Smartphone, ShieldCheck, Radio, AlertCircle, RefreshCw, 
-  X, Zap, ExternalLink, HardDrive, UploadCloud 
+  X, Zap, ExternalLink, HardDrive, UploadCloud, Laptop, Terminal
 } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -31,6 +31,8 @@ export function WirelessCameraModal({
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [customIp, setCustomIp] = useState("192.168.31.37");
+  const [isEditingIp, setIsEditingIp] = useState(false);
   const [ingestedPhotos, setIngestedPhotos] = useState<Array<{ id: string; name: string; time: string; faces: number }>>([]);
   const [simulating, setSimulating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -46,6 +48,14 @@ export function WirelessCameraModal({
       setLoading(true);
       const data = await api.getWirelessCredentials(eventId);
       setCredentials(data);
+      if (data?.ftp_settings?.host) {
+        // If host is an internal cloud container IP (e.g. 10.x.x.x), default to standard local Wi-Fi subnet
+        if (data.ftp_settings.host.startsWith("10.") || data.ftp_settings.host.startsWith("172.")) {
+          setCustomIp("192.168.31.37");
+        } else {
+          setCustomIp(data.ftp_settings.host);
+        }
+      }
     } catch (e) {
       console.error("Could not load credentials", e);
     } finally {
@@ -69,7 +79,7 @@ export function WirelessCameraModal({
       Array.from(files).forEach((file) => {
         formData.append("files", file);
       });
-      formData.append("camera_model", `${selectedBrand.toUpperCase()} Wi-Fi Direct`);
+      formData.append("camera_model", `${selectedBrand.toUpperCase()} Live Ingest`);
 
       const result = await api.wirelessHttpIngest(eventId, formData);
       if (result) {
@@ -91,7 +101,7 @@ export function WirelessCameraModal({
 
   if (!isOpen) return null;
 
-  const serverIp = credentials?.ftp_settings?.host || "192.168.31.37";
+  const effectiveIp = customIp || credentials?.ftp_settings?.host || "192.168.31.37";
   const ftpPort = credentials?.ftp_settings?.port || 2121;
 
   return (
@@ -117,7 +127,7 @@ export function WirelessCameraModal({
               </h2>
               <span className="px-2.5 py-0.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                Wi-Fi FTP Active
+                Cloud Live Sync
               </span>
             </div>
             <p className="text-sm text-gray-400 mt-1">
@@ -131,19 +141,37 @@ export function WirelessCameraModal({
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
               <Radio className="w-4 h-4 text-purple-400" />
-              Camera FTP Wi-Fi Configuration
+              Camera Wi-Fi FTP Configuration
             </span>
-            <span className="text-xs text-gray-400 font-mono">Port: {ftpPort}</span>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setIsEditingIp(!isEditingIp)}
+                className="text-xs text-purple-400 hover:text-purple-300 underline font-medium"
+              >
+                {isEditingIp ? "Save IP" : "Change Wi-Fi IP"}
+              </button>
+              <span className="text-xs text-gray-400 font-mono">Port: {ftpPort}</span>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {/* Host IP */}
             <div className="bg-[#12101C] p-3 rounded-xl border border-gray-800">
-              <span className="text-[10px] text-gray-400 uppercase font-semibold">FTP Host / IP</span>
+              <span className="text-[10px] text-gray-400 uppercase font-semibold">FTP Host / Wi-Fi IP</span>
               <div className="flex items-center justify-between mt-1">
-                <span className="font-mono text-sm font-bold text-emerald-400">{serverIp}</span>
+                {isEditingIp ? (
+                  <input
+                    type="text"
+                    value={customIp}
+                    onChange={(e) => setCustomIp(e.target.value)}
+                    className="w-full bg-[#1A1827] border border-purple-500 rounded px-1.5 py-0.5 text-xs text-emerald-400 font-mono outline-none"
+                    placeholder="192.168.1.50"
+                  />
+                ) : (
+                  <span className="font-mono text-sm font-bold text-emerald-400">{effectiveIp}</span>
+                )}
                 <button
-                  onClick={() => copyToClipboard(serverIp, "host")}
+                  onClick={() => copyToClipboard(effectiveIp, "host")}
                   className="p-1 text-gray-400 hover:text-white"
                 >
                   {copiedField === "host" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -195,6 +223,40 @@ export function WirelessCameraModal({
           </div>
         </div>
 
+        {/* 1-Click Laptop Bridge Banner */}
+        <div className="bg-purple-900/20 border border-purple-500/30 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-300 shrink-0">
+              <Laptop className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                Shooting on Venue Wi-Fi / Hotspot?
+              </h4>
+              <p className="text-xs text-gray-300">
+                Run <code className="text-purple-300 font-mono bg-purple-950/60 px-1 py-0.5 rounded">start_camera_sync.bat</code> on your laptop to bridge Camera Wi-Fi straight into this cloud event.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-lg shadow-emerald-600/20"
+            >
+              <UploadCloud className="w-4 h-4" />
+              {simulating ? "Ingesting..." : "Direct Photo Upload"}
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleSimulateClick}
+              multiple
+              accept="image/*"
+              className="hidden"
+            />
+          </div>
+        </div>
+
         {/* Brand Selector Tabs */}
         <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
           <button
@@ -229,154 +291,106 @@ export function WirelessCameraModal({
           >
             🟡 Nikon Z (Z9 / Z8 / Z6)
           </button>
-
-          <button
-            onClick={() => setSelectedBrand("mobile_relay")}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
-              selectedBrand === "mobile_relay"
-                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/30"
-                : "bg-[#1C1A29] text-gray-400 hover:text-white border border-transparent"
-            }`}
-          >
-            📱 Pocket Phone 5G Relay
-          </button>
         </div>
 
-        {/* Setup Instructions Box */}
-        <div className="bg-[#171524] border border-[#2D2A40] rounded-2xl p-5 mb-6">
-          <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-            <Zap className="w-4 h-4 text-amber-400" />
-            Camera Menu Setup Guide:
-          </h4>
+        {/* Camera Setup Guide */}
+        <div className="bg-[#1A1827] border border-[#2F2C44] rounded-2xl p-5 mb-6">
+          <h3 className="text-sm font-bold text-purple-300 mb-3 flex items-center gap-2">
+            <Camera className="w-4 h-4" />
+            {selectedBrand === "sony" && "Sony Alpha Menu Setup Steps"}
+            {selectedBrand === "canon" && "Canon EOS Menu Setup Steps"}
+            {selectedBrand === "nikon" && "Nikon Z Menu Setup Steps"}
+          </h3>
+          
+          <ul className="space-y-2.5 text-xs text-gray-300">
+            {selectedBrand === "sony" && (
+              <>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-purple-400">1.</span>
+                  <span>Connect Sony Camera to your Laptop Hotspot / Event Wi-Fi.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-purple-400">2.</span>
+                  <span>Go to: <strong className="text-white">Menu ➡️ Network ➡️ [FTP Transfer] ➡️ [FTP Transfer Func.] ➡️ ON</strong>.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-purple-400">3.</span>
+                  <span>Select <strong className="text-white">[Server Setting 1]</strong> ➡️ Host: <code className="text-emerald-400 font-mono font-bold bg-black/40 px-1 py-0.5 rounded">{effectiveIp}</code> | Port: <code className="text-white font-mono bg-black/40 px-1 py-0.5 rounded">{ftpPort}</code>.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-purple-400">4.</span>
+                  <span>User: <code className="text-white font-mono">camera</code> | Pass: <code className="text-white font-mono">shoot123</code> | Passive Mode: <strong className="text-emerald-400">ON</strong>.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-purple-400">5.</span>
+                  <span>Set <strong className="text-white">[Auto FTP Transfer]</strong> to <strong className="text-emerald-400">ON</strong>. Every shutter press will instantly stream into the cloud gallery!</span>
+                </li>
+              </>
+            )}
 
-          {selectedBrand === "sony" && (
-            <ol className="space-y-2.5 text-xs text-gray-300">
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0">1</span>
-                <span>Connect your Sony camera to the same Wi-Fi router as this laptop (<code className="text-purple-300">Menu &gt; Network &gt; Wi-Fi</code>).</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0">2</span>
-                <span>Open: <code className="text-purple-300">Menu &gt; Network &gt; [FTP Transfer] &gt; [FTP Transfer Func.] &gt; ON</code>.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0">3</span>
-                <span>Select <code className="text-purple-300">Server Setting 1</code> &gt; Host: <code className="text-emerald-400 font-bold">{serverIp}</code> | Port: <code className="text-emerald-400 font-bold">{ftpPort}</code>.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0">4</span>
-                <span>User: <code className="text-purple-300 font-bold">camera</code> | Password: <code className="text-purple-300 font-bold">shoot123</code> | Passive Mode: <code className="text-purple-300">ON</code>.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0">5</span>
-                <span>Turn <code className="text-emerald-400 font-bold">[Auto FTP Transfer] to ON</code>. Every shutter click will now stream directly to this screen!</span>
-              </li>
-            </ol>
-          )}
+            {selectedBrand === "canon" && (
+              <>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-purple-400">1.</span>
+                  <span>Connect Canon camera to Wi-Fi (Menu ➡️ Communication settings ➡️ Wi-Fi).</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-purple-400">2.</span>
+                  <span>Go to: <strong className="text-white">[FTP transfer settings] ➡️ [Create New Connection]</strong>.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-purple-400">3.</span>
+                  <span>Target Host: <code className="text-emerald-400 font-mono font-bold bg-black/40 px-1 py-0.5 rounded">{effectiveIp}</code> | Port: <code className="text-white font-mono bg-black/40 px-1 py-0.5 rounded">{ftpPort}</code>.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-purple-400">4.</span>
+                  <span>User: <code className="text-white font-mono">camera</code> | Pass: <code className="text-white font-mono">shoot123</code>.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-purple-400">5.</span>
+                  <span>Enable <strong className="text-emerald-400">[Automatic transfer]</strong>. New clicks will stream instantly!</span>
+                </li>
+              </>
+            )}
 
-          {selectedBrand === "canon" && (
-            <ol className="space-y-2.5 text-xs text-gray-300">
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0">1</span>
-                <span>Connect Canon camera to Wi-Fi (<code className="text-purple-300">Menu &gt; Communication settings &gt; Wi-Fi</code>).</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0">2</span>
-                <span>Select <code className="text-purple-300">[FTP transfer] &gt; [Create New Connection] &gt; Target Host: {serverIp}</code> (Port {ftpPort}).</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0">3</span>
-                <span>Enter User: <code className="text-purple-300 font-bold">camera</code> | Password: <code className="text-purple-300 font-bold">shoot123</code>.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0">4</span>
-                <span>Set <code className="text-emerald-400 font-bold">[Automatic transfer] to ON</code>. High-res clicks will transfer in real-time.</span>
-              </li>
-            </ol>
-          )}
-
-          {selectedBrand === "nikon" && (
-            <ol className="space-y-2.5 text-xs text-gray-300">
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0">1</span>
-                <span>Open: <code className="text-purple-300">Network menu &gt; Connect to PC / FTP &gt; Add profile</code>.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0">2</span>
-                <span>Enter FTP Host: <code className="text-emerald-400 font-bold">{serverIp}</code> | Port: <code className="text-emerald-400 font-bold">{ftpPort}</code> | User: <code className="text-purple-300 font-bold">camera</code>.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0">3</span>
-                <span>Enable <code className="text-emerald-400 font-bold">[Auto send]</code>. Photos will stream seamlessly during shoot.</span>
-              </li>
-            </ol>
-          )}
-
-          {selectedBrand === "mobile_relay" && (
-            <ol className="space-y-2.5 text-xs text-gray-300">
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center shrink-0">1</span>
-                <span>Pair camera with your mobile phone using Sony Creators' Cloud or Canon Camera Connect.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center shrink-0">2</span>
-                <span>Keep your phone in your pocket with Mobile Data (5G/4G) ON.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center shrink-0">3</span>
-                <span>The Get My Moment App auto-syncs your field clicks directly into this wedding event!</span>
-              </li>
-            </ol>
-          )}
+            {selectedBrand === "nikon" && (
+              <>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-purple-400">1.</span>
+                  <span>Connect camera to Wi-Fi (Network menu ➡️ Connect to PC / FTP).</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-purple-400">2.</span>
+                  <span>Select <strong className="text-white">[FTP server] ➡️ [Add profile]</strong> ➡️ Host: <code className="text-emerald-400 font-mono font-bold bg-black/40 px-1 py-0.5 rounded">{effectiveIp}</code> | Port: <code className="text-white font-mono bg-black/40 px-1 py-0.5 rounded">{ftpPort}</code>.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-purple-400">3.</span>
+                  <span>User: <code className="text-white font-mono">camera</code> | Pass: <code className="text-white font-mono">shoot123</code>.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-purple-400">4.</span>
+                  <span>Turn ON <strong className="text-emerald-400">[Auto send]</strong>. Photos will transmit seamlessly in real-time.</span>
+                </li>
+              </>
+            )}
+          </ul>
         </div>
 
-        {/* Live Test Trigger / Field Ingest Simulation */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-gradient-to-r from-purple-900/30 to-indigo-900/20 border border-purple-500/20">
-          <div className="flex items-center gap-3">
-            <Camera className="w-5 h-5 text-purple-400" />
-            <div>
-              <h5 className="text-xs font-bold text-white">Test Wireless Shoot From This PC:</h5>
-              <p className="text-[11px] text-gray-400">Pick any photo from your hard drive to test live AI face matching pipeline.</p>
-            </div>
-          </div>
-
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleSimulateClick}
-            multiple
-            accept="image/*"
-            className="hidden"
-          />
-
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={simulating}
-            className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white flex items-center gap-2 shadow-lg shadow-purple-600/30 transition-all shrink-0"
-          >
-            <UploadCloud className="w-4 h-4" />
-            {simulating ? "Simulating Click..." : "Test Wireless Click"}
-          </button>
-        </div>
-
-        {/* Live Incoming Feed List */}
+        {/* Ingested Photos Live Log */}
         {ingestedPhotos.length > 0 && (
-          <div className="mt-6">
-            <h5 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-emerald-400" />
-              Live Ingest Stream ({ingestedPhotos.length} photos):
-            </h5>
-            <div className="space-y-2">
-              {ingestedPhotos.map((item) => (
-                <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-[#171524] border border-emerald-500/20">
-                  <div className="flex items-center gap-3">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span className="text-xs font-bold text-white">{item.name}</span>
-                    <span className="text-[10px] text-gray-400 font-mono">{item.time}</span>
+          <div className="bg-[#1A1827] border border-emerald-500/20 rounded-2xl p-4">
+            <h4 className="text-xs font-bold text-emerald-400 mb-2 flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4" />
+              Live Ingested Photos ({ingestedPhotos.length})
+            </h4>
+            <div className="space-y-1.5 max-h-36 overflow-y-auto">
+              {ingestedPhotos.map((p) => (
+                <div key={p.id} className="flex items-center justify-between text-xs py-1 px-2 rounded bg-black/30 text-gray-300">
+                  <span className="font-mono text-purple-300">{p.name}</span>
+                  <div className="flex items-center gap-3 text-gray-400 font-mono text-[11px]">
+                    <span>{p.time}</span>
+                    <span className="text-emerald-400 font-bold">{p.faces} faces</span>
                   </div>
-                  <span className="px-2 py-0.5 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 rounded-md border border-emerald-500/20">
-                    ✨ {item.faces} Faces AI Indexed
-                  </span>
                 </div>
               ))}
             </div>
