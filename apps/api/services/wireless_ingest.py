@@ -238,8 +238,23 @@ class WirelessCameraServerManager:
             handler.masquerade_address = tcp_domain
             logger.info(f"🌐 FTP Masquerade Address set to: {tcp_domain}")
 
+        # Bind FTP server with automatic fallback if port is in use
+        bound = False
+        target_port = self.port
+        for p in [target_port, 2121, 2122, 2125]:
+            try:
+                self.server = FTPServer((self.host, p), handler)
+                self.port = p
+                bound = True
+                break
+            except Exception as e:
+                logger.warning(f"Could not bind FTP on {self.host}:{p} ({e}). Trying next port...")
+
+        if not bound:
+            logger.error("Could not bind Wireless Camera FTP on any port.")
+            return
+
         try:
-            self.server = FTPServer((self.host, self.port), handler)
             self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
             self.thread.start()
             self.is_running = True
