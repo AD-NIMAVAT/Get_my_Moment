@@ -62,7 +62,19 @@ def get_camera_credentials(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    server_ip = get_local_ip()
+    # Dynamic Public Host Detection (Railway TCP Proxy / Custom Domain / Local LAN)
+    tcp_domain = os.environ.get("RAILWAY_TCP_PROXY_DOMAIN")
+    tcp_port = os.environ.get("RAILWAY_TCP_PROXY_PORT")
+    
+    if tcp_domain and tcp_port:
+        server_ip = tcp_domain
+        server_port = int(tcp_port)
+    elif os.environ.get("FTP_PUBLIC_HOST"):
+        server_ip = os.environ.get("FTP_PUBLIC_HOST")
+        server_port = int(os.environ.get("FTP_PUBLIC_PORT", 2121))
+    else:
+        server_ip = get_local_ip()
+        server_port = wireless_server.port
 
     # Automatically bind incoming camera shoots to this event
     wireless_server.set_active_event_id(event.id)
@@ -80,7 +92,7 @@ def get_camera_credentials(
         "access_token": event.access_token,
         "ftp_settings": {
             "host": server_ip,
-            "port": wireless_server.port,
+            "port": server_port,
             "username": "camera",
             "password": "shoot123",
             "anonymous_allowed": True,
