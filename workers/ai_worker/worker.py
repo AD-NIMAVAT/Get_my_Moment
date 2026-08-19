@@ -6,7 +6,6 @@ import os
 import logging
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
-from celery import Celery
 from sqlalchemy.orm import Session
 from apps.api.config import settings
 from apps.api.database import SessionLocal, get_db_session
@@ -17,26 +16,31 @@ from packages.shared.constants import PhotoStatus
 
 logger = logging.getLogger(__name__)
 
-# Local background threadpool for instant non-blocking execution when Redis/Celery is offline
+# Local background threadpool for instant non-blocking execution
 local_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="photo_worker")
 
-# Initialize Celery app
-celery_app = Celery(
-    "getmymoment_worker",
-    broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND,
-)
-
-celery_app.conf.update(
-    task_serializer="json",
-    accept_content=["json"],
-    result_serializer="json",
-    timezone="UTC",
-    enable_utc=True,
-    task_track_started=True,
-    broker_connection_timeout=0.2,
-    broker_connection_retry_on_startup=False,
-)
+# Graceful Celery initialization (optional: falls back to ThreadPoolExecutor if Celery/Redis is not installed)
+try:
+    from celery import Celery
+    HAS_CELERY = True
+    celery_app = Celery(
+        "getmymoment_worker",
+        broker=settings.CELERY_BROKER_URL,
+        backend=settings.CELERY_RESULT_BACKEND,
+    )
+    celery_app.conf.update(
+        task_serializer="json",
+        accept_content=["json"],
+        result_serializer="json",
+        timezone="UTC",
+        enable_utc=True,
+        task_track_started=True,
+        broker_connection_timeout=0.2,
+        broker_connection_retry_on_startup=False,
+    )
+except ImportError:
+    HAS_CELERY = False
+    celery_app = None
 
 
 def run_photo_pipeline(photo_id: str, event_id: str, db_override: Optional[Session] = None):
@@ -123,14 +127,12 @@ def run_photo_pipeline(photo_id: str, event_id: str, db_override: Optional[Sessi
             db.close()
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=10)
-def process_photo_task(self, photo_id: str, event_id: str, db_override: Optional[Session] = None):
-    try:
-        return run_photo_pipeline(photo_id, event_id, db_override=db_override)
-    except Exception as exc:
-        if hasattr(self, "retry"):
-            raise self.retry(exc=exc)
-        raise exc
+# Task wrapper
+def process_photo_task(photo_id: str, event_id: str, db_override: Optional[Session] = None):
+    return run_photo_pipeline(photo_id, event_id, db_override=db_override)
+
+if celery_app is not None:
+    process_photo_task = celery_app.task(bind=True, max_retries=3, default_retry_delay=10)(process_photo_task)
 
 
 def dispatch_photo_processing(photo_id: str, event_id: str, db: Optional[Session] = None):
