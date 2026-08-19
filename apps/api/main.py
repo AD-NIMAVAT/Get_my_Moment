@@ -44,11 +44,18 @@ async def lifespan(app: FastAPI):
     except Exception as db_err:
         logger.warning(f"Database initialization warning (will retry on demand): {db_err}")
 
-    try:
-        from apps.api.services.wireless_ingest import wireless_server
-        wireless_server.start()
-    except Exception as e:
-        logger.warning(f"Could not auto-start wireless camera server: {e}")
+    def delayed_start_wireless():
+        try:
+            import time
+            time.sleep(2.0)
+            from apps.api.services.wireless_ingest import wireless_server
+            wireless_server.start()
+        except Exception as e:
+            logger.warning(f"Could not auto-start wireless camera server: {e}")
+
+    import threading
+    threading.Thread(target=delayed_start_wireless, daemon=True).start()
+
     logger.info("Get My Moment backend started successfully.")
     yield
     logger.info("Shutting down Get My Moment backend...")
