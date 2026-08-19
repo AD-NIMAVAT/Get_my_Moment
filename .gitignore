@@ -67,17 +67,17 @@ ENV/
 env.bak/
 venv.bak/
 build/
+# Python build artifacts
 develop-eggs/
 dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
 parts/
 sdist/
 var/
 wheels/
+!apps/web/src/lib/
 *.egg-info/
 .installed.cfg
 *.egg
