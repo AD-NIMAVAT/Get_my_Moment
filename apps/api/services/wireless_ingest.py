@@ -232,6 +232,12 @@ class WirelessCameraServerManager:
         handler.authorizer = authorizer
         handler.banner = "Get My Moment Wireless Camera Ingest Ready"
 
+        # Configure public masquerade address for cloud TCP proxy NAT traversal
+        tcp_domain = os.environ.get("RAILWAY_TCP_PROXY_DOMAIN", os.environ.get("FTP_PUBLIC_HOST"))
+        if tcp_domain:
+            handler.masquerade_address = tcp_domain
+            logger.info(f"🌐 FTP Masquerade Address set to: {tcp_domain}")
+
         try:
             self.server = FTPServer((self.host, self.port), handler)
             self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
