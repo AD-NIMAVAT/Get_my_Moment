@@ -238,10 +238,13 @@ class WirelessCameraServerManager:
             handler.masquerade_address = tcp_domain
             logger.info(f"🌐 FTP Masquerade Address set to: {tcp_domain}")
 
-        # Bind FTP server with automatic fallback if port is in use
+        # Exclude HTTP API PORT from FTP ports to prevent binding collision
+        http_port = int(os.environ.get("PORT", 8000))
+        target_port = self.port if self.port != http_port else 2122
+        candidate_ports = [target_port] + [p for p in [2121, 2122, 2125, 2120] if p != http_port and p != target_port]
+
         bound = False
-        target_port = self.port
-        for p in [target_port, 2121, 2122, 2125]:
+        for p in candidate_ports:
             try:
                 self.server = FTPServer((self.host, p), handler)
                 self.port = p
