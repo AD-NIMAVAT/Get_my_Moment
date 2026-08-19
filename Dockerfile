@@ -33,4 +33,4 @@ RUN mkdir -p /app/storage /app/data/wireless_incoming
 EXPOSE 8000 2121
 
 # Start FastAPI Application with dynamic Railway PORT binding
-CMD ["sh", "-c", "uvicorn apps.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["python", "run.py"]

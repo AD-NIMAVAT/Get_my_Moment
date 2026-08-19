@@ -34,8 +34,15 @@ class Settings(BaseSettings):
             return json.loads(v)
         return v
 
-    # Database
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/getmymoment"
+    # Database (Defaults to SQLite for instant plug-and-play, or PostgreSQL if DATABASE_URL is set)
+    DATABASE_URL: str = "sqlite:///./getmymoment.db"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def fix_postgres_prefix(cls, v: str) -> str:
+        if isinstance(v, str) and v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql://", 1)
+        return v
 
     # Redis & Celery
     REDIS_URL: str = "redis://localhost:6379/0"
