@@ -181,7 +181,7 @@ class WirelessCameraServerManager:
 
     def __init__(self, host: str = "0.0.0.0", port: int = 2121):
         self.host = host
-        self.port = port
+        self.port = int(os.environ.get("FTP_PORT", port))
         self.server: Optional[FTPServer] = None
         self.thread: Optional[threading.Thread] = None
         self.watcher_thread: Optional[threading.Thread] = None
