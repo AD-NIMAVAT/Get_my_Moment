@@ -15,8 +15,8 @@ export function Navbar() {
   const { user, logout } = useAuth();
   const { admin, logout: adminLogout } = useAdminAuth();
 
-  // 1. Hide Navbar on Guest Experience Pages & Client Selection Portals
-  if (pathname.startsWith('/e/') || pathname.startsWith('/selection/')) {
+  // 1. Hide Navbar on Guest Experience Pages, Client Selection Portals & Crew Mobile Portals
+  if (pathname.startsWith('/e/') || pathname.startsWith('/selection/') || pathname.startsWith('/crew')) {
     return null;
   }
 

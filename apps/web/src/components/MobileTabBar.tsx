@@ -15,6 +15,7 @@ export function MobileTabBar() {
     pathname.startsWith('/e/') || 
     pathname.startsWith('/selection/') || 
     pathname.startsWith('/admin') ||
+    pathname.startsWith('/crew') ||
     pathname === '/login' ||
     pathname === '/' ||
     !user
