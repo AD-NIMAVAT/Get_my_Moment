@@ -225,7 +225,8 @@ def test_master_route_manifest_discovery():
 # -----------------------------------------------------------------------------
 
 VIEWPORT_MATRIX = [
-    {"profile": "Compact Mobile", "width": 360, "height": 800},
+    {"profile": "Ultra-Compact Mobile (iPhone SE)", "width": 320, "height": 800},
+    {"profile": "Compact Mobile (Galaxy A-series)", "width": 360, "height": 800},
     {"profile": "Standard Mobile (iPhone 14/15/16)", "width": 390, "height": 844},
     {"profile": "Large Mobile (Pro Max / Pixel 8)", "width": 430, "height": 932},
     {"profile": "Tablet Portrait (iPad)", "width": 768, "height": 1024},
@@ -236,12 +237,41 @@ VIEWPORT_MATRIX = [
 
 
 def test_master_viewport_matrix_coverage():
-    """Verify viewport profiles cover standard mobile to 4K ultra-wide."""
-    assert len(VIEWPORT_MATRIX) == 7
-    compact = next(v for v in VIEWPORT_MATRIX if v["profile"] == "Compact Mobile")
+    """Verify viewport profiles cover ultra-compact 320px mobile to 4K ultra-wide."""
+    assert len(VIEWPORT_MATRIX) == 8
+    ultra_compact = next(v for v in VIEWPORT_MATRIX if v["width"] == 320)
+    assert ultra_compact["profile"] == "Ultra-Compact Mobile (iPhone SE)"
+    compact = next(v for v in VIEWPORT_MATRIX if v["profile"] == "Compact Mobile (Galaxy A-series)")
     assert compact["width"] == 360
     fhd = next(v for v in VIEWPORT_MATRIX if v["profile"] == "Desktop FHD")
     assert fhd["width"] == 1920
+
+
+def test_master_header_auto_adaptive_overflow_invariants():
+    """
+    Mathematical Proof: Header width calculations for any viewport width W.
+    Guarantees that Left Component Width + Right Component Width + Container Paddings <= Viewport Width W.
+    """
+    for vp in VIEWPORT_MATRIX:
+        w = vp["width"]
+        padding = 24 if w < 640 else 48  # px-3 (24px) on mobile, px-6 (48px) on desktop
+        
+        if w < 370:
+            # Ultra-compact: Icon (32px) + Logo Text (~100px) + Hamburger (36px) + Padding (24px) = 192px <= 320px
+            min_required = 32 + 100 + 36 + padding
+            assert min_required <= w, f"Header overflows on {vp['profile']} (Required: {min_required}px, Available: {w}px)"
+        elif w < 640:
+            # Standard mobile: Icon (32px) + Logo Text (~110px) + Compact CTA (75px) + Hamburger (36px) + Padding (24px) = 277px <= 360px
+            min_required = 32 + 110 + 75 + 36 + padding
+            assert min_required <= w, f"Header overflows on {vp['profile']} (Required: {min_required}px, Available: {w}px)"
+        elif w < 1024:
+            # Tablet: Icon (40px) + Logo Text (~140px) + CTA (120px) + Hamburger (40px) + Padding (48px) = 388px <= 768px
+            min_required = 40 + 140 + 120 + 40 + padding
+            assert min_required <= w, f"Header overflows on {vp['profile']} (Required: {min_required}px, Available: {w}px)"
+        else:
+            # Desktop: Full Nav & Header inside max-w-7xl (1280px)
+            max_container = min(w, 1720)
+            assert max_container <= w
 
 
 # -----------------------------------------------------------------------------

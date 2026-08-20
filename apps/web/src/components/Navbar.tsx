@@ -74,17 +74,17 @@ export function Navbar() {
   if (pathname.startsWith('/admin')) {
     if (pathname === '/admin/login') {
       return (
-        <header className="sticky top-0 z-50 w-full bg-[#F3F1EC]/95 backdrop-blur-md border-b border-[#E2DDD5] shadow-[0_4px_16px_#D4D0C7] text-[#1F1F1F]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shadow-[4px_4px_10px_#D4D0C7,-4px_-4px_10px_#FFFFFF]">
-                <KeyRound className="w-5 h-5 stroke-[2.5]" />
+        <header className="sticky top-0 z-50 w-full max-w-full bg-[#F3F1EC]/95 backdrop-blur-md border-b border-[#E2DDD5] shadow-[0_4px_16px_#D4D0C7] text-[#1F1F1F] box-border">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shadow-[4px_4px_10px_#D4D0C7,-4px_-4px_10px_#FFFFFF] shrink-0">
+                <KeyRound className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
               </div>
-              <div className="flex flex-col">
-                <span className="font-display font-extrabold text-lg tracking-tight text-[#1F1F1F] leading-none">
+              <div className="flex flex-col min-w-0">
+                <span className="font-display font-extrabold text-base sm:text-lg tracking-tight text-[#1F1F1F] leading-none truncate">
                   Get My Moment
                 </span>
-                <span className="text-[10px] font-bold tracking-widest text-[#E86A5B] uppercase mt-0.5">
+                <span className="text-[9px] sm:text-[10px] font-bold tracking-widest text-[#E86A5B] uppercase mt-0.5 truncate">
                   Super Admin Gateway
                 </span>
               </div>
@@ -92,10 +92,10 @@ export function Navbar() {
 
             <Link
               href="/"
-              className="text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F] flex items-center gap-1.5 px-3.5 py-2 rounded-xl neu-btn-secondary"
+              className="text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F] flex items-center gap-1 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl neu-btn-secondary shrink-0"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Main Site</span>
+              <span>Back Home</span>
             </Link>
           </div>
         </header>
@@ -104,30 +104,30 @@ export function Navbar() {
 
     // Inside Admin Dashboard
     return (
-      <header className="sticky top-0 z-50 w-full bg-[#F3F1EC]/95 backdrop-blur-md border-b border-[#E2DDD5] shadow-[0_4px_16px_#D4D0C7] text-[#1F1F1F]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link href="/admin/dashboard" className="flex items-center gap-3 group">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shadow-[4px_4px_10px_#D4D0C7,-4px_-4px_10px_#FFFFFF] group-hover:scale-105 transition-all">
-              <ShieldCheck className="w-5 h-5 stroke-[2.5]" />
+      <header className="sticky top-0 z-50 w-full max-w-full bg-[#F3F1EC]/95 backdrop-blur-md border-b border-[#E2DDD5] shadow-[0_4px_16px_#D4D0C7] text-[#1F1F1F] box-border">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
+          <Link href="/admin/dashboard" className="flex items-center gap-2.5 sm:gap-3 group min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shadow-[4px_4px_10px_#D4D0C7,-4px_-4px_10px_#FFFFFF] group-hover:scale-105 transition-all shrink-0">
+              <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
             </div>
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                <span className="font-display font-extrabold text-lg tracking-tight text-[#1F1F1F] leading-none">
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="font-display font-extrabold text-sm sm:text-lg tracking-tight text-[#1F1F1F] leading-none truncate">
                   Get My Moment
                 </span>
-                <span className="px-2 py-0.5 rounded-full bg-[#E86A5B]/15 text-[#E86A5B] text-[10px] font-bold border border-[#E86A5B]/30 neu-pill">
+                <span className="px-1.5 py-0.5 rounded-full bg-[#E86A5B]/15 text-[#E86A5B] text-[8px] sm:text-[10px] font-bold border border-[#E86A5B]/30 neu-pill shrink-0">
                   SUPER ADMIN
                 </span>
               </div>
-              <span className="text-[10px] font-bold tracking-widest text-[#6B6B6B] uppercase mt-0.5">
+              <span className="text-[8px] sm:text-[10px] font-bold tracking-widest text-[#6B6B6B] uppercase mt-0.5 truncate">
                 Platform Owner &amp; Master Control
               </span>
             </div>
           </Link>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
             {admin && (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -135,22 +135,23 @@ export function Navbar() {
                       window.dispatchEvent(new CustomEvent('open-vault-modal'));
                     }
                   }}
-                  className="px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 cursor-pointer neu-btn-secondary border border-[#E86A5B]/35 text-[#E86A5B] hover:bg-[#E86A5B]/10 hover:border-[#E86A5B]/60 shadow-[2px_2px_5px_#D4D0C7,-2px_-2px_5px_#FFFFFF] hover:scale-105 active:scale-95"
+                  className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1 cursor-pointer neu-btn-secondary border border-[#E86A5B]/35 text-[#E86A5B] hover:bg-[#E86A5B]/10 hover:border-[#E86A5B]/60 shadow-[2px_2px_5px_#D4D0C7,-2px_-2px_5px_#FFFFFF] hover:scale-105 active:scale-95"
                 >
                   <Lock className="w-3.5 h-3.5 text-[#E86A5B]" />
-                  <span>Gateway &amp; Bank Vault</span>
+                  <span className="hidden sm:inline">Gateway &amp; Bank Vault</span>
+                  <span className="sm:hidden">Vault</span>
                 </button>
-                <div className="hidden sm:flex flex-col text-right">
+                <div className="hidden md:flex flex-col text-right">
                   <span className="text-xs font-bold text-[#1F1F1F]">{admin.email}</span>
                   <span className="text-[10px] font-bold text-[#E86A5B] tracking-wider">PLATFORM OWNER</span>
                 </div>
                 <button
                   onClick={adminLogout}
-                  className="px-3.5 py-2 rounded-xl text-rose-600 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer neu-icon-btn"
+                  className="p-2 sm:px-3.5 sm:py-2 rounded-xl text-rose-600 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer neu-icon-btn"
                   title="Logout Super Admin"
                 >
                   <LogOut className="w-3.5 h-3.5" />
-                  <span>Admin Logout</span>
+                  <span className="hidden sm:inline">Admin Logout</span>
                 </button>
               </div>
             )}
@@ -160,33 +161,33 @@ export function Navbar() {
     );
   }
 
-  // 6. FLOATING LUXURY GLASSMORPHIC HEADER
+  // 6. AUTO-ADAPTIVE FLOATING LUXURY GLASSMORPHIC HEADER
   return (
     <>
       <header 
-        className={`sticky top-0 z-50 w-full transition-all duration-300 ${
+        className={`sticky top-0 z-50 w-full max-w-full box-border transition-all duration-300 ${
           isScrolled 
             ? 'py-2 bg-[#F3F1EC]/95 backdrop-blur-xl border-b border-[#E2DDD5] shadow-[0_10px_30px_rgba(0,0,0,0.06),0_4px_16px_#D4D0C7]' 
-            : 'py-3 sm:py-4 bg-[#F3F1EC]/85 backdrop-blur-md border-b border-[#E2DDD5]/60'
+            : 'py-2.5 sm:py-3.5 bg-[#F3F1EC]/85 backdrop-blur-md border-b border-[#E2DDD5]/60'
         }`}
       >
-        <div className="max-w-7xl 2xl:max-w-[1500px] 3xl:max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-10 flex items-center justify-between gap-4">
-          {/* Brand Logo */}
-          <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-2.5 sm:gap-3 group shrink-0 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-[#EE7E6F] via-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shadow-[3px_3px_8px_#D4D0C7,-3px_-3px_8px_#FFFFFF] group-hover:scale-105 transition-all duration-300 shrink-0">
+        <div className="max-w-7xl 2xl:max-w-[1500px] 3xl:max-w-[1720px] mx-auto px-3 sm:px-6 lg:px-10 flex items-center justify-between gap-2 sm:gap-4 box-border">
+          {/* Brand Logo Area (Auto-Truncating & Fluid) */}
+          <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-2 sm:gap-2.5 group shrink-0 min-w-0 max-w-[65%] sm:max-w-none">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-[#EE7E6F] via-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shadow-[3px_3px_8px_#D4D0C7,-3px_-3px_8px_#FFFFFF] group-hover:scale-105 transition-all duration-300 shrink-0">
               <Camera className="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2.5]" />
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="font-display font-extrabold text-base sm:text-lg tracking-tight text-[#1F1F1F] leading-none truncate">
+              <span className="font-display font-extrabold text-sm sm:text-base lg:text-lg tracking-tight text-[#1F1F1F] leading-none truncate">
                 Get My Moment
               </span>
-              <span className="text-[8px] sm:text-[10px] font-bold tracking-widest text-[#E86A5B] uppercase mt-0.5 truncate">
-                STUDIO OS &amp; AI DELIVERY
+              <span className="text-[7.5px] sm:text-[9px] lg:text-[10px] font-bold tracking-widest text-[#E86A5B] uppercase mt-0.5 truncate">
+                STUDIO OS &amp; AI
               </span>
             </div>
           </Link>
 
-          {/* Desktop Navigation Links */}
+          {/* Desktop Navigation Links (Hidden on mobile/tablet, shown on lg+) */}
           <nav className="hidden lg:flex items-center gap-1 text-sm font-semibold text-[#1F1F1F]">
             {user ? (
               /* Logged In Studio Links */
@@ -241,7 +242,7 @@ export function Navbar() {
               <>
                 <Link 
                   href="/" 
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                     pathname === '/' && !pathname.includes('#') 
                       ? 'text-[#E86A5B] font-extrabold' 
                       : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
@@ -251,31 +252,31 @@ export function Navbar() {
                 </Link>
                 <Link 
                   href="/#how-it-works" 
-                  className="px-3.5 py-2 rounded-xl text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F] transition-all"
+                  className="px-3 py-2 rounded-xl text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F] transition-all"
                 >
                   How It Works
                 </Link>
                 <Link 
                   href="/#business-os" 
-                  className="px-3.5 py-2 rounded-xl text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F] transition-all"
+                  className="px-3 py-2 rounded-xl text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F] transition-all"
                 >
                   Business OS
                 </Link>
                 <Link 
                   href="/#pricing" 
-                  className="px-3.5 py-2 rounded-xl text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F] transition-all"
+                  className="px-3 py-2 rounded-xl text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F] transition-all"
                 >
                   Pricing
                 </Link>
                 <Link 
                   href="/#faq" 
-                  className="px-3.5 py-2 rounded-xl text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F] transition-all"
+                  className="px-3 py-2 rounded-xl text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F] transition-all"
                 >
                   FAQs
                 </Link>
                 <Link 
                   href="/about" 
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                     pathname === '/about' ? 'text-[#E86A5B]' : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
                   }`}
                 >
@@ -283,7 +284,7 @@ export function Navbar() {
                 </Link>
                 <Link 
                   href="/contact" 
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                     pathname === '/contact' ? 'text-[#E86A5B]' : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
                   }`}
                 >
@@ -293,56 +294,65 @@ export function Navbar() {
             )}
           </nav>
 
-          {/* Right Side Header CTAs & Actions */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Right Side Header CTAs & Actions (Auto-Adaptive Layout) */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             {user ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <Link
                   href="/dashboard/profile"
-                  className="flex items-center gap-1.5 sm:gap-2 text-xs font-bold text-[#1F1F1F] hover:text-[#E86A5B] transition-all px-3 py-2 rounded-2xl bg-[#F3F1EC] shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF] border border-white/60 group"
+                  className="flex items-center gap-1.5 text-xs font-bold text-[#1F1F1F] hover:text-[#E86A5B] transition-all px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl bg-[#F3F1EC] shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF] border border-white/60 group"
                   title="Studio Profile & Subscription Plan"
                 >
-                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#E86A5B] to-[#C94F43] text-white flex items-center justify-center text-[11px] font-extrabold shadow-sm shrink-0">
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-br from-[#E86A5B] to-[#C94F43] text-white flex items-center justify-center text-[10px] sm:text-[11px] font-extrabold shadow-sm shrink-0">
                     {user.studio_name ? user.studio_name.charAt(0).toUpperCase() : 'S'}
                   </div>
-                  <span className="hidden sm:inline font-bold max-w-[120px] truncate">{user.studio_name}</span>
-                  <span className="sm:hidden font-bold text-xs">Profile</span>
+                  <span className="hidden sm:inline font-bold max-w-[100px] truncate">{user.studio_name}</span>
+                  <span className="sm:hidden font-bold text-[11px]">Profile</span>
                 </Link>
                 <button
                   onClick={logout}
                   title="Sign Out"
-                  className="hidden sm:flex text-xs p-2.5 rounded-xl text-[#6B6B6B] hover:text-rose-600 font-semibold transition-all items-center gap-1.5 cursor-pointer neu-icon-btn shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF]"
+                  className="hidden sm:flex text-xs p-2 sm:px-3 sm:py-2 rounded-xl text-[#6B6B6B] hover:text-rose-600 font-semibold transition-all items-center gap-1.5 cursor-pointer neu-icon-btn shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF]"
                 >
                   <LogOut className="w-3.5 h-3.5" />
-                  <span>Sign Out</span>
+                  <span className="hidden md:inline">Sign Out</span>
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                {/* Secondary CTA: Find My Photos / Live Demo */}
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {/* Secondary CTA: Find My Photos (Desktop only) */}
                 <button
                   onClick={() => setIsDemoModalOpen(true)}
-                  className="hidden md:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-[#E86A5B] bg-[#E86A5B]/10 hover:bg-[#E86A5B]/15 border border-[#E86A5B]/20 transition-all cursor-pointer shadow-sm active:scale-95"
+                  className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-[#E86A5B] bg-[#E86A5B]/10 hover:bg-[#E86A5B]/15 border border-[#E86A5B]/20 transition-all cursor-pointer shadow-sm active:scale-95"
                 >
                   <Search className="w-3.5 h-3.5 text-[#E86A5B]" />
                   <span>Find My Photos</span>
                 </button>
 
-                {/* Secondary CTA: Sign In Link */}
+                {/* Secondary CTA: Sign In Link (Desktop & Tablet only) */}
                 <Link
                   href="/login"
-                  className="hidden sm:inline-flex text-xs font-bold text-[#1F1F1F] hover:text-[#E86A5B] transition-colors px-3 py-2"
+                  className="hidden sm:inline-flex text-xs font-bold text-[#1F1F1F] hover:text-[#E86A5B] transition-colors px-2.5 py-1.5"
                 >
                   Sign In
                 </Link>
 
-                {/* Primary CTA: Get Started / Start Free */}
+                {/* Primary CTA: Adaptive Button */}
+                {/* 1. Large screens: "Get Started →" */}
                 <Link
                   href="/login?mode=signup"
-                  className="btn-primary py-2 px-4 sm:px-5 text-xs sm:text-sm font-bold shadow-[3px_3px_8px_#D4D0C7,-3px_-3px_8px_#FFFFFF] whitespace-nowrap active:scale-95"
+                  className="hidden sm:inline-flex btn-primary py-1.5 px-3.5 sm:py-2 sm:px-4 text-xs sm:text-sm font-bold shadow-[3px_3px_8px_#D4D0C7,-3px_-3px_8px_#FFFFFF] whitespace-nowrap active:scale-95 items-center gap-1.5"
                 >
                   <span>Get Started</span>
                   <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+
+                {/* 2. Standard Mobile (>= 370px): Compact "Start Free" Pill */}
+                <Link
+                  href="/login?mode=signup"
+                  className="inline-flex min-[370px]:inline-flex sm:hidden btn-primary py-1.5 px-2.5 text-[11px] font-bold whitespace-nowrap shadow-sm active:scale-95"
+                >
+                  Start Free
                 </Link>
               </div>
             )}
@@ -350,14 +360,14 @@ export function Navbar() {
             {/* Universal Mobile Hamburger Menu Button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2.5 rounded-2xl text-[#1F1F1F] neu-icon-btn shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF] cursor-pointer active:scale-95"
+              className="lg:hidden p-2 sm:p-2.5 rounded-xl sm:rounded-2xl text-[#1F1F1F] neu-icon-btn shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF] cursor-pointer active:scale-95 shrink-0"
               aria-label={mobileMenuOpen ? 'Close Navigation Menu' : 'Open Navigation Menu'}
               aria-expanded={mobileMenuOpen}
             >
               {mobileMenuOpen ? (
-                <X className="w-5 h-5 text-[#E86A5B]" />
+                <X className="w-4 h-4 sm:w-5 sm:h-5 text-[#E86A5B]" />
               ) : (
-                <Menu className="w-5 h-5" />
+                <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
               )}
             </button>
           </div>
@@ -366,7 +376,7 @@ export function Navbar() {
         {/* Mobile Slide-Down Drawer */}
         {mobileMenuOpen && (
           <div 
-            className="lg:hidden border-t border-[#E2DDD5] bg-[#F3F1EC] px-4 pt-4 pb-8 space-y-3 shadow-2xl animate-in slide-in-from-top-3 duration-200 max-h-[85vh] overflow-y-auto"
+            className="lg:hidden border-t border-[#E2DDD5] bg-[#F3F1EC] px-4 pt-4 pb-8 space-y-2.5 shadow-2xl animate-in slide-in-from-top-3 duration-200 max-h-[85vh] overflow-y-auto box-border"
             role="dialog"
             aria-modal="true"
             aria-label="Mobile Navigation Menu"

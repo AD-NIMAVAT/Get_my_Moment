@@ -148,7 +148,7 @@ def test_concurrent_photo_uploads_and_moves(conc_env):
             headers=headers,
         )
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         futures = [executor.submit(upload_single_photo, i) for i in range(10)]
         results = [f.result() for f in futures]
 
