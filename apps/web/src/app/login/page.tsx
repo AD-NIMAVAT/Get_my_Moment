@@ -232,9 +232,15 @@ function LoginForm() {
         </div>
       )}
 
-      {/* LOGIN FORM */}
+      {/* LOGIN FORM (Standard Credential Autofill Enabled for Google Password Manager) */}
       {mode === 'login' && (
-        <form onSubmit={handleSubmit} className="space-y-4" name="login_form" id="login_form" method="POST">
+        <form 
+          name="login_form" 
+          id="login_form" 
+          method="POST" 
+          onSubmit={handleSubmit} 
+          className="space-y-4"
+        >
           <div>
             <label htmlFor="email" className="block text-xs font-bold text-[#1F1F1F] mb-1.5">
               Email Address *
@@ -246,7 +252,7 @@ function LoginForm() {
                 name="email"
                 type="email"
                 required
-                autoComplete="username"
+                autoComplete="username email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="photographer@studio.com"
