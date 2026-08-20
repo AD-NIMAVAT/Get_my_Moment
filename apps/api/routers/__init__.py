@@ -19,12 +19,14 @@ from apps.api.routers.crew import router as crew_router
 from apps.api.routers.wireless import router as wireless_router
 from apps.api.routers.subscription import router as subscription_router
 from apps.api.routers.client_billing import router as client_billing_router
+from apps.api.routers.folders import router as folders_router
 from apps.api.routers.contact import router as contact_router
 from apps.api.routers import chunked_uploads
 
 __all__ = [
     "auth_router",
     "events_router",
+    "folders_router",
     "photos_router",
     "guest_router",
     "matching_router",

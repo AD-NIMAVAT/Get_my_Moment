@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from apps.api.database import get_db
-from apps.api.models import Event, Photo, Ceremony
+from apps.api.models import Event, Photo, Ceremony, Folder
 from packages.shared.constants import PhotoStatus
 
 router = APIRouter(prefix="/selection", tags=["Client Album Selection & Proofing"])
@@ -28,6 +28,7 @@ class ClientSelectionResponse(BaseModel):
     selected_count: int
     is_submitted: bool
     ceremonies: List[dict]
+    folders: List[dict] = []
     photos: List[dict]
 
 
@@ -42,10 +43,14 @@ def get_client_selection_gallery(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid selection link.")
 
     ceremonies = db.query(Ceremony).filter(Ceremony.event_id == event.id).order_by(Ceremony.order_index.asc()).all()
-    photos = db.query(Photo).filter(Photo.event_id == event.id, Photo.status == PhotoStatus.INDEXED.value).all()
+    folders = db.query(Folder).filter(Folder.event_id == event.id, Folder.deleted_at.is_(None)).order_by(Folder.order_index.asc()).all()
+    photos = db.query(Photo).filter(
+        Photo.event_id == event.id,
+        Photo.is_deleted == False
+    ).all()
 
     selected_count = sum(1 for p in photos if p.is_client_selected)
-    is_submitted = event.settings.get("album_selection_submitted", False)
+    is_submitted = event.settings.get("album_selection_submitted", False) if event.settings else False
 
     return ClientSelectionResponse(
         event_id=event.id,
@@ -63,11 +68,24 @@ def get_client_selection_gallery(
             }
             for c in ceremonies
         ],
+        folders=[
+            {
+                "id": f.id,
+                "name": f.name,
+                "slug": f.slug,
+                "icon": f.icon,
+                "color": f.color,
+                "photo_count": f.photo_count,
+            }
+            for f in folders
+        ],
         photos=[
             {
                 "id": p.id,
                 "original_file_name": p.original_file_name,
                 "ceremony_id": p.ceremony_id,
+                "folder_id": p.folder_id,
+                "folder_name": p.folder.name if p.folder else None,
                 "is_client_selected": p.is_client_selected,
                 "client_comment": p.client_comment,
                 "is_guest_uploaded": p.is_guest_uploaded,

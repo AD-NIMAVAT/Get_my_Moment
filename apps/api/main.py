@@ -110,6 +110,7 @@ from apps.api.routers import (
     health_router,
     auth_router,
     events_router,
+    folders_router,
     photos_router,
     guest_router,
     matching_router,
@@ -132,6 +133,7 @@ from apps.api.routers import (
 app.include_router(health_router, prefix=settings.API_V1_PREFIX)
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(events_router, prefix=settings.API_V1_PREFIX)
+app.include_router(folders_router, prefix=settings.API_V1_PREFIX)
 app.include_router(photos_router, prefix=settings.API_V1_PREFIX)
 app.include_router(chunked_uploads.router, prefix=settings.API_V1_PREFIX)
 app.include_router(guest_router, prefix=settings.API_V1_PREFIX)

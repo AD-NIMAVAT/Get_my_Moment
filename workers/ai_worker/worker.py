@@ -104,8 +104,10 @@ def run_photo_pipeline(photo_id: str, event_id: str, db_override: Optional[Sessi
             )
             db.add(face_embedding_record)
 
-        photo.status = PhotoStatus.PROCESSED.value
-        photo.error_message = None
+        db.query(Photo).filter(Photo.id == photo_id).update(
+            {"status": PhotoStatus.PROCESSED.value, "error_message": None},
+            synchronize_session=False
+        )
         db.commit()
         logger.info(f"Successfully processed photo {photo_id}: {len(faces)} faces indexed.")
         return {"status": "success", "photo_id": photo_id, "faces_count": len(faces)}
@@ -114,11 +116,11 @@ def run_photo_pipeline(photo_id: str, event_id: str, db_override: Optional[Sessi
         db.rollback()
         logger.error(f"Error processing photo {photo_id}: {exc}", exc_info=True)
         try:
-            photo = db.query(Photo).filter(Photo.id == photo_id).first()
-            if photo:
-                photo.status = PhotoStatus.FAILED.value
-                photo.error_message = str(exc)
-                db.commit()
+            db.query(Photo).filter(Photo.id == photo_id).update(
+                {"status": PhotoStatus.FAILED.value, "error_message": str(exc)},
+                synchronize_session=False
+            )
+            db.commit()
         except Exception:
             pass
         raise exc

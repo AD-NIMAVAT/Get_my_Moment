@@ -102,6 +102,9 @@ async def search_event_photos_by_selfie(
         for pid in sorted_photo_ids:
             if pid in photo_dict:
                 p = photo_dict[pid]
+                if p.folder and not p.folder.allow_guest_view:
+                    continue
+
                 matched_photos.append(
                     PhotoResponse(
                         id=p.id,
@@ -116,6 +119,11 @@ async def search_event_photos_by_selfie(
                         faces_detected_count=p.faces_detected_count,
                         thumbnail_url=f"/api/v1/photos/{p.id}/thumbnail",
                         download_url=f"/api/v1/photos/{p.id}/download",
+                        is_guest_uploaded=bool(p.is_guest_uploaded),
+                        uploaded_by_guest_name=p.uploaded_by_guest_name,
+                        uploaded_by_guest_phone=p.uploaded_by_guest_phone,
+                        folder_id=p.folder_id,
+                        folder_name=p.folder.name if p.folder else None,
                         created_at=p.created_at,
                     )
                 )

@@ -128,6 +128,27 @@ export interface PublicEventItem {
   photo_count: number;
 }
 
+export interface FolderItem {
+  id: string;
+  studio_id: string;
+  event_id: string;
+  parent_id?: string | null;
+  name: string;
+  slug: string;
+  folder_type: string;
+  icon?: string | null;
+  color?: string | null;
+  order_index: number;
+  is_locked: boolean;
+  allow_guest_view: boolean;
+  is_system: boolean;
+  photo_count: number;
+  total_size_bytes: number;
+  created_at: string;
+  updated_at: string;
+  subfolders?: FolderItem[];
+}
+
 export interface PhotoItem {
   id: string;
   event_id: string;
@@ -139,6 +160,8 @@ export interface PhotoItem {
   mime_type: string;
   status: string;
   ceremony_id?: string;
+  folder_id?: string;
+  folder_name?: string;
   is_client_selected?: boolean;
   client_comment?: string;
   is_guest_uploaded?: boolean;
@@ -784,10 +807,13 @@ class ApiClient {
   }
 
   // Photos
-  async uploadPhotos(eventId: string, files: File[]): Promise<{ uploaded_count: number; duplicates_count: number }> {
+  async uploadPhotos(eventId: string, files: File[], folderId?: string): Promise<{ uploaded_count: number; duplicates_count: number }> {
     const formData = new FormData();
     for (const file of files) {
       formData.append('files', file);
+    }
+    if (folderId) {
+      formData.append('folder_id', folderId);
     }
     const res = await fetch(`${this.baseUrl}/events/${eventId}/photos`, {
       method: 'POST',
@@ -801,12 +827,92 @@ class ApiClient {
     return res.json();
   }
 
-  async getEventPhotos(eventId: string): Promise<PhotoItem[]> {
-    const res = await fetch(`${this.baseUrl}/events/${eventId}/photos`, {
+  async getEventPhotos(eventId: string, folderId?: string): Promise<PhotoItem[]> {
+    const url = folderId ? `${this.baseUrl}/events/${eventId}/photos?folder_id=${folderId}` : `${this.baseUrl}/events/${eventId}/photos`;
+    const res = await fetch(url, {
       headers: this.getHeaders(),
     });
     if (!res.ok) throw new Error('Failed to load event photos');
     return res.json();
+  }
+
+  // Master Folder Management
+  async getFolders(eventId: string): Promise<FolderItem[]> {
+    const res = await fetch(`${this.baseUrl}/events/${eventId}/folders`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to load folders');
+    return res.json();
+  }
+
+  async createFolder(eventId: string, data: { name: string; parent_id?: string | null; icon?: string; color?: string; order_index?: number; allow_guest_view?: boolean }): Promise<FolderItem> {
+    const res = await fetch(`${this.baseUrl}/events/${eventId}/folders`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to create folder');
+    }
+    return res.json();
+  }
+
+  async updateFolder(eventId: string, folderId: string, data: { name?: string; icon?: string; color?: string; order_index?: number; is_locked?: boolean; allow_guest_view?: boolean }): Promise<FolderItem> {
+    const res = await fetch(`${this.baseUrl}/events/${eventId}/folders/${folderId}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to update folder');
+    }
+    return res.json();
+  }
+
+  async deleteFolder(eventId: string, folderId: string, mode: 'MOVE_TO_UNCATEGORIZED' | 'DELETE_PHOTOS' = 'MOVE_TO_UNCATEGORIZED'): Promise<{ message: string }> {
+    const res = await fetch(`${this.baseUrl}/events/${eventId}/folders/${folderId}?mode=${mode}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to delete folder');
+    }
+    return res.json();
+  }
+
+  async generateWeddingFolders(eventId: string): Promise<FolderItem[]> {
+    const res = await fetch(`${this.baseUrl}/events/${eventId}/folders/generate-wedding-preset`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to generate wedding preset');
+    }
+    return res.json();
+  }
+
+  async movePhotosToFolder(eventId: string, photoIds: string[], destinationFolderId: string): Promise<{ moved_count: number }> {
+    const res = await fetch(`${this.baseUrl}/events/${eventId}/folders/move-photos`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        photo_ids: photoIds,
+        destination_folder_id: destinationFolderId,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to move photos');
+    }
+    return res.json();
+  }
+
+  getFolderZipDownloadUrl(eventId: string, folderId: string): string {
+    return `${this.baseUrl}/events/${eventId}/folders/${folderId}/download-zip`;
   }
 
   // CRM & Leads

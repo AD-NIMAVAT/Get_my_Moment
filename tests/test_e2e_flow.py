@@ -140,6 +140,6 @@ def test_complete_end_to_end_lifecycle(client: TestClient, db_session):
     delete_res = client.delete(f"/api/v1/events/{event_id}", headers=headers)
     assert delete_res.status_code == 204
 
-    # Verify event is deleted
-    assert db_session.query(Event).filter(Event.id == event_id).first() is None
-    assert db_session.query(Photo).filter(Photo.event_id == event_id).first() is None
+    # Verify event is deleted (soft-deleted in recycle bin)
+    assert db_session.query(Event).filter(Event.id == event_id, Event.is_deleted == False).first() is None
+    assert db_session.query(Photo).filter(Photo.event_id == event_id, Photo.is_deleted == False).first() is None

@@ -7,7 +7,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
   api, EventItem, PhotoItem, GuestLead, FinanceSummary, OperationsData,
-  GuestUploadsReportResponse, GuestContributor
+  GuestUploadsReportResponse, GuestContributor, FolderItem
 } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -19,7 +19,9 @@ import {
   Camera, QrCode, Users, ArrowLeft, UploadCloud, Copy, Check, 
   ExternalLink, Download, Sparkles, CheckCircle2, ShieldCheck, 
   IndianRupee, DollarSign, Plus, MessageSquare, Send, CheckSquare, 
-  Calendar, Layers, Heart, FileText, Trash2, ToggleLeft, ToggleRight, AlertCircle, Phone, Wifi
+  Calendar, Layers, Heart, FileText, Trash2, ToggleLeft, ToggleRight, 
+  AlertCircle, Phone, Wifi, Folder as FolderIcon, FolderPlus, MoveRight,
+  Lock, Eye, MoreVertical, X
 } from 'lucide-react';
 
 type Tab = 'operations' | 'finance' | 'photos' | 'selection' | 'guest-uploads' | 'whatsapp' | 'qr' | 'leads';
@@ -33,6 +35,10 @@ export default function EventCommandCenterPage() {
 
   const [event, setEvent] = useState<EventItem | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const [folders, setFolders] = useState<FolderItem[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
+  
   const [leads, setLeads] = useState<GuestLead[]>([]);
   const [finance, setFinance] = useState<FinanceSummary | null>(null);
   const [operations, setOperations] = useState<OperationsData | null>(null);
@@ -43,9 +49,18 @@ export default function EventCommandCenterPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [uploadTargetFolderId, setUploadTargetFolderId] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [copiedSelection, setCopiedSelection] = useState(false);
   const [showWirelessModal, setShowWirelessModal] = useState(false);
+
+  // Folder Modals & Actions
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderType, setNewFolderType] = useState('CEREMONY');
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [targetMoveFolderId, setTargetMoveFolderId] = useState('');
+  const [generatingPresets, setGeneratingPresets] = useState(false);
 
   // Operations Modals
   const [showCeremonyModal, setShowCeremonyModal] = useState(false);
@@ -84,13 +99,14 @@ export default function EventCommandCenterPage() {
   const loadAllEventData = async () => {
     try {
       setLoading(true);
-      const [eventData, photosData, leadsData, financeData, opsData, guestReportData] = await Promise.all([
+      const [eventData, photosData, leadsData, financeData, opsData, guestReportData, foldersData] = await Promise.all([
         api.getEvent(eventId),
         api.getEventPhotos(eventId),
         api.getEventLeads(eventId),
         api.getEventFinance(eventId),
         api.getEventOperations(eventId),
         api.getGuestUploadsReport(eventId).catch(() => null),
+        api.getFolders(eventId).catch(() => []),
       ]);
       setEvent(eventData);
       setPhotos(photosData);
@@ -98,12 +114,17 @@ export default function EventCommandCenterPage() {
       setFinance(financeData);
       setOperations(opsData);
       setGuestReport(guestReportData);
+      setFolders(foldersData);
+      if (foldersData.length > 0 && !uploadTargetFolderId) {
+        setUploadTargetFolderId(foldersData[0].id);
+      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to load event data');
     } finally {
       setLoading(false);
     }
   };
+
   // Real-Time Live Wireless Camera Ingestion & Auto-Sync Listener
   useEffect(() => {
     if (!eventId || !user) return;
@@ -111,7 +132,7 @@ export default function EventCommandCenterPage() {
     // Lock wireless camera ingest receiver to this active event
     api.getWirelessCredentials(eventId).catch(() => {});
 
-    // Polling interval (every 2 seconds) to auto-fetch new wireless photos without manual refresh
+    // Polling interval (every 2.5 seconds)
     const interval = setInterval(async () => {
       try {
         const latestPhotos = await api.getEventPhotos(eventId);
@@ -123,6 +144,8 @@ export default function EventCommandCenterPage() {
             if (newlyAdded.length > 0) {
               const name = newlyAdded[0].original_file_name;
               toast.success(`📸 Live Wireless Photo: ${name} synced instantly!`);
+              // Also refresh folders for updated counters
+              api.getFolders(eventId).then(setFolders).catch(() => {});
             }
             return latestPhotos;
           }
@@ -131,7 +154,7 @@ export default function EventCommandCenterPage() {
       } catch (e) {
         // silent polling catch
       }
-    }, 2000);
+    }, 2500);
 
     return () => clearInterval(interval);
   }, [eventId, user]);
@@ -169,15 +192,19 @@ export default function EventCommandCenterPage() {
       const chunkSize = 4;
       for (let i = 0; i < total; i += chunkSize) {
         const chunk = fileArray.slice(i, i + chunkSize);
-        const res = await api.uploadPhotos(eventId, chunk);
+        const res = await api.uploadPhotos(eventId, chunk, uploadTargetFolderId || undefined);
         uploaded += res.uploaded_count;
         duplicates += res.duplicates_count;
         const pct = Math.min(100, Math.round(((i + chunk.length) / total) * 100));
         setUploadProgress(`Uploaded ${uploaded + duplicates}/${total} photos (${pct}%)... AI face embeddings active`);
       }
 
-      const updatedPhotos = await api.getEventPhotos(eventId);
+      const [updatedPhotos, updatedFolders] = await Promise.all([
+        api.getEventPhotos(eventId),
+        api.getFolders(eventId),
+      ]);
       setPhotos(updatedPhotos);
+      setFolders(updatedFolders);
       toast.success(`🎉 Ingest Complete! ${uploaded} new photo(s) indexed with 128-d AI faces.`);
       setUploadProgress(null);
     } catch (err: any) {
@@ -186,6 +213,93 @@ export default function EventCommandCenterPage() {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleCreateFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFolderName.trim()) return;
+    try {
+      await api.createFolder(eventId, {
+        name: newFolderName.trim(),
+        folder_type: newFolderType,
+      });
+      setShowFolderModal(false);
+      setNewFolderName('');
+      const updatedFolders = await api.getFolders(eventId);
+      setFolders(updatedFolders);
+      toast.success(`📁 Folder created successfully!`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create folder');
+    }
+  };
+
+  const handleGenerateWeddingFolders = async () => {
+    try {
+      setGeneratingPresets(true);
+      const generated = await api.generateWeddingFolders(eventId);
+      setFolders(generated);
+      toast.success('✨ Standard Wedding Ceremony Folders generated successfully!');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate wedding folders');
+    } finally {
+      setGeneratingPresets(false);
+    }
+  };
+
+  const handleDeleteFolder = async (folderId: string, folderName: string) => {
+    if (!confirm(`Delete folder "${folderName}"? Photos inside will be safely moved to Uncategorized.`)) return;
+    try {
+      await api.deleteFolder(eventId, folderId, 'MOVE_TO_UNCATEGORIZED');
+      const [updatedFolders, updatedPhotos] = await Promise.all([
+        api.getFolders(eventId),
+        api.getEventPhotos(eventId),
+      ]);
+      setFolders(updatedFolders);
+      setPhotos(updatedPhotos);
+      if (selectedFolderId === folderId) setSelectedFolderId(null);
+      toast.success(`Folder "${folderName}" deleted. Photos relocated.`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete folder');
+    }
+  };
+
+  const handleTogglePhotoSelect = (photoId: string) => {
+    setSelectedPhotoIds(prev => {
+      const next = new Set(prev);
+      if (next.has(photoId)) {
+        next.delete(photoId);
+      } else {
+        next.add(photoId);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllCurrentPhotos = () => {
+    const current = displayedPhotos.map(p => p.id);
+    setSelectedPhotoIds(new Set(current));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedPhotoIds(new Set());
+  };
+
+  const handleMoveSelectedPhotos = async () => {
+    if (!targetMoveFolderId || selectedPhotoIds.size === 0) return;
+    try {
+      const res = await api.movePhotosToFolder(eventId, Array.from(selectedPhotoIds), targetMoveFolderId);
+      setShowMoveModal(false);
+      setSelectedPhotoIds(new Set());
+      const [updatedFolders, updatedPhotos] = await Promise.all([
+        api.getFolders(eventId),
+        api.getEventPhotos(eventId),
+      ]);
+      setFolders(updatedFolders);
+      setPhotos(updatedPhotos);
+      toast.success(`Moved ${res.moved_count} photo(s) successfully!`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to move photos');
     }
   };
 
@@ -256,7 +370,7 @@ export default function EventCommandCenterPage() {
       setExpensePaidTo('');
       const updatedFin = await api.getEventFinance(eventId);
       setFinance(updatedFin);
-      toast.success('Expense recorded in profit ledger!');
+      toast.success('Expense recorded in project ledger!');
     } catch (err: any) {
       toast.error(err.message || 'Failed to log expense');
     }
@@ -270,783 +384,827 @@ export default function EventCommandCenterPage() {
       setNewTaskTitle('');
       const updatedOps = await api.getEventOperations(eventId);
       setOperations(updatedOps);
-      toast.success('Checklist item added!');
+      toast.success('Deliverable task added!');
     } catch (err: any) {
       toast.error(err.message || 'Failed to add task');
     }
   };
 
-  const handleToggleTask = async (taskId: string) => {
+  const handleToggleTask = async (taskId: string, isCompleted: boolean) => {
     try {
-      await api.toggleEventTask(eventId, taskId);
+      await api.toggleEventTask(eventId, taskId, !isCompleted);
       const updatedOps = await api.getEventOperations(eventId);
       setOperations(updatedOps);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to toggle task');
+      toast.error(err.message || 'Failed to update task');
     }
   };
 
-  const copyGuestLink = () => {
+  const handleCopyGuestLink = () => {
     if (!event) return;
     const url = `${window.location.origin}/e/${event.access_token}`;
     navigator.clipboard.writeText(url);
     setCopied(true);
-    toast.success('Live Guest QR Link copied to clipboard!');
+    toast.success('Guest QR Selfie link copied to clipboard!');
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const copySelectionLink = () => {
+  const handleCopySelectionLink = () => {
     if (!event) return;
-    const url = `${window.location.origin}/selection/${event.selection_token || event.access_token}`;
+    const url = `${window.location.origin}/selection/${event.selection_token}`;
     navigator.clipboard.writeText(url);
     setCopiedSelection(true);
-    toast.success('Client Album Selection link copied!');
+    toast.success('Client Album Proofing link copied to clipboard!');
     setTimeout(() => setCopiedSelection(false), 2000);
   };
 
-  const triggerWhatsApp = (type: 'BOOKING' | 'PAYMENT' | 'QR_GUEST' | 'SELECTION') => {
-    if (!event) return;
-    const phone = event.client_phone ? event.client_phone.replace(/[^0-9]/g, '') : '';
-    const phoneWithCode = phone.startsWith('91') ? phone : `91${phone}`;
-    const guestUrl = `${window.location.origin}/e/${event.access_token}`;
-    const selectionUrl = `${window.location.origin}/selection/${event.selection_token || event.access_token}`;
-
-    let msg = '';
-    if (type === 'BOOKING') {
-      msg = `*${user?.studio_name} - Booking Confirmation* 📸\n\nDear ${event.client_name || 'Client'},\n\nWe are delighted to confirm your photography booking for *${event.name}*!\n\nContract Value: *₹${(finance?.package_amount_inr || 0).toLocaleString('en-IN')}*\nAdvance Received: *₹${(finance?.total_received_inr || 0).toLocaleString('en-IN')}*\n\nOur team is prepared to capture your most memorable moments!`;
-    } else if (type === 'PAYMENT') {
-      msg = `*${user?.studio_name} - Payment Milestone Reminder* 💳\n\nDear ${event.client_name || 'Client'},\n\nThis is a friendly reminder regarding your pending balance of *₹${(finance?.total_pending_inr || 0).toLocaleString('en-IN')}* for *${event.name}*.\n\nYou may pay via UPI to our studio account.\n\nThank you for choosing ${user?.studio_name}!`;
-    } else if (type === 'QR_GUEST') {
-      msg = `*Live Event Photos - Instant AI Face Match* ✨\n\nWelcome to *${event.name}*!\n\nFind all your personal photos in seconds by scanning the QR code or clicking here:\n👉 ${guestUrl}\n\nJust take a selfie to receive your high-res photos instantly!\n- Hosted by ${user?.studio_name}`;
-    } else if (type === 'SELECTION') {
-      msg = `*Wedding Album Photo Selection Portal* 📖\n\nDear ${event.client_name || 'Couple'},\n\nYour high-resolution photos for *${event.name}* are ready for album selection!\n\nPlease review, mark your favorites (❤️), and submit your album selection here:\n👉 ${selectionUrl}\n\nWarm regards,\n${user?.studio_name}`;
-    }
-
-    window.open(`https://wa.me/${phoneWithCode}?text=${encodeURIComponent(msg)}`, '_blank');
-    toast.info('WhatsApp window opened with formatted proposal!');
-  };
-
   const handleConfirmDelete = async () => {
-    setDeleting(true);
     try {
+      setDeleting(true);
       await api.deleteEvent(eventId);
-      toast.success(`Event "${event?.name}" deleted successfully`);
+      toast.success(`Event "${event?.name}" deleted successfully.`);
       router.push('/dashboard');
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete event');
       setDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
-  if (loading || !event) {
+  if (loading) {
     return (
-      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="space-y-6">
-          <div className="h-28 rounded-3xl skeleton-shimmer" />
-          <div className="h-16 rounded-2xl skeleton-shimmer" />
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="h-32 rounded-2xl skeleton-shimmer" />
-            <div className="h-32 rounded-2xl skeleton-shimmer" />
-            <div className="h-32 rounded-2xl skeleton-shimmer" />
-            <div className="h-32 rounded-2xl skeleton-shimmer" />
-          </div>
+      <div className="min-h-screen bg-[#F3F1EC] flex items-center justify-center p-4">
+        <div className="neu-flat p-8 rounded-3xl text-center space-y-4 max-w-sm w-full">
+          <div className="w-12 h-12 border-4 border-[#E86A5B] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm font-bold text-[#1F1F1F]">Loading Event Studio OS...</p>
         </div>
       </div>
     );
   }
 
-  const guestUrl = typeof window !== 'undefined' ? `${window.location.origin}/e/${event.access_token}` : `/e/${event.access_token}`;
+  const displayedPhotos = photos
+    .filter(p => !p.is_guest_uploaded)
+    .filter(p => selectedFolderId ? p.folder_id === selectedFolderId : true);
+
+  const hasWeddingFolders = folders.some(f => f.name.includes('Haldi') || f.name.includes('Wedding'));
 
   return (
-    <div className="flex-1 max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1850px] w-full mx-auto px-4 sm:px-6 lg:px-10 py-8 sm:py-10">
-      {/* Back Link */}
-      <div className="mb-4 flex items-center justify-between">
-        <Link
-          href="/dashboard"
-          className="text-xs text-[#6B6B6B] hover:text-[#E86A5B] inline-flex items-center gap-1.5 transition-colors font-bold"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Studio Dashboard</span>
-        </Link>
-        <Link
-          href="/dashboard/crm"
-          className="text-xs text-[#E86A5B] hover:text-[#C94F43] inline-flex items-center gap-1.5 transition-colors font-bold"
-        >
-          <span>Leads & CRM Pipeline →</span>
-        </Link>
-      </div>
-
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-[#E8E5E2]">
-        <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl sm:text-4xl font-display font-extrabold text-[#1F1F1F] tracking-tight">{event.name}</h1>
-            <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-[#3FA66B] border border-emerald-200">
-              {event.status}
-            </span>
+    <div className="min-h-screen bg-[#F3F1EC] pb-24">
+      {/* Top Breadcrumb & Actions Bar */}
+      <div className="border-b border-[#E2DDD5] bg-[#F3F1EC]/80 backdrop-blur-md sticky top-0 z-30">
+        <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1850px] mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/dashboard"
+              className="neu-button-sm p-2 rounded-xl text-[#6B6B6B] hover:text-[#1F1F1F] flex items-center justify-center"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-display font-extrabold text-[#1F1F1F] tracking-tight truncate max-w-md">
+                  {event?.name}
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#E86A5B]/10 text-[#E86A5B] border border-[#E86A5B]/20">
+                  {event?.status}
+                </span>
+              </div>
+              <p className="text-xs text-[#6B6B6B] mt-0.5">
+                {event?.client_name ? `Client: ${event.client_name} • ` : ''}
+                {event?.venue ? `${event.venue}, ${event.city || ''}` : 'Wedding Event'}
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-[#6B6B6B] mt-1.5 font-normal">
-            Client: <strong className="text-[#1F1F1F]">{event.client_name || 'Direct Studio Client'}</strong> • Public Token: <code className="text-[#E86A5B] font-mono bg-[#E86A5B]/10 px-2 py-0.5 rounded border border-[#E86A5B]/20 font-bold">{event.access_token}</code>
-          </p>
-        </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={() => setShowWirelessModal(true)}
-            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-emerald-500/20"
-          >
-            <Wifi className="w-3.5 h-3.5 animate-pulse" />
-            <span>Connect Wireless Camera (Wi-Fi)</span>
-          </button>
-          <button
-            onClick={copyGuestLink}
-            className="px-4 py-2.5 rounded-xl border border-[#E8E5E2] hover:bg-neutral-50 text-[#1F1F1F] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer"
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-[#3FA66B]" /> : <Copy className="w-3.5 h-3.5 text-[#6B6B6B]" />}
-            <span>{copied ? 'Copied QR URL' : 'Copy Guest QR Link'}</span>
-          </button>
-          <a
-            href={guestUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="btn-primary py-2.5 px-4 text-xs"
-          >
-            <span>Live Guest Portal</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="px-3.5 py-2.5 rounded-xl border border-rose-200 hover:border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
-            title="Permanently Delete Event"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Delete Event</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+            <button
+              onClick={() => setShowWirelessModal(true)}
+              className="btn-secondary py-2 px-3 text-xs flex items-center gap-1.5 shadow-sm text-emerald-700 hover:text-emerald-800 border-emerald-300"
+            >
+              <Wifi className="w-3.5 h-3.5" />
+              <span>Camera Wi-Fi</span>
+            </button>
+
+            <button
+              onClick={handleCopyGuestLink}
+              className="btn-secondary py-2 px-3 text-xs flex items-center gap-1.5 shadow-sm"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <QrCode className="w-3.5 h-3.5 text-[#E86A5B]" />}
+              <span>{copied ? 'Copied QR Link' : 'Guest QR Link'}</span>
+            </button>
+
+            <button
+              onClick={handleCopySelectionLink}
+              className="btn-secondary py-2 px-3 text-xs flex items-center gap-1.5 shadow-sm"
+            >
+              {copiedSelection ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Heart className="w-3.5 h-3.5 text-rose-500" />}
+              <span>Proofing Portal</span>
+            </button>
+
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
+              title="Delete Event"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 border-b border-[#E8E5E2] my-6 -mx-4 px-4 sm:mx-0 sm:px-0 touch-action-manipulation">
-        {[
-          { id: 'operations', label: 'Command Center & Operations', icon: Layers },
-          { id: 'finance', label: 'Profit & Invoicing', icon: IndianRupee },
-          { id: 'photos', label: `Studio Photos (${photos.filter(p => !p.is_guest_uploaded).length})`, icon: Camera },
-          { id: 'guest-uploads', label: `Guest Uploads (${guestReport?.total_guest_photos || 0})`, icon: UploadCloud },
-          { id: 'selection', label: 'Album Proofing Portal', icon: Heart },
-          { id: 'whatsapp', label: 'WhatsApp Automation', icon: MessageSquare },
-          { id: 'qr', label: 'QR Standee', icon: QrCode },
-          { id: 'leads', label: `Guest Leads (${leads.length})`, icon: Users },
-        ].map((t) => {
-          const Icon = t.icon;
-          const isActive = activeTab === t.id;
-          return (
+      {/* Main Container */}
+      <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1850px] mx-auto px-4 sm:px-6 py-6 space-y-6">
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+          {[
+            { id: 'operations', label: 'Operations & Crew', icon: <Users className="w-4 h-4" /> },
+            { id: 'finance', label: 'Finance & Profit', icon: <IndianRupee className="w-4 h-4" /> },
+            { id: 'photos', label: `Photos & Folders (${photos.filter(p => !p.is_guest_uploaded).length})`, icon: <Camera className="w-4 h-4" /> },
+            { id: 'guest-uploads', label: `Guest Uploads (${photos.filter(p => p.is_guest_uploaded).length})`, icon: <UploadCloud className="w-4 h-4" /> },
+            { id: 'selection', label: 'Album Proofing', icon: <Heart className="w-4 h-4" /> },
+            { id: 'qr', label: 'Event QR Flyer', icon: <QrCode className="w-4 h-4" /> },
+            { id: 'leads', label: `Guest Leads (${leads.length})`, icon: <Users className="w-4 h-4" /> },
+          ].map((tab) => (
             <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id as Tab)}
-              className={`py-2.5 px-4 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
-                isActive 
-                  ? 'bg-[#F3F1EC] text-[#E86A5B] shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF]' 
-                  : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as Tab)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all duration-200 cursor-pointer ${
+                activeTab === tab.id
+                  ? 'bg-[#E86A5B] text-white shadow-md'
+                  : 'neu-button text-[#6B6B6B] hover:text-[#1F1F1F]'
               }`}
             >
-              <Icon className="w-4 h-4" />
-              <span>{t.label}</span>
+              {tab.icon}
+              <span>{tab.label}</span>
             </button>
-          );
-        })}
-      </div>
+          ))}
+        </div>
 
-      {/* TAB 1: Command Center & Operations */}
-      {activeTab === 'operations' && (
-        <div className="space-y-8">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div className="neu-card p-5">
-              <span className="text-[11px] font-bold text-[#6B6B6B] uppercase">Functions / Ceremonies</span>
-              <div className="text-2xl font-extrabold text-[#1F1F1F] mt-1">{operations?.ceremonies.length || 0}</div>
-            </div>
-            <div className="neu-card p-5">
-              <span className="text-[11px] font-bold text-[#6B6B6B] uppercase">Assigned Crew</span>
-              <div className="text-2xl font-extrabold text-[#D9A441] mt-1">{operations?.crew_members.length || 0}</div>
-            </div>
-            <div className="neu-card p-5">
-              <span className="text-[11px] font-bold text-[#6B6B6B] uppercase">Indexed Photos</span>
-              <div className="text-2xl font-extrabold text-[#E86A5B] mt-1">{photos.length}</div>
-            </div>
-            <div className="neu-card p-5">
-              <span className="text-[11px] font-bold text-[#6B6B6B] uppercase">Task Completion</span>
-              <div className="text-2xl font-extrabold text-[#3FA66B] mt-1">
-                {operations?.tasks.filter((t) => t.is_completed).length} / {operations?.tasks.length || 0}
-              </div>
-            </div>
-          </div>
+        {/* TAB: Photos & Folders Master Management */}
+        {activeTab === 'photos' && (
+          <div className="space-y-6">
+            {/* Folder Navigation Bar & Preset Actions */}
+            <div className="neu-card p-4 sm:p-5 flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-display font-extrabold text-[#1F1F1F] flex items-center gap-2">
+                    <FolderIcon className="w-5 h-5 text-[#E86A5B]" />
+                    <span>Ceremony & Event Folders</span>
+                  </h3>
+                  <p className="text-xs text-[#6B6B6B]">Organize wedding photos by ceremony functions and manage client/guest view settings.</p>
+                </div>
 
-          {/* Ceremonies Timeline */}
-          <div className="neu-card p-7">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Event Ceremonies & Functions</h3>
-                <p className="text-xs text-[#6B6B6B]">Multi-day wedding timeline (Haldi, Mehendi, Sangeet, Wedding, Reception).</p>
-              </div>
-              <button
-                onClick={() => setShowCeremonyModal(true)}
-                className="btn-primary py-2 px-3.5 text-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Ceremony</span>
-              </button>
-            </div>
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  {!hasWeddingFolders && (
+                    <button
+                      onClick={handleGenerateWeddingFolders}
+                      disabled={generatingPresets}
+                      className="btn-secondary py-2 px-3.5 text-xs flex items-center gap-1.5 text-amber-700 border-amber-300 bg-amber-50/50 hover:bg-amber-50"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                      <span>{generatingPresets ? 'Generating...' : '✨ Generate Wedding Folders'}</span>
+                    </button>
+                  )}
 
-            {operations?.ceremonies.length === 0 ? (
-              <div className="p-8 text-center bg-[#EBE8E1] rounded-2xl shadow-[inset_2px_2px_5px_#D1CDC4,inset_-2px_-2px_5px_#FFFFFF] text-xs text-[#6B6B6B]">
-                No ceremonies defined yet. Add functions like Haldi, Sangeet, or Reception.
+                  <button
+                    onClick={() => setShowFolderModal(true)}
+                    className="btn-primary py-2 px-3.5 text-xs flex items-center gap-1.5"
+                  >
+                    <FolderPlus className="w-3.5 h-3.5" />
+                    <span>+ New Folder</span>
+                  </button>
+                </div>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {operations?.ceremonies.map((c) => (
-                  <div key={c.id} className="p-4 rounded-2xl bg-[#EBE8E1] shadow-[inset_2px_2px_4px_#D1CDC4,inset_-2px_-2px_4px_#FFFFFF]">
-                    <span className="text-xs font-bold text-[#1F1F1F] block">{c.name}</span>
-                    <span className="text-[11px] text-[#6B6B6B] mt-1 block">{c.photo_count} Photos Assigned</span>
+
+              {/* Folder Pills */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none pt-2 border-t border-[#E8E5E2]">
+                <button
+                  onClick={() => setSelectedFolderId(null)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-150 flex items-center gap-1.5 ${
+                    selectedFolderId === null
+                      ? 'bg-[#1F1F1F] text-white shadow'
+                      : 'neu-button text-[#6B6B6B] hover:text-[#1F1F1F]'
+                  }`}
+                >
+                  <span>All Photos</span>
+                  <span className="px-1.5 py-0.2 rounded-md bg-white/20 text-[10px]">
+                    {photos.filter(p => !p.is_guest_uploaded).length}
+                  </span>
+                </button>
+
+                {folders.map((f) => (
+                  <div key={f.id} className="flex items-center group relative">
+                    <button
+                      onClick={() => setSelectedFolderId(f.id)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-150 flex items-center gap-2 ${
+                        selectedFolderId === f.id
+                          ? 'bg-[#E86A5B] text-white shadow'
+                          : 'neu-button text-[#1F1F1F] hover:text-[#E86A5B]'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: f.color || '#E86A5B' }} />
+                      <span>{f.name}</span>
+                      <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${
+                        selectedFolderId === f.id ? 'bg-white/20 text-white' : 'bg-[#EBE8E1] text-[#6B6B6B]'
+                      }`}>
+                        {f.photo_count}
+                      </span>
+                    </button>
+
+                    {!f.is_system && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteFolder(f.id, f.name);
+                        }}
+                        className="ml-1 p-1 rounded-lg text-[#6B6B6B] hover:text-rose-600 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Delete Folder"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-
-          {/* Crew & Payouts */}
-          <div className="neu-card p-7">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Crew Members & Agreed Payouts</h3>
-                <p className="text-xs text-[#6B6B6B]">Track photographer roles, contact details, and payout settlement status.</p>
-              </div>
-              <button
-                onClick={() => setShowCrewModal(true)}
-                className="btn-primary py-2 px-3.5 text-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Assign Crew Member</span>
-              </button>
             </div>
 
-            {operations?.crew_members.length === 0 ? (
+            {/* Uploader Box with Target Folder Dropdown */}
+            <div className="neu-card p-6 sm:p-8 text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-[#F3F1EC] shadow-[inset_2px_2px_4px_#D1CDC4,inset_-2px_-2px_4px_#FFFFFF] text-[#E86A5B] flex items-center justify-center mx-auto">
+                <UploadCloud className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Upload Event Photos</h3>
+                <p className="text-xs text-[#6B6B6B] mt-1 max-w-md mx-auto">
+                  Drag & drop high-resolution JPEG/PNG files. AI face vector indexing will process automatically.
+                </p>
+              </div>
+
+              {/* Destination Folder Selector */}
+              {folders.length > 0 && (
+                <div className="max-w-xs mx-auto flex items-center justify-center gap-2 pt-2">
+                  <span className="text-xs font-bold text-[#6B6B6B]">Destination:</span>
+                  <select
+                    value={uploadTargetFolderId}
+                    onChange={(e) => setUploadTargetFolderId(e.target.value)}
+                    className="gmm-input py-1.5 px-3 text-xs font-bold rounded-xl"
+                  >
+                    {folders.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name} ({f.photo_count} photos)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png"
+                  ref={fileInputRef}
+                  onChange={(e) => handleFileUpload(e.target.files)}
+                  className="hidden"
+                  id="photo-upload-input"
+                />
+                <label
+                  htmlFor="photo-upload-input"
+                  className="btn-primary inline-flex cursor-pointer py-2.5 px-6 text-xs font-bold shadow-md"
+                >
+                  {uploading ? 'Processing & Indexing AI Faces...' : 'Select Photos to Upload'}
+                </label>
+              </div>
+
+              {uploadProgress && (
+                <div className="p-3 rounded-2xl bg-[#EBE8E1] shadow-[inset_2px_2px_4px_#D1CDC4,inset_-2px_-2px_4px_#FFFFFF] text-xs font-bold text-[#E86A5B] max-w-md mx-auto">
+                  {uploadProgress}
+                </div>
+              )}
+            </div>
+
+            {/* Gallery Control Bar & Bulk Selection */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 neu-card p-5">
+              <div className="flex items-center gap-3">
+                <div>
+                  <h4 className="text-sm font-extrabold text-[#1F1F1F] flex items-center gap-2">
+                    <span>
+                      {selectedFolderId 
+                        ? `${folders.find(f => f.id === selectedFolderId)?.name || 'Folder'} Photos` 
+                        : 'All Studio Photos'}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-[#EBE8E1] text-[#E86A5B] text-xs font-bold shadow-[inset_1px_1px_3px_#D1CDC4,inset_-1px_-1px_3px_#FFFFFF]">
+                      {displayedPhotos.length} Photos
+                    </span>
+                  </h4>
+                  <p className="text-xs text-[#6B6B6B] mt-0.5">High-resolution camera captures indexed with 128-d facial biometrics.</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+                <button
+                  onClick={handleSelectAllCurrentPhotos}
+                  className="neu-button-sm py-2 px-3 text-xs text-[#1F1F1F] font-bold"
+                >
+                  Select All ({displayedPhotos.length})
+                </button>
+
+                <a
+                  href={
+                    selectedFolderId 
+                      ? api.getFolderZipDownloadUrl(eventId, selectedFolderId)
+                      : api.getDownloadAllZipUrl(eventId, 'studio')
+                  }
+                  download={`${event?.name || 'Event'}_Photos.zip`}
+                  className="btn-primary py-2 px-4 text-xs flex items-center justify-center gap-2 w-full sm:w-auto shadow-md"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Folder (.ZIP)</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Photo Grid */}
+            {displayedPhotos.length === 0 ? (
+              <div className="p-12 text-center neu-card rounded-3xl">
+                <Camera className="w-10 h-10 text-[#6B6B6B] mx-auto mb-3 opacity-40" />
+                <h4 className="text-sm font-bold text-[#1F1F1F]">No photos in this folder yet</h4>
+                <p className="text-xs text-[#6B6B6B] mt-1">Upload camera shots or move existing photos into this ceremony folder.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+                {displayedPhotos.map((ph) => {
+                  const isSelected = selectedPhotoIds.has(ph.id);
+                  return (
+                    <div 
+                      key={ph.id} 
+                      className={`aspect-square rounded-2xl overflow-hidden neu-card relative group border transition-all duration-150 ${
+                        isSelected ? 'ring-4 ring-[#E86A5B] border-transparent scale-[0.98]' : 'border-white/60'
+                      }`}
+                    >
+                      <img
+                        src={api.getThumbnailUrl(ph.id)}
+                        alt={ph.original_file_name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          if (!target.src.includes('/download')) {
+                            target.src = api.getDownloadUrl(ph.id);
+                          }
+                        }}
+                      />
+
+                      {/* Selection Checkbox */}
+                      <button
+                        onClick={() => handleTogglePhotoSelect(ph.id)}
+                        className={`absolute top-2.5 left-2.5 z-20 w-6 h-6 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                          isSelected 
+                            ? 'bg-[#E86A5B] text-white shadow-lg scale-110' 
+                            : 'bg-black/40 text-white/80 opacity-0 group-hover:opacity-100 hover:bg-black/60'
+                        }`}
+                      >
+                        {isSelected ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : <CheckSquare className="w-3.5 h-3.5" />}
+                      </button>
+
+                      {/* Hover Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-between p-2.5 z-10">
+                        <div className="flex justify-end">
+                          <a
+                            href={api.getDownloadUrl(ph.id)}
+                            download={ph.original_file_name}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="w-7 h-7 rounded-lg bg-white/95 hover:bg-white text-[#1F1F1F] flex items-center justify-center shadow-lg transition-transform hover:scale-110 cursor-pointer"
+                            title="Download High-Res Original"
+                          >
+                            <Download className="w-3.5 h-3.5 text-[#E86A5B]" />
+                          </a>
+                        </div>
+                        <div className="truncate text-[10px] text-white/90 font-medium">
+                          {ph.original_file_name}
+                        </div>
+                      </div>
+
+                      {ph.folder_name && (
+                        <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-sm text-white text-[9px] font-bold group-hover:hidden">
+                          {ph.folder_name}
+                        </div>
+                      )}
+
+                      {ph.faces_detected_count > 0 && (
+                        <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-[#E86A5B]/90 text-white text-[10px] font-bold flex items-center gap-1 shadow group-hover:hidden">
+                          <Sparkles className="w-3 h-3" />
+                          <span>{ph.faces_detected_count}</span>
+                        </div>
+                      )}
+
+                      {ph.uploaded_by_guest_name?.includes('[CAMERA') && (
+                        <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[9px] font-bold flex items-center gap-1 shadow group-hover:hidden">
+                          <Wifi className="w-2.5 h-2.5" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Floating Bulk Photo Action Toolbar */}
+            {selectedPhotoIds.size > 0 && (
+              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[#1F1F1F]/90 backdrop-blur-xl text-white px-6 py-3.5 rounded-2xl shadow-2xl flex items-center gap-4 border border-white/20 animate-in slide-in-from-bottom-6">
+                <span className="text-xs font-bold text-[#E86A5B]">
+                  {selectedPhotoIds.size} photo(s) selected
+                </span>
+
+                <div className="h-4 w-px bg-white/20" />
+
+                <button
+                  onClick={() => setShowMoveModal(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-[#E86A5B] hover:bg-[#D45849] text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow"
+                >
+                  <MoveRight className="w-3.5 h-3.5" />
+                  <span>Move to Folder</span>
+                </button>
+
+                <button
+                  onClick={handleClearSelection}
+                  className="p-1.5 rounded-xl hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+                  title="Clear Selection"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 1: Operations & Timeline */}
+        {activeTab === 'operations' && (
+          <div className="space-y-8">
+            {/* Ceremonies Timeline */}
+            <div className="neu-card p-7">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Ceremony Timeline & Coverage</h3>
+                  <p className="text-xs text-[#6B6B6B]">Wedding events, functions, and assigned photo counts.</p>
+                </div>
+                <button
+                  onClick={() => setShowCeremonyModal(true)}
+                  className="btn-primary py-2 px-3.5 text-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Ceremony</span>
+                </button>
+              </div>
+
+              {operations?.ceremonies.length === 0 ? (
+                <div className="p-8 text-center bg-[#EBE8E1] rounded-2xl shadow-[inset_2px_2px_5px_#D1CDC4,inset_-2px_-2px_5px_#FFFFFF] text-xs text-[#6B6B6B]">
+                  No ceremonies defined yet. Add functions like Haldi, Sangeet, or Reception.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {operations?.ceremonies.map((c) => (
+                    <div key={c.id} className="p-4 rounded-2xl bg-[#EBE8E1] shadow-[inset_2px_2px_4px_#D1CDC4,inset_-2px_-2px_4px_#FFFFFF]">
+                      <span className="text-xs font-bold text-[#1F1F1F] block">{c.name}</span>
+                      <span className="text-[11px] text-[#6B6B6B] mt-1 block">{c.photo_count} Photos Assigned</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Crew Members */}
+            <div className="neu-card p-7">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Crew Members & Agreed Payouts</h3>
+                  <p className="text-xs text-[#6B6B6B]">Track photographer roles, contact details, and payout settlement status.</p>
+                </div>
+                <button
+                  onClick={() => setShowCrewModal(true)}
+                  className="btn-primary py-2 px-3.5 text-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Assign Crew Member</span>
+                </button>
+              </div>
+
+              {operations?.crew_members.length === 0 ? (
+                <div className="p-8 text-center bg-[#FAF9F7] rounded-2xl border border-dashed border-[#E8E5E2] text-xs text-[#6B6B6B]">
+                  No crew assigned yet. Add candid photographers, drone pilots, and cinematographers.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {operations?.crew_members.map((cr) => (
+                    <div key={cr.id} className="p-4 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] flex items-center justify-between gap-4">
+                      <div>
+                        <span className="text-xs font-bold text-[#1F1F1F] block">{cr.name} ({cr.role})</span>
+                        {cr.phone && <span className="text-[11px] text-[#6B6B6B]">{cr.phone}</span>}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-bold text-[#1F1F1F]">₹{cr.payout_inr.toLocaleString('en-IN')}</span>
+                        <button
+                          onClick={() => handleToggleCrewPayout(cr.id, cr.payout_status)}
+                          className={`px-3 py-1 rounded-xl text-xs font-bold cursor-pointer border ${
+                            cr.payout_status === 'PAID'
+                              ? 'bg-emerald-50 text-[#3FA66B] border-emerald-200'
+                              : 'bg-amber-50 text-[#D99A2B] border-amber-200'
+                          }`}
+                        >
+                          {cr.payout_status === 'PAID' ? '✓ Settled' : 'Pending'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Deliverable Tasks */}
+            <div className="neu-card p-7">
+              <h3 className="text-lg font-display font-extrabold text-[#1F1F1F] mb-4">Post-Production Checklist</h3>
+              <form onSubmit={handleAddTask} className="flex gap-3 mb-6">
+                <input
+                  type="text"
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  placeholder="e.g. Color Grade Cinematic Teaser, Print Velvet Silk Album..."
+                  className="gmm-input flex-1"
+                />
+                <button type="submit" className="btn-primary py-2.5 px-4 text-xs font-bold">
+                  Add Task
+                </button>
+              </form>
+
+              <div className="space-y-2.5">
+                {operations?.tasks.map((task) => (
+                  <div key={task.id} className="p-3.5 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] flex items-center justify-between">
+                    <span className={`text-xs font-bold ${task.is_completed ? 'line-through text-[#6B6B6B]' : 'text-[#1F1F1F]'}`}>
+                      {task.title}
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={task.is_completed}
+                      onChange={() => handleToggleTask(task.id, task.is_completed)}
+                      className="w-4 h-4 text-[#E86A5B] rounded cursor-pointer"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: Finance */}
+        {activeTab === 'finance' && (
+          <div className="space-y-8">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+              <div className="neu-card p-6">
+                <span className="text-xs font-bold text-[#6B6B6B] uppercase">Contract Package</span>
+                <div className="text-3xl font-extrabold text-[#1F1F1F] mt-2">
+                  ₹{(finance?.package_amount_inr || 0).toLocaleString('en-IN')}
+                </div>
+              </div>
+              <div className="neu-card p-6">
+                <span className="text-xs font-bold text-[#6B6B6B] uppercase">Expenses & Payouts</span>
+                <div className="text-3xl font-extrabold text-rose-600 mt-2">
+                  ₹{(finance?.total_expenses_inr || 0).toLocaleString('en-IN')}
+                </div>
+              </div>
+              <div className="neu-card p-6 border-2 border-[#3FA66B]/50">
+                <span className="text-xs font-bold text-[#3FA66B] uppercase">Real Net Profit ({finance?.profit_margin_pct || 0}%)</span>
+                <div className="text-3xl font-extrabold text-[#3FA66B] mt-2">
+                  ₹{(finance?.net_profit_inr || 0).toLocaleString('en-IN')}
+                </div>
+              </div>
+            </div>
+
+            <div className="neu-card p-7">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Logged Expenses</h3>
+                <button
+                  onClick={() => setShowExpenseModal(true)}
+                  className="btn-primary py-2 px-3.5 text-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Log Expense</span>
+                </button>
+              </div>
+
+              {finance?.expenses.length === 0 ? (
+                <div className="p-8 text-center bg-[#EBE8E1] rounded-2xl shadow-[inset_2px_2px_5px_#D1CDC4,inset_-2px_-2px_5px_#FFFFFF] text-xs text-[#6B6B6B]">
+                  No expenses logged yet.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {finance?.expenses.map((ex) => (
+                    <div key={ex.id} className="p-3.5 rounded-2xl bg-[#EBE8E1] shadow-[inset_2px_2px_4px_#D1CDC4,inset_-2px_-2px_4px_#FFFFFF] flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-[#1F1F1F] block">{ex.description}</span>
+                        <span className="text-[11px] text-[#6B6B6B]">{ex.category} {ex.paid_to ? `• Paid to: ${ex.paid_to}` : ''}</span>
+                      </div>
+                      <span className="text-xs font-bold text-rose-600">₹{ex.amount_inr.toLocaleString('en-IN')}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB: Guest Uploads */}
+        {activeTab === 'guest-uploads' && (
+          <div className="space-y-6">
+            <div className="neu-card p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white shadow-sm">
+                    <UploadCloud className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Guest Upload Permissions</h3>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    event?.allow_guest_uploads 
+                      ? 'bg-emerald-50 text-[#3FA66B] border border-emerald-200' 
+                      : 'bg-rose-50 text-rose-600 border border-rose-200'
+                  }`}>
+                    {event?.allow_guest_uploads ? '🟢 ENABLED' : '🔴 DISABLED'}
+                  </span>
+                </div>
+                <p className="text-xs text-[#6B6B6B] max-w-2xl leading-relaxed">
+                  Studio Rights: When enabled, guests scanning the QR code can upload candid photos from their phones.
+                </p>
+              </div>
+
+              <button
+                onClick={handleToggleGuestUploads}
+                disabled={togglingGuestUploads}
+                className={`py-2.5 px-5 rounded-2xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md ${
+                  event?.allow_guest_uploads
+                    ? 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100'
+                    : 'bg-emerald-50 text-[#3FA66B] border border-emerald-200 hover:bg-emerald-100'
+                }`}
+              >
+                {event?.allow_guest_uploads ? <ToggleRight className="w-5 h-5 text-rose-600" /> : <ToggleLeft className="w-5 h-5 text-[#3FA66B]" />}
+                <span>{togglingGuestUploads ? 'Updating...' : event?.allow_guest_uploads ? 'Disable Guest Uploads' : 'Enable Guest Uploads'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: Album Proofing */}
+        {activeTab === 'selection' && (
+          <div className="neu-card p-8 text-center space-y-4">
+            <Heart className="w-12 h-12 text-rose-500 mx-auto" />
+            <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Client Album Proofing Portal</h3>
+            <p className="text-xs text-[#6B6B6B] max-w-md mx-auto">
+              Share this dedicated link with the bride & groom to curate and approve photos for their wedding album.
+            </p>
+            <button
+              onClick={handleCopySelectionLink}
+              className="btn-primary inline-flex items-center gap-2"
+            >
+              <Copy className="w-4 h-4" />
+              <span>Copy Client Proofing Link</span>
+            </button>
+          </div>
+        )}
+
+        {/* TAB: QR Flyer */}
+        {activeTab === 'qr' && (
+          <div className="neu-card p-8 text-center space-y-4">
+            <QrCode className="w-16 h-16 text-[#E86A5B] mx-auto" />
+            <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Guest Live QR Standee Flyer</h3>
+            <p className="text-xs text-[#6B6B6B] max-w-md mx-auto">
+              Guests scan this QR code at wedding tables to find all photos containing their face using AI.
+            </p>
+            <button
+              onClick={handleCopyGuestLink}
+              className="btn-primary inline-flex items-center gap-2"
+            >
+              <Copy className="w-4 h-4" />
+              <span>Copy Public Guest Link</span>
+            </button>
+          </div>
+        )}
+
+        {/* TAB: Leads */}
+        {activeTab === 'leads' && (
+          <div className="neu-card p-7 space-y-4">
+            <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Wedding Guest Inquiries & CRM Leads</h3>
+            {leads.length === 0 ? (
               <div className="p-8 text-center bg-[#FAF9F7] rounded-2xl border border-dashed border-[#E8E5E2] text-xs text-[#6B6B6B]">
-                No crew assigned yet. Add candid photographers, drone pilots, and cinematographers.
+                No guest leads collected yet. Leads arrive automatically when guests request photo access.
               </div>
             ) : (
               <div className="space-y-3">
-                {operations?.crew_members.map((cr) => (
-                  <div key={cr.id} className="p-4 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] flex items-center justify-between gap-4">
-                    <div>
-                      <span className="text-xs font-bold text-[#1F1F1F] block">{cr.name} ({cr.role})</span>
-                      {cr.phone && <span className="text-[11px] text-[#6B6B6B]">{cr.phone}</span>}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-bold text-[#1F1F1F]">₹{cr.payout_inr.toLocaleString('en-IN')}</span>
-                      <button
-                        onClick={() => handleToggleCrewPayout(cr.id, cr.payout_status)}
-                        className={`px-3 py-1 rounded-xl text-xs font-bold cursor-pointer border ${
-                          cr.payout_status === 'PAID'
-                            ? 'bg-emerald-50 text-[#3FA66B] border-emerald-200'
-                            : 'bg-amber-50 text-[#D99A2B] border-amber-200'
-                        }`}
-                      >
-                        {cr.payout_status === 'PAID' ? '✓ Settled' : 'Pending'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 2: Finance & Profitability */}
-      {activeTab === 'finance' && (
-        <div className="space-y-8">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            <div className="neu-card p-6">
-              <span className="text-xs font-bold text-[#6B6B6B] uppercase">Contract Package</span>
-              <div className="text-3xl font-extrabold text-[#1F1F1F] mt-2">
-                ₹{(finance?.package_amount_inr || 0).toLocaleString('en-IN')}
-              </div>
-            </div>
-            <div className="neu-card p-6">
-              <span className="text-xs font-bold text-[#6B6B6B] uppercase">Expenses & Payouts</span>
-              <div className="text-3xl font-extrabold text-rose-600 mt-2">
-                ₹{(finance?.total_expenses_inr || 0).toLocaleString('en-IN')}
-              </div>
-            </div>
-            <div className="neu-card p-6 border-2 border-[#3FA66B]/50">
-              <span className="text-xs font-bold text-[#3FA66B] uppercase">Real Net Profit ({finance?.profit_margin_pct || 0}%)</span>
-              <div className="text-3xl font-extrabold text-[#3FA66B] mt-2">
-                ₹{(finance?.net_profit_inr || 0).toLocaleString('en-IN')}
-              </div>
-            </div>
-          </div>
-
-          <div className="neu-card p-7">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Logged Expenses</h3>
-              <button
-                onClick={() => setShowExpenseModal(true)}
-                className="btn-primary py-2 px-3.5 text-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Log Expense</span>
-              </button>
-            </div>
-
-            {finance?.expenses.length === 0 ? (
-              <div className="p-8 text-center bg-[#EBE8E1] rounded-2xl shadow-[inset_2px_2px_5px_#D1CDC4,inset_-2px_-2px_5px_#FFFFFF] text-xs text-[#6B6B6B]">
-                No expenses logged yet.
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {finance?.expenses.map((ex) => (
-                  <div key={ex.id} className="p-3.5 rounded-2xl bg-[#EBE8E1] shadow-[inset_2px_2px_4px_#D1CDC4,inset_-2px_-2px_4px_#FFFFFF] flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold text-[#1F1F1F] block">{ex.description}</span>
-                      <span className="text-[11px] text-[#6B6B6B]">{ex.category} {ex.paid_to ? `• Paid to: ${ex.paid_to}` : ''}</span>
-                    </div>
-                    <span className="text-xs font-bold text-rose-600">₹{ex.amount_inr.toLocaleString('en-IN')}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: Photos & Ingest */}
-      {activeTab === 'photos' && (
-        <div className="space-y-8">
-          {/* Uploader Box */}
-          <div className="neu-card p-8 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-[#F3F1EC] shadow-[inset_2px_2px_4px_#D1CDC4,inset_-2px_-2px_4px_#FFFFFF] text-[#E86A5B] flex items-center justify-center mx-auto mb-4">
-              <UploadCloud className="w-7 h-7" />
-            </div>
-            <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Upload Event Photos</h3>
-            <p className="text-xs text-[#6B6B6B] mt-1 max-w-md mx-auto">
-              Drag & drop JPEG/PNG images or click to select multiple camera files. Automated AI face indexing will run in background.
-            </p>
-
-            <input
-              type="file"
-              multiple
-              accept="image/jpeg,image/png"
-              ref={fileInputRef}
-              onChange={(e) => handleFileUpload(e.target.files)}
-              className="hidden"
-              id="photo-upload-input"
-            />
-            <label
-              htmlFor="photo-upload-input"
-              className="mt-6 btn-primary inline-flex"
-            >
-              {uploading ? 'Processing & Indexing AI Faces...' : 'Select Photos to Upload'}
-            </label>
-
-            {uploadProgress && (
-              <div className="mt-4 p-3 rounded-2xl bg-[#EBE8E1] shadow-[inset_2px_2px_4px_#D1CDC4,inset_-2px_-2px_4px_#FFFFFF] text-xs font-bold text-[#E86A5B]">
-                {uploadProgress}
-              </div>
-            )}
-          </div>
-
-          {/* Gallery Header & Bulk Download Toolbar */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 neu-card p-5">
-            <div>
-              <h4 className="text-sm font-extrabold text-[#1F1F1F] flex items-center gap-2">
-                <span>Studio Photos Gallery</span>
-                <span className="px-2 py-0.5 rounded-full bg-[#EBE8E1] text-[#E86A5B] text-xs font-bold shadow-[inset_1px_1px_3px_#D1CDC4,inset_-1px_-1px_3px_#FFFFFF]">
-                  {photos.filter(p => !p.is_guest_uploaded).length} Photos
-                </span>
-              </h4>
-              <p className="text-xs text-[#6B6B6B] mt-0.5">High-resolution camera captures indexed with 128-d AI face recognition.</p>
-            </div>
-
-            <div className="flex items-center gap-2.5 w-full sm:w-auto">
-              <a
-                href={api.getDownloadAllZipUrl(eventId, 'studio')}
-                download={`${event?.name || 'Event'}_Studio_Photos.zip`}
-                className="btn-primary py-2 px-4 text-xs flex items-center justify-center gap-2 w-full sm:w-auto shadow-md"
-              >
-                <Download className="w-4 h-4" />
-                <span>Download All (.ZIP)</span>
-              </a>
-            </div>
-          </div>
-
-          {/* Photo Grid with Single Download Buttons */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
-            {photos.filter(p => !p.is_guest_uploaded).map((ph) => (
-              <div key={ph.id} className="aspect-square rounded-2xl overflow-hidden neu-card relative group border border-white/60">
-                <img
-                  src={api.getThumbnailUrl(ph.id)}
-                  alt={ph.original_file_name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  loading="lazy"
-                  onError={(e) => {
-                    const target = e.currentTarget;
-                    if (!target.src.includes('/download')) {
-                      target.src = api.getDownloadUrl(ph.id);
-                    }
-                  }}
-                />
-
-                {/* Hover Action Overlay with Single Download Button */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-between p-2.5">
-                  <div className="flex justify-end">
-                    <a
-                      href={api.getDownloadUrl(ph.id)}
-                      download={ph.original_file_name}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="w-7 h-7 rounded-lg bg-white/95 hover:bg-white text-[#1F1F1F] flex items-center justify-center shadow-lg transition-transform hover:scale-110 cursor-pointer"
-                      title="Download High-Res Original"
-                    >
-                      <Download className="w-3.5 h-3.5 text-[#E86A5B]" />
-                    </a>
-                  </div>
-                  <div className="truncate text-[10px] text-white/90 font-medium">
-                    {ph.original_file_name}
-                  </div>
-                </div>
-
-                {ph.faces_detected_count > 0 && (
-                  <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-[#E86A5B]/90 text-white text-[10px] font-bold flex items-center gap-1 shadow group-hover:hidden">
-                    <Sparkles className="w-3 h-3" />
-                    <span>{ph.faces_detected_count}</span>
-                  </div>
-                )}
-                {ph.uploaded_by_guest_name?.includes('[WIRELESS') && (
-                  <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[9px] font-bold flex items-center gap-1 shadow group-hover:hidden">
-                    <Wifi className="w-2.5 h-2.5" />
-                    <span>Wi-Fi Cam</span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* TAB: Guest Community Uploads Inspector & Studio Control */}
-      {activeTab === 'guest-uploads' && (
-        <div className="space-y-6">
-          {/* Studio Rights / Toggle Card */}
-          <div className="neu-card p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white shadow-sm">
-                  <UploadCloud className="w-4 h-4" />
-                </div>
-                <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Guest Upload Permissions</h3>
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                  event?.allow_guest_uploads 
-                    ? 'bg-emerald-50 text-[#3FA66B] border border-emerald-200' 
-                    : 'bg-rose-50 text-rose-600 border border-rose-200'
-                }`}>
-                  {event?.allow_guest_uploads ? '🟢 ENABLED' : '🔴 DISABLED'}
-                </span>
-              </div>
-              <p className="text-xs text-[#6B6B6B] max-w-2xl leading-relaxed">
-                Studio Rights: When enabled, guests scanning the QR code can upload candid photos & selfies from their phones. Turn this off if you only want studio-curated photos in this event.
-              </p>
-            </div>
-
-            <button
-              onClick={handleToggleGuestUploads}
-              disabled={togglingGuestUploads}
-              className={`py-3 px-5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                event?.allow_guest_uploads
-                  ? 'bg-[#EBE8E1] text-[#E86A5B] shadow-[inset_2px_2px_5px_#D1CDC4,inset_-2px_-2px_5px_#FFFFFF] hover:text-rose-600'
-                  : 'btn-primary'
-              }`}
-            >
-              {event?.allow_guest_uploads ? (
-                <>
-                  <ToggleRight className="w-4 h-4 text-[#3FA66B]" />
-                  <span>Disable Guest Uploads</span>
-                </>
-              ) : (
-                <>
-                  <ToggleLeft className="w-4 h-4 text-white" />
-                  <span>Enable Guest Uploads</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Quick Metrics */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="neu-card p-5">
-              <span className="text-[11px] font-bold text-[#6B6B6B] uppercase block">Total Guest Photos</span>
-              <div className="text-2xl sm:text-3xl font-extrabold text-[#E86A5B] mt-1">{guestReport?.total_guest_photos || 0}</div>
-              <span className="text-[10px] text-[#6B6B6B]">Auto-indexed by AI face engine</span>
-            </div>
-
-            <div className="neu-card p-5">
-              <span className="text-[11px] font-bold text-[#6B6B6B] uppercase block">Guest Contributors</span>
-              <div className="text-2xl sm:text-3xl font-extrabold text-[#1F1F1F] mt-1">{guestReport?.contributors_count || 0}</div>
-              <span className="text-[10px] text-[#3FA66B] font-bold">Unique guests uploaded</span>
-            </div>
-
-            <div className="neu-card p-5">
-              <span className="text-[11px] font-bold text-[#6B6B6B] uppercase block">Public Guest QR Link</span>
-              <div className="mt-2 flex items-center gap-2">
-                <a
-                  href={guestUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="neu-btn-secondary py-1.5 px-3 text-xs flex items-center gap-1.5"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Open Guest View</span>
-                </a>
-              </div>
-            </div>
-          </div>
-
-          {/* Contributors & Uploaded Photos Breakdown */}
-          {(!guestReport || guestReport.contributors.length === 0) ? (
-            <div className="neu-card p-8 sm:p-12 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-[#FAF9F7] border border-[#E2DDD5] text-[#8E8E8E] flex items-center justify-center mx-auto mb-3 shadow-inner">
-                <UploadCloud className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-display font-extrabold text-[#1F1F1F]">No Guest Uploads Yet</h3>
-              <p className="text-xs text-[#6B6B6B] mt-1 max-w-sm mx-auto leading-relaxed">
-                When wedding guests scan your QR code and upload photos from their phones, their names, mobile numbers, and photos will appear here.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <h4 className="text-sm font-display font-extrabold text-[#1F1F1F]">
-                  Guest Contributor Breakdown ({guestReport.contributors.length} Guests)
-                </h4>
-                <a
-                  href={api.getDownloadAllZipUrl(eventId, 'guest')}
-                  download={`${event?.name || 'Event'}_Guest_Community_Photos.zip`}
-                  className="btn-primary py-2 px-3.5 text-xs flex items-center gap-2 shadow-sm"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download All Guest Photos (.ZIP)</span>
-                </a>
-              </div>
-
-              {guestReport.contributors.map((c, idx) => (
-                <div key={idx} className="neu-card p-6 sm:p-7 space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E2DDD5]">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#E86A5B]/20 to-[#C94F43]/30 flex items-center justify-center text-[#E86A5B] font-bold shadow-sm">
-                        {c.guest_name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-[#1F1F1F]">{c.guest_name}</span>
-                          <span className="neu-pill text-[10px] font-bold text-[#E86A5B]">
-                            {c.photo_count} Photos
-                          </span>
-                        </div>
-                        {c.guest_phone && c.guest_phone !== 'N/A' && (
-                          <span className="text-xs text-[#6B6B6B] flex items-center gap-1 mt-0.5 font-mono">
-                            <Phone className="w-3 h-3 text-[#3FA66B]" />
-                            <span>{c.guest_phone}</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="text-left sm:text-right">
-                      <span className="text-[11px] text-[#8E8E8E] block">
-                        Uploaded: {new Date(c.latest_upload).toLocaleDateString()} at {new Date(c.latest_upload).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Contributor's Photos Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                    {c.photos.map((p) => (
-                      <div key={p.id} className="aspect-square rounded-2xl overflow-hidden neu-card relative group border border-white/60">
-                        <img
-                          src={api.getThumbnailUrl(p.id)}
-                          alt={p.original_file_name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          loading="lazy"
-                        />
-                        <a
-                          href={api.getDownloadUrl(p.id)}
-                          download={p.original_file_name}
-                          className="absolute bottom-1.5 right-1.5 p-1.5 rounded-xl bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[#E86A5B]"
-                          title="Download photo"
-                        >
-                          <Download className="w-3 h-3" />
-                        </a>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 4: Album Selection */}
-      {activeTab === 'selection' && (
-        <div className="p-8 rounded-3xl neu-card text-center">
-          <Heart className="w-12 h-12 text-[#E86A5B] mx-auto mb-3" />
-          <h2 className="text-2xl font-display font-extrabold text-[#1F1F1F]">Client Album Proofing Suite</h2>
-          <p className="text-xs sm:text-sm text-[#6B6B6B] mt-2 max-w-xl mx-auto">
-            Clients can access their private proofing album to heart favorites, leave custom retouch instructions, and finalize choices for photobook printing.
-          </p>
-
-          <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
-            <button
-              onClick={copySelectionLink}
-              className="btn-primary"
-            >
-              {copiedSelection ? 'Copied Client Link ✓' : 'Copy Client Proofing Link'}
-            </button>
-            <a
-              href={`${window.location.origin}/selection/${event.selection_token || event.access_token}`}
-              target="_blank"
-              rel="noreferrer"
-              className="neu-btn-secondary"
-            >
-              Open Proofing Preview
-            </a>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 5: WhatsApp Automation */}
-      {activeTab === 'whatsapp' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="neu-card p-6 flex flex-col justify-between">
-            <div>
-              <span className="text-[10px] font-bold text-[#E86A5B] uppercase neu-pill mb-2">BOOKING STAGE</span>
-              <h4 className="text-base font-bold text-[#1F1F1F] mt-1">Booking Confirmation Message</h4>
-              <p className="text-xs text-[#6B6B6B] mt-2">Sends contract amount and advance received details to the client.</p>
-            </div>
-            <button
-              onClick={() => triggerWhatsApp('BOOKING')}
-              className="mt-6 btn-primary text-xs w-full"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Send Confirmation</span>
-            </button>
-          </div>
-
-          <div className="card-elevated p-6 flex flex-col justify-between">
-            <div>
-              <span className="text-[10px] font-bold text-[#D9A441] uppercase">PAYMENT STAGE</span>
-              <h4 className="text-base font-bold text-[#1F1F1F] mt-1">Payment Balance Reminder</h4>
-              <p className="text-xs text-[#6B6B6B] mt-2">Sends friendly balance reminder with exact pending amount.</p>
-            </div>
-            <button
-              onClick={() => triggerWhatsApp('PAYMENT')}
-              className="mt-6 btn-secondary-gold text-xs w-full"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Send Payment Reminder</span>
-            </button>
-          </div>
-
-          <div className="card-elevated p-6 flex flex-col justify-between">
-            <div>
-              <span className="text-[10px] font-bold text-[#3FA66B] uppercase">GUEST AI PORTAL</span>
-              <h4 className="text-base font-bold text-[#1F1F1F] mt-1">Guest QR & Selfie Match</h4>
-              <p className="text-xs text-[#6B6B6B] mt-2">Share live guest selfie search link to family broadcast groups.</p>
-            </div>
-            <button
-              onClick={() => triggerWhatsApp('QR_GUEST')}
-              className="mt-6 btn-primary text-xs w-full"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Share Guest QR Link</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 6: QR Standee */}
-      {activeTab === 'qr' && (
-        <div className="max-w-xl mx-auto p-8 rounded-3xl bg-white border border-[#E8E5E2] text-center shadow-sm">
-          <div className="w-12 h-12 rounded-2xl bg-[#E86A5B]/10 text-[#E86A5B] flex items-center justify-center mx-auto mb-4">
-            <QrCode className="w-6 h-6" />
-          </div>
-          <h2 className="text-2xl font-display font-extrabold text-[#1F1F1F] mb-1.5">Event Guest QR Code</h2>
-          <p className="text-xs text-[#6B6B6B] mb-6">
-            Display this QR standee at table tents or reception kiosks for instant guest selfie matching.
-          </p>
-
-          <div className="p-6 bg-white rounded-3xl inline-block shadow-lg mb-6 border-2 border-[#E86A5B]/20">
-            <img src={api.getQRUrl(event.id)} alt={`QR for ${event.name}`} className="w-56 h-56 mx-auto object-contain" />
-          </div>
-
-          <div className="flex items-center justify-center gap-3">
-            <a
-              href={api.getQRUrl(event.id)}
-              download={`QR_${event.slug}.png`}
-              className="btn-primary"
-            >
-              Download Printable PNG
-            </a>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 7: Guest Leads */}
-      {activeTab === 'leads' && (
-        <div className="overflow-hidden rounded-3xl border border-[#E8E5E2] bg-white shadow-sm">
-          <div className="p-6 border-b border-[#E8E5E2] flex items-center justify-between">
-            <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Marketing Leads & Delivery Records</h3>
-            <span className="text-xs font-bold px-3 py-1 rounded-full bg-[#E86A5B]/10 text-[#E86A5B] border border-[#E86A5B]/20">
-              {leads.length} Registered
-            </span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-[#E8E5E2] text-left text-xs">
-              <thead className="bg-[#FAF9F7] text-[#6B6B6B] font-bold uppercase text-[10px]">
-                <tr>
-                  <th className="px-5 py-3.5">Guest Name</th>
-                  <th className="px-5 py-3.5">Mobile Number</th>
-                  <th className="px-5 py-3.5">Biometric Consent</th>
-                  <th className="px-5 py-3.5">Marketing Consent</th>
-                  <th className="px-5 py-3.5">Matches Found</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E8E5E2] text-[#1F1F1F]">
                 {leads.map((l) => (
-                  <tr key={l.guest_id}>
-                    <td className="px-5 py-4 font-bold text-[#1F1F1F]">{l.name}</td>
-                    <td className="px-5 py-4 font-mono">{l.mobile}</td>
-                    <td className="px-5 py-4 text-[#3FA66B] font-bold">{l.face_search_consent ? 'Consented ✓' : 'No'}</td>
-                    <td className="px-5 py-4 text-[#E86A5B] font-bold">{l.marketing_consent ? 'Opted In ✓' : 'Opted Out'}</td>
-                    <td className="px-5 py-4 font-bold text-[#1F1F1F]">{l.searches_count}</td>
-                  </tr>
+                  <div key={l.id} className="p-4 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-[#1F1F1F] block">{l.guest_name}</span>
+                      <span className="text-[11px] text-[#6B6B6B]">{l.guest_phone}</span>
+                    </div>
+                    <span className="text-xs text-[#6B6B6B]">{new Date(l.created_at).toLocaleDateString()}</span>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* CREATE FOLDER MODAL */}
+      <Modal
+        isOpen={showFolderModal}
+        onClose={() => setShowFolderModal(false)}
+        title="Create New Folder"
+        subtitle="Organize photos by ceremony, portraits, drone, or custom categories."
+        icon={<FolderPlus className="w-5 h-5 text-[#E86A5B]" />}
+        size="md"
+      >
+        <form onSubmit={handleCreateFolder} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Folder Name *</label>
+            <input
+              type="text"
+              required
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              placeholder="e.g. 01_Haldi, Ring Ceremony, Drone Candids"
+              className="gmm-input w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Folder Type</label>
+            <NeomorphicSelect
+              value={newFolderType}
+              onChange={setNewFolderType}
+              options={[
+                { value: 'CEREMONY', label: 'Ceremony Function' },
+                { value: 'PORTRAITS', label: 'Couple Portraits' },
+                { value: 'CANDID', label: 'Candid Moments' },
+                { value: 'DRONE', label: 'Drone & Aerial Shots' },
+                { value: 'CUSTOM', label: 'Custom Folder' },
+              ]}
+            />
+          </div>
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E8E5E2]">
+            <button type="button" onClick={() => setShowFolderModal(false)} className="px-4 py-2.5 text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F]">Cancel</button>
+            <button type="submit" className="btn-primary py-2.5 px-5 text-xs font-bold">Create Folder</button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* BULK MOVE PHOTOS MODAL */}
+      <Modal
+        isOpen={showMoveModal}
+        onClose={() => setShowMoveModal(false)}
+        title="Move Photos to Folder"
+        subtitle={`Select destination folder for ${selectedPhotoIds.size} photo(s).`}
+        icon={<MoveRight className="w-5 h-5 text-[#E86A5B]" />}
+        size="md"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Target Destination Folder</label>
+            <select
+              value={targetMoveFolderId}
+              onChange={(e) => setTargetMoveFolderId(e.target.value)}
+              className="gmm-input w-full py-2.5"
+            >
+              <option value="">-- Choose Target Folder --</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name} ({f.photo_count} current photos)
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E8E5E2]">
+            <button type="button" onClick={() => setShowMoveModal(false)} className="px-4 py-2.5 text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F]">Cancel</button>
+            <button 
+              type="button" 
+              onClick={handleMoveSelectedPhotos} 
+              disabled={!targetMoveFolderId}
+              className="btn-primary py-2.5 px-5 text-xs font-bold disabled:opacity-50"
+            >
+              Move Photos
+            </button>
           </div>
         </div>
-      )}
+      </Modal>
 
       {/* CEREMONY MODAL */}
       <Modal
         isOpen={showCeremonyModal}
         onClose={() => setShowCeremonyModal(false)}
-        title="Add Ceremony / Function"
-        subtitle="Add wedding timeline functions like Haldi, Sangeet, or Reception."
-        icon={<Calendar className="w-5 h-5 text-[#E86A5B]" />}
+        title="Add Wedding Ceremony"
+        subtitle="Define a wedding function (Haldi, Sangeet, Wedding, Reception)."
+        icon={<Sparkles className="w-5 h-5 text-[#E86A5B]" />}
         size="md"
       >
         <form onSubmit={handleAddCeremony} className="space-y-4">
-          <div className="min-w-0">
+          <div>
             <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Ceremony Name *</label>
             <input
               type="text"
@@ -1074,7 +1232,7 @@ export default function EventCommandCenterPage() {
         size="md"
       >
         <form onSubmit={handleAddCrew} className="space-y-4">
-          <div className="min-w-0">
+          <div>
             <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Crew / Freelancer Name *</label>
             <input
               type="text"
@@ -1086,7 +1244,7 @@ export default function EventCommandCenterPage() {
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="min-w-0">
+            <div>
               <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Role</label>
               <NeomorphicSelect
                 value={crewRole}
@@ -1100,7 +1258,7 @@ export default function EventCommandCenterPage() {
                 ]}
               />
             </div>
-            <div className="min-w-0">
+            <div>
               <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Agreed Payout (₹)</label>
               <input
                 type="number"
@@ -1127,7 +1285,7 @@ export default function EventCommandCenterPage() {
         size="md"
       >
         <form onSubmit={handleAddExpense} className="space-y-4">
-          <div className="min-w-0">
+          <div>
             <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Category</label>
             <NeomorphicSelect
               value={expenseCat}
@@ -1141,7 +1299,7 @@ export default function EventCommandCenterPage() {
               ]}
             />
           </div>
-          <div className="min-w-0">
+          <div>
             <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Description *</label>
             <input
               type="text"
@@ -1152,7 +1310,7 @@ export default function EventCommandCenterPage() {
               className="gmm-input w-full"
             />
           </div>
-          <div className="min-w-0">
+          <div>
             <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Amount (₹ INR) *</label>
             <input
               type="number"

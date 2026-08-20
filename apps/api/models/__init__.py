@@ -4,6 +4,7 @@ Get My Moment - Database Models
 
 from apps.api.models.photographer import Photographer
 from apps.api.models.event import Event
+from apps.api.models.folder import Folder, FolderType
 from apps.api.models.photo import Photo
 from apps.api.models.face import Face, FaceEmbedding
 from apps.api.models.guest import Guest
@@ -39,6 +40,8 @@ from apps.api.models.platform_settings import PlatformPaymentConfig
 __all__ = [
     "Photographer",
     "Event",
+    "Folder",
+    "FolderType",
     "Photo",
     "Face",
     "FaceEmbedding",

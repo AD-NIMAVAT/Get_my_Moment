@@ -24,6 +24,8 @@ class PhotoResponse(BaseModel):
     is_guest_uploaded: bool = False
     uploaded_by_guest_name: Optional[str] = None
     uploaded_by_guest_phone: Optional[str] = None
+    folder_id: Optional[str] = None
+    folder_name: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

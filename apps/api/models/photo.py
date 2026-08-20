@@ -14,7 +14,9 @@ class Photo(Base):
     __tablename__ = "photos"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    studio_id = Column(String(36), ForeignKey("photographers.id", ondelete="CASCADE"), nullable=True, index=True)
     event_id = Column(String(36), ForeignKey("events.id", ondelete="CASCADE"), nullable=False, index=True)
+    folder_id = Column(String(36), ForeignKey("folders.id", ondelete="SET NULL"), nullable=True, index=True)
     original_file_name = Column(String(255), nullable=False)
     file_path = Column(String(1024), nullable=False)
     thumbnail_path = Column(String(1024), nullable=True)
@@ -44,11 +46,16 @@ class Photo(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
+    photographer = relationship("Photographer", backref="photos")
     event = relationship("Event", back_populates="photos")
+    folder = relationship("Folder", back_populates="photos")
     faces = relationship("Face", back_populates="photo", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_photos_event_sha256", "event_id", "sha256_hash"),
+        Index("ix_photos_studio_event", "studio_id", "event_id"),
+        Index("ix_photos_event_folder", "event_id", "folder_id"),
+        Index("ix_photos_studio_event_folder", "studio_id", "event_id", "folder_id"),
         Index("ix_photos_event_camera", "event_id", "camera_id"),
         Index("ix_photos_event_idempotency", "event_id", "idempotency_key"),
     )

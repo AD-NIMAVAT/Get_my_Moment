@@ -1,5 +1,6 @@
 """
 Storage Service Abstraction and Local Storage Engine
+Supports Studio-scoped, Event-scoped, and Folder-scoped UUID storage hierarchy
 """
 
 import os
@@ -11,6 +12,8 @@ from pathlib import Path
 from PIL import Image, ImageOps
 import io
 from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+from sqlalchemy import func
 from apps.api.config import settings
 from packages.shared.constants import THUMBNAIL_SIZES
 
@@ -18,10 +21,10 @@ from packages.shared.constants import THUMBNAIL_SIZES
 class StorageService:
     """Abstract interface for file storage drivers."""
     
-    def save_original(self, event_id: str, file_bytes: bytes, original_filename: str) -> Tuple[str, str, int, str]:
+    def save_original(self, event_id: str, file_bytes: bytes, original_filename: str, studio_id: Optional[str] = None, folder_id: Optional[str] = None) -> Tuple[str, str, int, str]:
         raise NotImplementedError
 
-    def generate_thumbnails(self, event_id: str, file_id: str, original_path: str) -> Tuple[str, Optional[str]]:
+    def generate_thumbnails(self, event_id: str, file_id: str, original_path: str, studio_id: Optional[str] = None, folder_id: Optional[str] = None) -> Tuple[str, Optional[str]]:
         raise NotImplementedError
 
     def save_face_crop(self, event_id: str, face_id: str, crop_bytes: bytes) -> Optional[str]:
@@ -38,18 +41,25 @@ class StorageService:
 
 
 class LocalStorageService(StorageService):
-    """Local filesystem storage driver with path traversal protections."""
+    """Local filesystem storage driver with multi-tenant path isolation and path traversal protections."""
 
     def __init__(self, root_dir: str = settings.STORAGE_LOCAL_ROOT):
         self.root_dir = os.path.abspath(root_dir)
         os.makedirs(self.root_dir, exist_ok=True)
 
-    def _ensure_event_directories(self, event_id: str):
-        """Ensure all required event subdirectories exist."""
-        base_event_dir = os.path.join(self.root_dir, "events", event_id)
-        for folder in ["originals", "thumbnails", "processed", "faces", "temp"]:
-            os.makedirs(os.path.join(base_event_dir, folder), exist_ok=True)
-        return base_event_dir
+    def _ensure_directories(self, studio_id: Optional[str], event_id: str, folder_id: Optional[str] = None):
+        """Ensure all required studio/event/folder subdirectories exist."""
+        if studio_id:
+            base_dir = os.path.join(self.root_dir, "studios", studio_id, "events", event_id)
+        else:
+            base_dir = os.path.join(self.root_dir, "events", event_id)
+
+        for sub in ["originals", "thumbnails", "processed", "faces", "temp", "exports"]:
+            if folder_id and sub in ["originals", "thumbnails"]:
+                os.makedirs(os.path.join(base_dir, sub, folder_id), exist_ok=True)
+            else:
+                os.makedirs(os.path.join(base_dir, sub), exist_ok=True)
+        return base_dir
 
     def _safe_resolve(self, relative_path: str) -> str:
         """Resolve path and guard against directory traversal attacks."""
@@ -74,7 +84,6 @@ class LocalStorageService(StorageService):
     @staticmethod
     def validate_image(file_bytes: bytes) -> Tuple[str, int, int]:
         """Validate magic bytes, dimensions, and file size with anti-decompression bomb protection."""
-        # 1. Size limit
         max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
         if len(file_bytes) > max_bytes:
             raise HTTPException(
@@ -82,21 +91,17 @@ class LocalStorageService(StorageService):
                 detail=f"Uploaded file exceeds maximum allowed size of {settings.MAX_UPLOAD_SIZE_MB}MB."
             )
 
-        # 2. Decompression Bomb Protection (Max 80MP)
         Image.MAX_IMAGE_PIXELS = 80_000_000
 
         try:
-            # First pass: verify structural container & markers
             with Image.open(io.BytesIO(file_bytes)) as img:
                 img.verify()
 
-            # Second pass: fully load and decode pixels to ensure no truncation or partial upload
             with Image.open(io.BytesIO(file_bytes)) as img:
                 img.load()
                 img_format = (img.format or "JPEG").lower()
                 width, height = img.size
 
-                # 3. Sanity check dimensions (max 12000x12000 px)
                 if width > 12000 or height > 12000:
                     raise ValueError(f"Image dimensions ({width}x{height}) exceed maximum allowed dimensions of 12000x12000px.")
 
@@ -114,12 +119,19 @@ class LocalStorageService(StorageService):
                 detail=f"Invalid, incomplete, or corrupted image file: {str(e)}"
             )
 
-    def save_original(self, event_id: str, file_bytes: bytes, original_filename: str) -> Tuple[str, str, int, str]:
+    def save_original(
+        self,
+        event_id: str,
+        file_bytes: bytes,
+        original_filename: str,
+        studio_id: Optional[str] = None,
+        folder_id: Optional[str] = None
+    ) -> Tuple[str, str, int, str]:
         """
         Saves original immutable file with safe UUID internal name.
         Returns: (file_id, relative_path, file_size, sha256_hash)
         """
-        self._ensure_event_directories(event_id)
+        self._ensure_directories(studio_id, event_id, folder_id)
         img_format, width, height = self.validate_image(file_bytes)
         sha256_hash = self.calculate_sha256(file_bytes)
 
@@ -127,7 +139,15 @@ class LocalStorageService(StorageService):
         ext = "jpg" if img_format in ["jpeg", "jpg"] else img_format
         safe_name = f"{file_id}.{ext}"
 
-        rel_path = os.path.join("events", event_id, "originals", safe_name).replace("\\", "/")
+        if studio_id:
+            if folder_id:
+                rel_path = os.path.join("studios", studio_id, "events", event_id, "originals", folder_id, safe_name)
+            else:
+                rel_path = os.path.join("studios", studio_id, "events", event_id, "originals", safe_name)
+        else:
+            rel_path = os.path.join("events", event_id, "originals", safe_name)
+
+        rel_path = rel_path.replace("\\", "/")
         abs_path = self._safe_resolve(rel_path)
 
         with open(abs_path, "wb") as f:
@@ -135,35 +155,50 @@ class LocalStorageService(StorageService):
 
         return file_id, rel_path, len(file_bytes), sha256_hash
 
-    def generate_thumbnails(self, event_id: str, file_id: str, original_path: str) -> Tuple[str, Optional[str]]:
+    def generate_thumbnails(
+        self,
+        event_id: str,
+        file_id: str,
+        original_path: str,
+        studio_id: Optional[str] = None,
+        folder_id: Optional[str] = None
+    ) -> Tuple[str, Optional[str]]:
         """
         Generates web-optimized small (400px) and medium (1200px) JPEG thumbnails.
         Returns: (small_thumb_rel_path, medium_thumb_rel_path)
         """
-        self._ensure_event_directories(event_id)
+        self._ensure_directories(studio_id, event_id, folder_id)
         abs_orig_path = self._safe_resolve(original_path)
 
         small_name = f"{file_id}_small.jpg"
         med_name = f"{file_id}_medium.jpg"
 
-        small_rel_path = os.path.join("events", event_id, "thumbnails", small_name).replace("\\", "/")
-        med_rel_path = os.path.join("events", event_id, "thumbnails", med_name).replace("\\", "/")
+        if studio_id:
+            if folder_id:
+                small_rel_path = os.path.join("studios", studio_id, "events", event_id, "thumbnails", folder_id, small_name)
+                med_rel_path = os.path.join("studios", studio_id, "events", event_id, "thumbnails", folder_id, med_name)
+            else:
+                small_rel_path = os.path.join("studios", studio_id, "events", event_id, "thumbnails", small_name)
+                med_rel_path = os.path.join("studios", studio_id, "events", event_id, "thumbnails", med_name)
+        else:
+            small_rel_path = os.path.join("events", event_id, "thumbnails", small_name)
+            med_rel_path = os.path.join("events", event_id, "thumbnails", med_name)
+
+        small_rel_path = small_rel_path.replace("\\", "/")
+        med_rel_path = med_rel_path.replace("\\", "/")
 
         abs_small = self._safe_resolve(small_rel_path)
         abs_med = self._safe_resolve(med_rel_path)
 
         with Image.open(abs_orig_path) as img:
-            # Auto-orient based on EXIF tag
             img = ImageOps.exif_transpose(img)
             if img.mode in ("RGBA", "P"):
                 img = img.convert("RGB")
 
-            # Medium preview thumbnail
             med_img = img.copy()
             med_img.thumbnail(THUMBNAIL_SIZES["medium"], Image.Resampling.LANCZOS)
             med_img.save(abs_med, "JPEG", quality=85, optimize=True)
 
-            # Small gallery thumbnail
             small_img = img.copy()
             small_img.thumbnail(THUMBNAIL_SIZES["small"], Image.Resampling.LANCZOS)
             small_img.save(abs_small, "JPEG", quality=80, optimize=True)
@@ -171,11 +206,10 @@ class LocalStorageService(StorageService):
         return small_rel_path, med_rel_path
 
     def save_face_crop(self, event_id: str, face_id: str, crop_bytes: bytes) -> Optional[str]:
-        """Saves optional debug face crop only if FACE_DEBUG_CROPS_ENABLED is True."""
         if not settings.FACE_DEBUG_CROPS_ENABLED:
             return None
 
-        self._ensure_event_directories(event_id)
+        self._ensure_directories(None, event_id)
         rel_path = os.path.join("events", event_id, "faces", f"{face_id}.jpg").replace("\\", "/")
         abs_path = self._safe_resolve(rel_path)
 
@@ -185,10 +219,9 @@ class LocalStorageService(StorageService):
         return rel_path
 
     def save_temp_file(self, event_id: str, file_bytes: bytes, suffix: str = ".jpg") -> str:
-        """Saves transient selfie file in temp directory for processing."""
-        self._ensure_event_directories(event_id)
-        temp_id = str(uuid.uuid4())
-        rel_path = os.path.join("events", event_id, "temp", f"{temp_id}{suffix}").replace("\\", "/")
+        self._ensure_directories(None, event_id)
+        file_id = str(uuid.uuid4())
+        rel_path = os.path.join("events", event_id, "temp", f"{file_id}{suffix}").replace("\\", "/")
         abs_path = self._safe_resolve(rel_path)
 
         with open(abs_path, "wb") as f:
@@ -196,27 +229,84 @@ class LocalStorageService(StorageService):
 
         return rel_path
 
-    def delete_file(self, relative_path: str) -> bool:
-        """Deletes file safely if it exists."""
+    def delete_file(self, file_path: str) -> bool:
         try:
-            abs_path = self._safe_resolve(relative_path)
+            abs_path = self._safe_resolve(file_path)
             if os.path.exists(abs_path):
                 os.remove(abs_path)
                 return True
         except Exception:
             pass
-def get_storage_service() -> StorageService:
-    """Storage driver factory supporting local filesystem and cloud S3/R2 object storage."""
-    driver = getattr(settings, "STORAGE_DRIVER", "local").lower()
-    if driver == "s3":
-        try:
-            from apps.api.services.s3_storage import S3StorageService
-            return S3StorageService()
-        except Exception as e:
-            import logging
-            logging.getLogger("getmymoment").warning(f"Failed to initialize S3 storage, falling back to local: {e}")
-    return LocalStorageService()
+        return False
 
 
-# Global storage service instance
-storage_service = get_storage_service()
+def get_or_create_uncategorized_folder(db: Session, studio_id: str, event_id: str):
+    """
+    Ensures every event has a protected system 'Uncategorized' folder.
+    Used as fallback for legacy photos, deleted folders, and unassigned camera ingest.
+    """
+    from apps.api.models.folder import Folder, FolderType
+
+    folder = db.query(Folder).filter(
+        Folder.event_id == event_id,
+        Folder.folder_type == FolderType.UNCATEGORIZED
+    ).first()
+
+    if not folder:
+        folder = Folder(
+            id=str(uuid.uuid4()),
+            studio_id=studio_id,
+            event_id=event_id,
+            name="Uncategorized",
+            slug="uncategorized",
+            folder_type=FolderType.UNCATEGORIZED,
+            icon="Folder",
+            color="#6B6B6B",
+            order_index=999,
+            is_locked=False,
+            allow_guest_view=True,
+            is_system=True,
+        )
+        db.add(folder)
+        db.commit()
+        db.refresh(folder)
+
+    return folder
+
+
+def reconcile_folder_counters(db: Session, event_id: str, folder_id: Optional[str] = None):
+    """
+    Reconciles photo_count and total_size_bytes for folders in an event using a single GROUP BY query.
+    Prevents N+1 query overhead.
+    """
+    from apps.api.models.folder import Folder
+    from apps.api.models.photo import Photo
+
+    query = db.query(
+        Photo.folder_id,
+        func.count(Photo.id).label("cnt"),
+        func.sum(Photo.file_size).label("sz")
+    ).filter(
+        Photo.event_id == event_id,
+        Photo.is_deleted == False
+    )
+
+    if folder_id:
+        query = query.filter(Photo.folder_id == folder_id)
+
+    stats = query.group_by(Photo.folder_id).all()
+    stats_map = {row.folder_id: (row.cnt or 0, row.sz or 0) for row in stats}
+
+    folders_query = db.query(Folder).filter(Folder.event_id == event_id)
+    if folder_id:
+        folders_query = folders_query.filter(Folder.id == folder_id)
+
+    for f in folders_query.all():
+        cnt, sz = stats_map.get(f.id, (0, 0))
+        f.photo_count = cnt
+        f.total_size_bytes = sz
+
+    db.commit()
+
+
+storage_service = LocalStorageService()
