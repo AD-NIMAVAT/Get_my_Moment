@@ -234,24 +234,19 @@ function LoginForm() {
 
       {/* LOGIN FORM */}
       {mode === 'login' && (
-        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off" data-lpignore="true" data-form-type="other">
-          {/* Prevent aggressive browser autofill of cross-portal passwords */}
-          <input type="text" style={{ display: 'none' }} aria-hidden="true" tabIndex={-1} autoComplete="off" />
-          <input type="password" style={{ display: 'none' }} aria-hidden="true" tabIndex={-1} autoComplete="off" />
-
+        <form onSubmit={handleSubmit} className="space-y-4" name="login_form" id="login_form" method="POST">
           <div>
-            <label htmlFor="studio_portal_email" className="block text-xs font-bold text-[#1F1F1F] mb-1.5">
+            <label htmlFor="email" className="block text-xs font-bold text-[#1F1F1F] mb-1.5">
               Email Address *
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-[#E86A5B] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
               <input
-                id="studio_portal_email"
-                name="studio_portal_email"
+                id="email"
+                name="email"
                 type="email"
                 required
-                autoComplete="off"
-                data-lpignore="true"
+                autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="photographer@studio.com"
@@ -261,18 +256,17 @@ function LoginForm() {
           </div>
 
           <div>
-            <label htmlFor="studio_portal_password" className="block text-xs font-bold text-[#1F1F1F] mb-1.5">
+            <label htmlFor="password" className="block text-xs font-bold text-[#1F1F1F] mb-1.5">
               Password *
             </label>
             <div className="relative">
               <Lock className="w-4 h-4 text-[#E86A5B] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
               <input
-                id="studio_portal_password"
-                name="studio_portal_password"
+                id="password"
+                name="password"
                 type="password"
                 required
-                autoComplete="new-password"
-                data-lpignore="true"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
