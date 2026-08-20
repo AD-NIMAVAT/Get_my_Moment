@@ -186,17 +186,20 @@ export function Navbar() {
               <Link href="/#how-it-works" className="px-3 py-2 rounded-xl text-[#6B6B6B] hover:text-[#E86A5B] transition-all">
                 How It Works
               </Link>
-              <Link href="/#killer-features" className="px-3 py-2 rounded-xl text-[#6B6B6B] hover:text-[#E86A5B] transition-all">
+              <Link href="/#business-os" className="px-3 py-2 rounded-xl text-[#6B6B6B] hover:text-[#E86A5B] transition-all">
                 Business OS
               </Link>
               <Link href="/#pricing" className="px-3 py-2 rounded-xl text-[#6B6B6B] hover:text-[#E86A5B] transition-all">
-                Pricing Plans
+                Pricing
+              </Link>
+              <Link href="/#faq" className="px-3 py-2 rounded-xl text-[#6B6B6B] hover:text-[#E86A5B] transition-all">
+                FAQs
               </Link>
               <Link href="/about" className="px-3 py-2 rounded-xl text-[#6B6B6B] hover:text-[#E86A5B] transition-all font-semibold">
                 About Us
               </Link>
               <Link href="/contact" className="px-3 py-2 rounded-xl text-[#6B6B6B] hover:text-[#E86A5B] transition-all font-semibold">
-                Contact Us
+                Contact
               </Link>
             </>
           )}
