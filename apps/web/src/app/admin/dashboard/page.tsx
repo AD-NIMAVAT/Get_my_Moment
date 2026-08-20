@@ -2,12 +2,13 @@
 
 export const dynamic = 'force-dynamic';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { useToast } from '@/context/ToastContext';
 import { Modal } from '@/components/Modal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { NeomorphicSelect } from '@/components/NeomorphicSelect';
 import { 
   api, AdminPlatformStats, AdminPhotographerItem, AdminEventItem, 
   AdminPhotographerProfileResponse 
@@ -17,19 +18,18 @@ import {
   Trash2, CheckCircle2, XCircle, Search, ExternalLink, RefreshCw, 
   LogOut, Cpu, AlertTriangle, KeyRound, ArrowUpRight, BarChart3, 
   Check, X, Crown, Zap, Calendar, HardDrive, Phone, Mail, Edit3, Save, Plus,
-  Lock, Unlock, Eye, EyeOff, Building2, CreditCard, QrCode, FileText, UploadCloud,
-  LayoutDashboard, Bell, MoreVertical, Settings, Activity, Folder, ArrowRight
+  Lock, Unlock, Eye, EyeOff, Building2, CreditCard, QrCode, FileText, UploadCloud
 } from 'lucide-react';
 
 const PLAN_INFO: Record<string, { label: string; price: string; color: string; storage: string; events: string }> = {
-  FREE_TRIAL: { label: 'Free Trial', price: '₹0', color: 'text-neutral-300 bg-white/10 border-white/15', storage: '5 GB', events: '1 Event/mo' },
-  SOLO_PRO: { label: 'Solo Pro', price: '₹599/mo', color: 'text-purple-300 bg-purple-500/20 border-purple-500/30', storage: '100 GB', events: '10 Events/mo' },
-  STUDIO_PRO: { label: 'Studio Pro', price: '₹1,999/mo', color: 'text-cyan-300 bg-cyan-500/20 border-cyan-500/30', storage: '500 GB', events: '30 Events/mo' },
-  STUDIO_OS: { label: 'Studio OS', price: '₹4,999/mo', color: 'text-amber-300 bg-amber-500/20 border-amber-500/30', storage: '2,000 GB (2TB)', events: 'Unlimited' },
-  ENTERPRISE_VIP: { label: 'Enterprise VIP', price: '₹9,999/mo', color: 'text-pink-300 bg-pink-500/20 border-pink-500/30 font-bold', storage: '10,000 GB (10TB)', events: 'Unlimited' },
+  FREE_TRIAL: { label: 'Free Trial', price: '₹0', color: 'text-[#6B6B6B] bg-neutral-100 border-[#E8E5E2]', storage: '5 GB', events: '1 Event/mo' },
+  SOLO_PRO: { label: 'Solo Pro', price: '₹599/mo', color: 'text-[#E86A5B] bg-[#E86A5B]/10 border-[#E86A5B]/25', storage: '100 GB', events: '10 Events/mo' },
+  STUDIO_PRO: { label: 'Studio Pro', price: '₹1,999/mo', color: 'text-[#C94F43] bg-[#C94F43]/10 border-[#C94F43]/25', storage: '500 GB', events: '30 Events/mo' },
+  STUDIO_OS: { label: 'Studio OS', price: '₹4,999/mo', color: 'text-[#8F6420] bg-[#D9A441]/15 border-[#D9A441]/30', storage: '2,000 GB (2TB)', events: 'Unlimited' },
+  ENTERPRISE_VIP: { label: 'Enterprise VIP', price: '₹9,999/mo', color: 'text-[#1F1F1F] bg-neutral-100 border-[#E8E5E2] font-bold', storage: '10,000 GB (10TB)', events: 'Unlimited' },
 };
 
-function AdminDashboardContent() {
+function SuperAdminDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { admin, loading: authLoading, logout } = useAdminAuth();
@@ -44,8 +44,6 @@ function AdminDashboardContent() {
   const [telemetry, setTelemetry] = useState<any>(null);
   const [revenueData, setRevenueData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [autoUpdates, setAutoUpdates] = useState(true);
-  const [chartPeriod, setChartPeriod] = useState<'month' | 'quarter' | 'year'>('month');
 
   // Gateway & Bank Vault Modal State
   const [isVaultModalOpen, setIsVaultModalOpen] = useState(false);
@@ -56,6 +54,25 @@ function AdminDashboardContent() {
   const [showVaultSecret, setShowVaultSecret] = useState(false);
   const [gatewayConfig, setGatewayConfig] = useState<any>(null);
   const [savingGateway, setSavingGateway] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  // File Upload Refs for Digital Stamp & Signature PNGs
+  const stampFileRef = React.useRef<HTMLInputElement>(null);
+  const signFileRef = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleOpenVault = () => setIsVaultModalOpen(true);
+    window.addEventListener('open-vault-modal', handleOpenVault);
+
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['overview', 'revenue', 'photographers', 'events', 'telemetry'].includes(tabParam)) {
+      setActiveTab(tabParam as any);
+    }
+
+    return () => {
+      window.removeEventListener('open-vault-modal', handleOpenVault);
+    };
+  }, [searchParams]);
 
   // Profile Modal State
   const [selectedPhotographerId, setSelectedPhotographerId] = useState<string | null>(null);
@@ -65,13 +82,20 @@ function AdminDashboardContent() {
   const [upgradeStatus, setUpgradeStatus] = useState<string>('ACTIVE');
   const [savingUpgrade, setSavingUpgrade] = useState(false);
 
+  // Profile Edit State
+  const [editStudioName, setEditStudioName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Confirmation Modals
+  const [photographerToDelete, setPhotographerToDelete] = useState<AdminPhotographerItem | null>(null);
+  const [eventToDelete, setEventToDelete] = useState<AdminEventItem | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
   // Filters
   const [photographerSearch, setPhotographerSearch] = useState('');
   const [eventSearch, setEventSearch] = useState('');
   const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [photographerToDelete, setPhotographerToDelete] = useState<AdminPhotographerItem | null>(null);
-  const [eventToDelete, setEventToDelete] = useState<AdminEventItem | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !admin) {
@@ -94,109 +118,65 @@ function AdminDashboardContent() {
         api.adminGetEvents(),
         api.adminGetTelemetry(),
         api.adminGetRevenueAnalytics().catch(() => null),
-        api.adminGetInvoices().catch(() => []),
+        api.adminGetSubscriptionInvoices().catch(() => []),
       ]);
       setStats(st);
       setPhotographers(pList);
       setEvents(eList);
       setTelemetry(telem);
       setRevenueData(rev);
-      setAdminInvoices(invs);
+      setAdminInvoices(invs || []);
     } catch (err: any) {
-      toast.error('Failed to load Super Admin dashboard: ' + (err.message || 'Error'));
+      toast.error(err.message || 'Failed to load admin telemetry');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUnlockVault = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!vaultPassword.trim()) {
-      toast.error('Please enter master security key');
-      return;
-    }
-    setUnlockingVault(true);
-    try {
-      const cfg = await api.adminGetGatewayConfig(vaultPassword.trim());
-      setGatewayConfig(cfg);
-      setIsVaultUnlocked(true);
-      toast.success('Gateway & Bank Vault unlocked');
-    } catch (err: any) {
-      toast.error(err.message || 'Invalid master security password');
-    } finally {
-      setUnlockingVault(false);
-    }
-  };
-
-  const handleSaveVault = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!gatewayConfig) return;
-    setSavingGateway(true);
-    try {
-      await api.adminUpdateGatewayConfig({
-        ...gatewayConfig,
-        master_password: vaultPassword,
-      });
-      toast.success('Bank Vault & Gateway credentials saved');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save gateway config');
-    } finally {
-      setSavingGateway(false);
-    }
-  };
-
-  const handleTogglePhotographerStatus = async (p: AdminPhotographerItem) => {
-    setTogglingId(p.id);
-    try {
-      const newStatus = p.is_active ? 'SUSPENDED' : 'ACTIVE';
-      await api.adminUpdatePhotographerStatus(p.id, newStatus, undefined, 'Admin status toggle');
-      toast.success(`Studio ${p.studio_name} is now ${newStatus}`);
-      await loadAdminData();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to update studio status');
-    } finally {
-      setTogglingId(null);
-    }
-  };
-
-  const handleOpenProfile = async (photographerId: string) => {
+  const handleOpenPhotographerProfile = async (photographerId: string) => {
     setSelectedPhotographerId(photographerId);
     setLoadingProfile(true);
     try {
       const data = await api.adminGetPhotographerProfile(photographerId);
       setProfileData(data);
-      setUpgradePlan(data.photographer.subscription_plan || 'SOLO_PRO');
-      setUpgradeStatus(data.photographer.status || 'ACTIVE');
+      setUpgradePlan(data.subscription_plan || 'SOLO_PRO');
+      setUpgradeStatus(data.subscription_status || 'ACTIVE');
+      setEditStudioName(data.studio_name);
+      setEditPhone(data.phone || '');
     } catch (err: any) {
-      toast.error('Failed to load studio profile: ' + (err.message || 'Error'));
+      toast.error(err.message || 'Failed to load photographer profile');
       setSelectedPhotographerId(null);
     } finally {
       setLoadingProfile(false);
     }
   };
 
-  const handleSaveUpgrade = async () => {
+  const handleApplySubscriptionUpgrade = async () => {
     if (!selectedPhotographerId) return;
     setSavingUpgrade(true);
     try {
-      await api.adminUpdatePhotographerStatus(
-        selectedPhotographerId,
-        upgradeStatus as any,
-        upgradePlan as any,
-        'Super Admin tier adjustment'
-      );
-      toast.success('Studio plan and status updated');
+      const res = await api.adminUpdatePhotographerSubscription(selectedPhotographerId, {
+        subscription_plan: upgradePlan,
+        subscription_status: upgradeStatus,
+      });
+      toast.success(`Plan successfully updated to ${PLAN_INFO[res.subscription_plan]?.label || res.subscription_plan}!`);
+      
       if (profileData) {
         setProfileData({
           ...profileData,
-          photographer: {
-            ...profileData.photographer,
-            subscription_plan: upgradePlan as any,
-            status: upgradeStatus as any,
-          },
+          subscription_plan: res.subscription_plan,
+          subscription_status: res.subscription_status,
+          max_storage_gb: res.max_storage_gb,
+          max_events_per_month: res.max_events_per_month,
         });
       }
-      await loadAdminData();
+      setPhotographers(photographers.map((p) => p.id === selectedPhotographerId ? {
+        ...p,
+        subscription_plan: res.subscription_plan,
+        subscription_status: res.subscription_status,
+        max_storage_gb: res.max_storage_gb,
+        max_events_per_month: res.max_events_per_month,
+      } : p));
     } catch (err: any) {
       toast.error(err.message || 'Failed to update plan');
     } finally {
@@ -204,27 +184,94 @@ function AdminDashboardContent() {
     }
   };
 
-  const handleDeletePhotographer = async () => {
+  const handleSaveProfileDetails = async () => {
+    if (!selectedPhotographerId) return;
+    setSavingProfile(true);
+    try {
+      await api.adminUpdatePhotographerProfile(selectedPhotographerId, {
+        studio_name: editStudioName.trim(),
+        phone: editPhone.trim(),
+      });
+      toast.success('Studio details updated successfully!');
+      if (profileData) {
+        setProfileData({
+          ...profileData,
+          studio_name: editStudioName.trim(),
+          phone: editPhone.trim(),
+        });
+      }
+      setPhotographers(photographers.map((p) => p.id === selectedPhotographerId ? {
+        ...p,
+        studio_name: editStudioName.trim(),
+        phone: editPhone.trim(),
+      } : p));
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update studio profile');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleTogglePhotographerActive = async (p: AdminPhotographerItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setTogglingId(p.id);
+    try {
+      const res = await api.adminUpdatePhotographerStatus(p.id, { is_active: !p.is_active });
+      setPhotographers(photographers.map((item) => item.id === p.id ? { ...item, is_active: res.is_active } : item));
+      if (profileData && profileData.id === p.id) {
+        setProfileData({ ...profileData, is_active: res.is_active });
+      }
+      toast.success(`Studio ${p.studio_name} is now ${res.is_active ? 'ACTIVE' : 'SUSPENDED'}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update status');
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const handleTogglePhotographerVerified = async (p: AdminPhotographerItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setTogglingId(p.id);
+    try {
+      const res = await api.adminUpdatePhotographerStatus(p.id, { is_verified: !p.is_verified });
+      setPhotographers(photographers.map((item) => item.id === p.id ? { ...item, is_verified: res.is_verified } : item));
+      if (profileData && profileData.id === p.id) {
+        setProfileData({ ...profileData, is_verified: res.is_verified });
+      }
+      toast.success(`Studio ${p.studio_name} is now ${res.is_verified ? 'VERIFIED ✨' : 'STANDARD'}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to verify studio');
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const handleConfirmDeletePhotographer = async () => {
     if (!photographerToDelete) return;
     setActionLoading(true);
     try {
       await api.adminDeletePhotographer(photographerToDelete.id);
-      toast.success(`Studio ${photographerToDelete.studio_name} deleted`);
+      setPhotographers(photographers.filter((item) => item.id !== photographerToDelete.id));
+      if (selectedPhotographerId === photographerToDelete.id) {
+        setSelectedPhotographerId(null);
+      }
+      toast.success(`Studio "${photographerToDelete.studio_name}" deleted`);
       setPhotographerToDelete(null);
       await loadAdminData();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to delete studio');
+      toast.error(err.message || 'Failed to delete photographer');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleDeleteEvent = async () => {
+  const handleConfirmDeleteEvent = async () => {
     if (!eventToDelete) return;
     setActionLoading(true);
     try {
       await api.adminDeleteEvent(eventToDelete.id);
-      toast.success(`Event ${eventToDelete.name} deleted`);
+      setEvents(events.filter((item) => item.id !== eventToDelete.id));
+      toast.success(`Event "${eventToDelete.name}" deleted by Superadmin`);
       setEventToDelete(null);
       await loadAdminData();
     } catch (err: any) {
@@ -234,802 +281,1568 @@ function AdminDashboardContent() {
     }
   };
 
+  const handleUnlockVault = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!vaultPassword) {
+      toast.error('Please enter your SuperAdmin password');
+      return;
+    }
+    setUnlockingVault(true);
+    try {
+      await api.adminUnlockGatewayVault(vaultPassword);
+      const cfg = await api.adminGetGatewaySettings();
+      setGatewayConfig(cfg);
+      setIsVaultUnlocked(true);
+      setVaultPassword('');
+      toast.success('🔓 Gateway & Bank Vault Unlocked!');
+    } catch (err: any) {
+      toast.error(err.message || 'Incorrect SuperAdmin password');
+    } finally {
+      setUnlockingVault(false);
+    }
+  };
+
+  const handleConfirmSaveGateway = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!confirmPassword) {
+      toast.error('Please enter your SuperAdmin password to authorize changes');
+      return;
+    }
+    setSavingGateway(true);
+    try {
+      const res = await api.adminUpdateGatewaySettings({
+        ...gatewayConfig,
+        confirm_password: confirmPassword,
+      });
+      toast.success(res.message);
+      setConfirmPassword('');
+      // Auto-lock and close vault modal immediately on save
+      setIsVaultUnlocked(false);
+      setGatewayConfig(null);
+      setIsVaultModalOpen(false);
+      toast.info('🔒 Gateway & Bank Vault has been saved & automatically locked for security.');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update settings');
+    } finally {
+      setSavingGateway(false);
+    }
+  };
+
   if (authLoading || (loading && !stats)) {
     return (
-      <div className="min-h-screen bg-[#0E0A22] text-white flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#8B5CF6] via-[#EC4899] to-[#06B6D4] animate-spin flex items-center justify-center p-0.5">
-            <div className="w-full h-full bg-[#0E0A22] rounded-[14px]" />
+      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div className="space-y-6">
+          <div className="h-32 rounded-3xl skeleton-shimmer" />
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="h-24 rounded-2xl skeleton-shimmer" />
+            ))}
           </div>
-          <span className="text-xs font-bold text-neutral-400 tracking-wider">INITIALIZING LUMINA CYBER DASHBOARD...</span>
+          <div className="h-96 rounded-3xl skeleton-shimmer" />
         </div>
       </div>
     );
   }
 
-  const filteredPhotographers = photographers.filter(p => 
-    p.studio_name?.toLowerCase().includes(photographerSearch.toLowerCase()) ||
-    p.email?.toLowerCase().includes(photographerSearch.toLowerCase())
+  const filteredPhotographers = photographers.filter((p) => 
+    p.studio_name.toLowerCase().includes(photographerSearch.toLowerCase()) ||
+    p.email.toLowerCase().includes(photographerSearch.toLowerCase())
   );
 
-  const filteredEvents = events.filter(e => 
-    e.name?.toLowerCase().includes(eventSearch.toLowerCase()) ||
-    e.photographer_name?.toLowerCase().includes(eventSearch.toLowerCase())
+  const filteredEvents = events.filter((e) => 
+    e.name.toLowerCase().includes(eventSearch.toLowerCase()) ||
+    e.studio_name.toLowerCase().includes(eventSearch.toLowerCase()) ||
+    e.access_token.toLowerCase().includes(eventSearch.toLowerCase())
   );
 
   return (
-    <div className="min-h-screen bg-[#0E0A22] text-white selection:bg-[#8B5CF6] selection:text-white relative overflow-hidden flex flex-col lg:flex-row p-4 sm:p-6 lg:p-7 gap-6">
-      {/* ========================================================================= */}
-      {/* 1. AMBIENT CYBER GLOW ORBS                                                */}
-      {/* ========================================================================= */}
-      <div className="absolute -top-32 -left-32 w-[550px] h-[550px] bg-[#8B5CF6]/20 rounded-full blur-[150px] pointer-events-none" />
-      <div className="absolute -bottom-32 -right-32 w-[600px] h-[600px] bg-[#06B6D4]/20 rounded-full blur-[160px] pointer-events-none" />
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[450px] bg-[#EC4899]/15 rounded-full blur-[170px] pointer-events-none" />
-
-      {/* ========================================================================= */}
-      {/* 2. LEFT SIDEBAR (Lumina Frosted Glass Layout)                             */}
-      {/* ========================================================================= */}
-      <aside className="w-full lg:w-64 xl:w-72 shrink-0 flex flex-col justify-between bg-white/[0.05] backdrop-blur-2xl border border-white/10 rounded-3xl p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] relative z-10">
-        <div className="space-y-6">
-          {/* Brand Gem Logo */}
-          <div className="flex items-center gap-3 px-2">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#8B5CF6] via-[#EC4899] to-[#06B6D4] flex items-center justify-center text-white font-black shadow-[0_0_20px_rgba(139,92,246,0.5)]">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-display font-black text-base tracking-tight text-white leading-none">
-                LUMINA
-              </span>
-              <span className="text-[9px] font-bold tracking-widest text-[#06B6D4] uppercase mt-1">
-                GET MY MOMENT OS
-              </span>
-            </div>
+    <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+      {/* Superadmin Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-[#E8E5E2]">
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#E86A5B]/10 text-[#E86A5B] border border-[#E86A5B]/20 mb-2 shadow-sm">
+            <ShieldCheck className="w-3.5 h-3.5 text-[#E86A5B]" />
+            <span>PLATFORM OWNER & SUPER ADMIN CONTROL CENTER</span>
           </div>
-
-          {/* Navigation Items */}
-          <nav className="space-y-1.5">
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'overview'
-                  ? 'bg-gradient-to-r from-white/20 to-white/10 text-white border border-white/25 shadow-lg shadow-purple-500/10'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4 text-purple-400" />
-              <span>Overview</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('revenue')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'revenue'
-                  ? 'bg-gradient-to-r from-white/20 to-white/10 text-white border border-white/25 shadow-lg'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4 text-cyan-400" />
-              <span>Analytics &amp; Revenue</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('events')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'events'
-                  ? 'bg-gradient-to-r from-white/20 to-white/10 text-white border border-white/25 shadow-lg'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
-              }`}
-            >
-              <Folder className="w-4 h-4 text-pink-400" />
-              <span>Projects &amp; Events</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('photographers')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'photographers'
-                  ? 'bg-gradient-to-r from-white/20 to-white/10 text-white border border-white/25 shadow-lg'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
-              }`}
-            >
-              <Users className="w-4 h-4 text-indigo-400" />
-              <span>Users &amp; Studios</span>
-            </button>
-
-            <button
-              onClick={() => setIsVaultModalOpen(true)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-neutral-400 hover:text-white hover:bg-white/[0.04] transition-all cursor-pointer"
-            >
-              <Lock className="w-4 h-4 text-amber-400" />
-              <span>Bank Vault &amp; Keys</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('invoices')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'invoices'
-                  ? 'bg-gradient-to-r from-white/20 to-white/10 text-white border border-white/25 shadow-lg'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
-              }`}
-            >
-              <FileText className="w-4 h-4 text-emerald-400" />
-              <span>Invoices &amp; GST</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('telemetry')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'telemetry'
-                  ? 'bg-gradient-to-r from-white/20 to-white/10 text-white border border-white/25 shadow-lg'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
-              }`}
-            >
-              <Cpu className="w-4 h-4 text-cyan-400" />
-              <span>System Settings</span>
-            </button>
-          </nav>
+          <h1 className="text-2xl sm:text-4xl font-display font-extrabold text-[#1F1F1F] tracking-tight">
+            Get My Moment Master Command
+          </h1>
+          <p className="text-xs sm:text-sm text-[#6B6B6B] mt-1 font-normal">
+            Platform governance, studio onboarding, subscription upgrades, events surveillance, and AI infrastructure.
+          </p>
         </div>
 
-        {/* Bottom Profile Card */}
-        <div className="pt-6 border-t border-white/10 mt-6 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-black shadow-md shrink-0">
-              {admin?.email?.charAt(0).toUpperCase() || 'A'}
-            </div>
-            <div className="flex flex-col min-w-0">
-              <span className="text-xs font-bold text-white truncate">
-                {admin?.email?.split('@')[0] || 'Super Admin'}
-              </span>
-              <span className="text-[10px] text-neutral-400 truncate">
-                {admin?.email || 'admin@getmymoment.fun'}
-              </span>
-            </div>
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[#3FA66B] text-xs font-bold">
+            <span className="w-2 h-2 rounded-full bg-[#3FA66B] animate-pulse" />
+            <span>AI ENGINE LIVE</span>
           </div>
+
           <button
-            onClick={logout}
-            title="Sign Out"
-            className="p-2 rounded-xl text-neutral-400 hover:text-rose-400 hover:bg-white/10 transition-colors cursor-pointer"
+            onClick={loadAdminData}
+            className="px-4 py-2.5 rounded-xl bg-white border border-[#E8E5E2] hover:border-[#E86A5B] text-[#1F1F1F] text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+            title="Refresh Metrics"
           >
-            <LogOut className="w-4 h-4" />
+            <RefreshCw className="w-3.5 h-3.5 text-[#E86A5B]" />
+            <span>Refresh Telemetry</span>
           </button>
         </div>
-      </aside>
+      </div>
 
-      {/* ========================================================================= */}
-      {/* 3. MAIN DASHBOARD CONTENT AREA                                            */}
-      {/* ========================================================================= */}
-      <main className="flex-1 flex flex-col gap-6 relative z-10 overflow-y-auto max-w-full">
-        {/* Top Header Bar */}
-        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-display font-black text-white tracking-tight flex items-center gap-2">
-              <span>Good morning, {admin?.email?.split('@')[0] || 'Admin'}</span>
-              <span className="text-2xl">👋</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-neutral-400 mt-1">
-              Here&apos;s what&apos;s happening with your Get My Moment projects today.
-            </p>
-          </div>
+      {/* Metric Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3.5 sm:gap-4 my-8">
+        <div className="neu-card p-4 sm:p-5">
+          <span className="text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider block">Studios</span>
+          <div className="text-2xl sm:text-3xl font-extrabold text-[#1F1F1F] mt-1">{stats?.total_photographers}</div>
+          <span className="text-[10px] text-[#3FA66B] font-bold">Registered Studios</span>
+        </div>
 
-          {/* Quick Actions (Search, Bell, Vault, Refresh) */}
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search..."
-                value={photographerSearch}
-                onChange={(e) => setPhotographerSearch(e.target.value)}
-                className="w-44 sm:w-60 bg-white/[0.06] backdrop-blur-md border border-white/10 rounded-2xl pl-10 pr-4 py-2 text-xs text-white placeholder:text-neutral-500 focus:outline-none focus:border-[#8B5CF6]"
-              />
-            </div>
+        <div className="neu-card p-4 sm:p-5">
+          <span className="text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider block">Events</span>
+          <div className="text-2xl sm:text-3xl font-extrabold text-[#E86A5B] mt-1">{stats?.total_events}</div>
+          <span className="text-[10px] text-[#6B6B6B]">Live catalogs</span>
+        </div>
 
+        <div className="neu-card p-4 sm:p-5">
+          <span className="text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider block">Photos</span>
+          <div className="text-2xl sm:text-3xl font-extrabold text-[#1F1F1F] mt-1">{stats?.total_photos}</div>
+          <span className="text-[10px] text-[#6B6B6B]">Cloud Storage</span>
+        </div>
+
+        <div className="neu-card p-4 sm:p-5">
+          <span className="text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider block">Face Vectors</span>
+          <div className="text-2xl sm:text-3xl font-extrabold text-[#D9A441] mt-1">{stats?.total_faces_indexed}</div>
+          <span className="text-[10px] text-[#D9A441] font-bold">Biometric Vectors</span>
+        </div>
+
+        <div className="neu-card p-4 sm:p-5">
+          <span className="text-[11px] font-bold text-[#6B6B6B] uppercase tracking-wider block">Searches</span>
+          <div className="text-xl sm:text-2xl font-extrabold text-[#3FA66B] mt-1">{stats?.total_guest_searches}</div>
+          <span className="text-[10px] text-[#3FA66B] font-bold">Guest Matches</span>
+        </div>
+
+        <div className="neu-card p-4 sm:p-5 border-2 border-[#D9A441]/50">
+          <span className="text-[11px] font-bold text-[#8F6420] uppercase tracking-wider block">Platform GMV</span>
+          <div className="text-xl sm:text-2xl font-extrabold text-[#D9A441] mt-1">₹{(stats?.total_platform_gmv_inr || 0).toLocaleString('en-IN')}</div>
+          <span className="text-[10px] text-[#D9A441] font-bold">Gross Event Value</span>
+        </div>
+      </div>
+
+      {/* Admin Navigation Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto p-1.5 rounded-2xl bg-[#EBE8E1] shadow-[inset_2px_2px_5px_#D1CDC4,inset_-2px_-2px_5px_#FFFFFF] mb-8 no-scrollbar">
+        {[
+          { id: 'overview', label: '📊 Platform Overview' },
+          { id: 'revenue', label: `💳 Subscriptions & Settlements (${revenueData?.total_transactions_count || 0})` },
+          { id: 'invoices', label: `🧾 Studio Tax Invoices (${adminInvoices.length})` },
+          { id: 'photographers', label: `📸 Studios & Subscriptions (${photographers.length})` },
+          { id: 'events', label: `🗓️ All Events Master (${events.length})` },
+          { id: 'telemetry', label: '⚡ AI Telemetry' },
+        ].map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
             <button
-              onClick={() => setIsVaultModalOpen(true)}
-              className="p-2.5 rounded-2xl bg-white/[0.06] backdrop-blur-md border border-white/10 hover:bg-white/10 text-amber-400 transition-all cursor-pointer"
-              title="Bank Vault & Payment Gateway"
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+                isActive
+                  ? 'bg-[#F3F1EC] text-[#E86A5B] shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF]'
+                  : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
+              }`}
             >
-              <Lock className="w-4 h-4" />
+              <span>{tab.label}</span>
             </button>
+          );
+        })}
+      </div>
 
-            <button
-              onClick={loadAdminData}
-              className="p-2.5 rounded-2xl bg-white/[0.06] backdrop-blur-md border border-white/10 hover:bg-white/10 text-white transition-all cursor-pointer"
-              title="Refresh Data"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-          </div>
-        </header>
+      {/* TAB: REVENUE & BANK SETTLEMENTS */}
+      {activeTab === 'revenue' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="neu-card p-5">
+              <span className="text-[11px] font-bold text-[#6B6B6B] uppercase block">Monthly Recurring (MRR)</span>
+              <div className="text-2xl font-extrabold text-[#E86A5B] mt-1">₹{(revenueData?.mrr_inr || 0).toLocaleString('en-IN')}</div>
+              <span className="text-[10px] text-[#6B6B6B]">ARR: ₹{((revenueData?.mrr_inr || 0) * 12).toLocaleString('en-IN')}</span>
+            </div>
 
-        {/* 4 Stat Metric Cards (Horizontal Row) */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-          {/* Card 1: Total Revenue */}
-          <div className="bg-white/[0.06] backdrop-blur-2xl border border-white/10 rounded-3xl p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-neutral-400">Total Revenue</span>
-              <div className="text-2xl font-black text-white">
-                ₹{revenueData?.this_month ? revenueData.this_month.toLocaleString() : '78,540'}
-              </div>
-              <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400">
-                <span>↑ 12.5%</span>
-                <span className="text-neutral-400 text-[10px]">from last month</span>
-              </div>
+            <div className="neu-card p-5">
+              <span className="text-[11px] font-bold text-[#6B6B6B] uppercase block">Total Subscription GMV</span>
+              <div className="text-2xl font-extrabold text-[#1F1F1F] mt-1">₹{(revenueData?.total_gross_gmv_inr || 0).toLocaleString('en-IN')}</div>
+              <span className="text-[10px] text-[#3FA66B] font-bold">{revenueData?.total_transactions_count || 0} Transactions</span>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600/40 to-pink-600/40 border border-purple-500/30 flex items-center justify-center shadow-lg">
-              <IndianRupee className="w-6 h-6 text-purple-300" />
-            </div>
-          </div>
 
-          {/* Card 2: Active Users / Studios */}
-          <div className="bg-white/[0.06] backdrop-blur-2xl border border-white/10 rounded-3xl p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-neutral-400">Active Studios</span>
-              <div className="text-2xl font-black text-white">
-                {stats?.total_photographers ? (stats.total_photographers * 59 + 42).toLocaleString() : '2,842'}
-              </div>
-              <div className="inline-flex items-center gap-1 text-[11px] font-bold text-cyan-400">
-                <span>↑ 8.1%</span>
-                <span className="text-neutral-400 text-[10px]">from last month</span>
-              </div>
+            <div className="neu-card p-5">
+              <span className="text-[11px] font-bold text-[#6B6B6B] uppercase block">Gateway MDR Deductions</span>
+              <div className="text-2xl font-extrabold text-[#6B6B6B] mt-1">₹{(revenueData?.total_gateway_fees_inr || 0).toLocaleString('en-IN')}</div>
+              <span className="text-[10px] text-[#6B6B6B]">2.0% + 18% GST</span>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-600/40 to-blue-600/40 border border-cyan-500/30 flex items-center justify-center shadow-lg">
-              <Users className="w-6 h-6 text-cyan-300" />
+
+            <div className="neu-card p-5 border-2 border-emerald-500/40">
+              <span className="text-[11px] font-bold text-emerald-700 uppercase block">Net Bank Settlement</span>
+              <div className="text-2xl font-extrabold text-emerald-600 mt-1">₹{(revenueData?.total_net_bank_settled_inr || 0).toLocaleString('en-IN')}</div>
+              <span className="text-[10px] text-emerald-700 font-bold">Direct Bank Deposits (T+1)</span>
             </div>
           </div>
 
-          {/* Card 3: Orders / Synced Events */}
-          <div className="bg-white/[0.06] backdrop-blur-2xl border border-white/10 rounded-3xl p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-neutral-400">Events &amp; Orders</span>
-              <div className="text-2xl font-black text-white">
-                {stats?.total_events ? (stats.total_events * 10 + 4).toLocaleString() : '1,204'}
-              </div>
-              <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400">
-                <span>↑ 14.3%</span>
-                <span className="text-neutral-400 text-[10px]">from last month</span>
-              </div>
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600/40 to-teal-600/40 border border-emerald-500/30 flex items-center justify-center shadow-lg">
-              <Camera className="w-6 h-6 text-emerald-300" />
-            </div>
-          </div>
+          {/* Transactions Feed */}
+          <div className="neu-card p-7">
+            <h3 className="text-base font-display font-extrabold text-[#1F1F1F] mb-4 flex items-center justify-between">
+              <span>Recent Subscription Transactions & Settlements</span>
+              <span className="text-xs font-mono font-normal text-[#6B6B6B]">Gateway: {revenueData?.payment_gateway?.toUpperCase()} ({revenueData?.payment_mode?.toUpperCase()})</span>
+            </h3>
 
-          {/* Card 4: Conversion Rate / AI Face Match Speed */}
-          <div className="bg-white/[0.06] backdrop-blur-2xl border border-white/10 rounded-3xl p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-neutral-400">AI Match Success</span>
-              <div className="text-2xl font-black text-white">
-                98.4%
-              </div>
-              <div className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-400">
-                <span>⚡ 0.048s</span>
-                <span className="text-neutral-400 text-[10px]">vector speed</span>
-              </div>
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-pink-600/40 to-rose-600/40 border border-pink-500/30 flex items-center justify-center shadow-lg">
-              <Sparkles className="w-6 h-6 text-pink-300" />
-            </div>
-          </div>
-        </section>
-
-        {/* ========================================================================= */}
-        {/* TAB 1: OVERVIEW (Exact Layout from Lumina Reference Image)                */}
-        {/* ========================================================================= */}
-        {activeTab === 'overview' && (
-          <div className="space-y-6">
-            {/* Middle Row: 65% Revenue Overview Curve + 35% Platform Progress */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Left (65%): Revenue Overview Chart Card */}
-              <div className="lg:col-span-8 bg-white/[0.06] backdrop-blur-2xl border border-white/10 rounded-3xl p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-semibold text-neutral-400">Revenue Overview</span>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-2xl sm:text-3xl font-black text-white">₹78,540</span>
-                      <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                        ↑ 12.5%
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={chartPeriod}
-                      onChange={(e) => setChartPeriod(e.target.value as any)}
-                      aria-label="Filter chart by period"
-                      className="bg-white/10 border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none"
-                    >
-                      <option value="month" className="bg-[#0E0A22]">This Month</option>
-                      <option value="quarter" className="bg-[#0E0A22]">This Quarter</option>
-                      <option value="year" className="bg-[#0E0A22]">This Year</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Interactive Glowing SVG Area Chart */}
-                <div className="relative h-64 w-full pt-4">
-                  <svg className="w-full h-full overflow-visible" viewBox="0 0 700 200" preserveAspectRatio="none">
-                    <defs>
-                      <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#06B6D4" stopOpacity="0.45" />
-                        <stop offset="50%" stopColor="#8B5CF6" stopOpacity="0.25" />
-                        <stop offset="100%" stopColor="#0E0A22" stopOpacity="0.0" />
-                      </linearGradient>
-                      <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#EC4899" />
-                        <stop offset="50%" stopColor="#8B5CF6" />
-                        <stop offset="100%" stopColor="#06B6D4" />
-                      </linearGradient>
-                      <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feDropShadow dx="0" dy="0" stdDeviation="6" floodColor="#06B6D4" floodOpacity="0.6" />
-                      </filter>
-                    </defs>
-
-                    {/* Horizontal Grid lines */}
-                    <line x1="0" y1="40" x2="700" y2="40" stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
-                    <line x1="0" y1="80" x2="700" y2="80" stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
-                    <line x1="0" y1="120" x2="700" y2="120" stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
-                    <line x1="0" y1="160" x2="700" y2="160" stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
-
-                    {/* Area fill */}
-                    <path
-                      d="M 0 170 C 50 160, 100 130, 150 140 C 200 150, 250 80, 300 100 C 350 120, 400 50, 480 60 C 540 70, 600 120, 700 40 L 700 200 L 0 200 Z"
-                      fill="url(#areaGradient)"
-                    />
-
-                    {/* Glowing Stroke Curve */}
-                    <path
-                      d="M 0 170 C 50 160, 100 130, 150 140 C 200 150, 250 80, 300 100 C 350 120, 400 50, 480 60 C 540 70, 600 120, 700 40"
-                      fill="none"
-                      stroke="url(#lineGradient)"
-                      strokeWidth="3.5"
-                      filter="url(#glow)"
-                    />
-
-                    {/* Highlighted Tooltip Dot at Peak */}
-                    <circle cx="480" cy="60" r="6" fill="#FFFFFF" stroke="#06B6D4" strokeWidth="3" />
-                  </svg>
-
-                  {/* Tooltip Overlay */}
-                  <div className="absolute top-4 left-[64%] -translate-x-1/2 bg-[#0E0A22]/90 border border-[#06B6D4]/50 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-xl text-center">
-                    <span className="text-[10px] text-neutral-400 block">May 21, 2026</span>
-                    <span className="text-xs font-black text-cyan-300">₹78,540</span>
-                  </div>
-
-                  {/* X Axis Dates */}
-                  <div className="flex justify-between text-[10px] font-mono text-neutral-500 pt-3">
-                    <span>May 1</span>
-                    <span>May 6</span>
-                    <span>May 11</span>
-                    <span>May 16</span>
-                    <span>May 21</span>
-                    <span>May 26</span>
-                    <span>May 31</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right (35%): Project Progress & Storage Tiers */}
-              <div className="lg:col-span-4 bg-white/[0.06] backdrop-blur-2xl border border-white/10 rounded-3xl p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-neutral-400">Platform Progress</span>
-                    <MoreVertical className="w-4 h-4 text-neutral-500 cursor-pointer" />
-                  </div>
-
-                  {/* Circular Donut Gauge */}
-                  <div className="relative w-40 h-40 mx-auto my-4 flex items-center justify-center">
-                    <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                      <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" />
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="38"
-                        fill="none"
-                        stroke="url(#lineGradient)"
-                        strokeWidth="10"
-                        strokeDasharray="238.7"
-                        strokeDashoffset="66.8"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <div className="absolute text-center">
-                      <span className="text-3xl font-black text-white">72%</span>
-                      <span className="text-[10px] text-neutral-400 block">Complete</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Legend List */}
-                <div className="space-y-2 pt-2 border-t border-white/10 text-xs">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                      <span className="text-neutral-300">Design System</span>
-                    </div>
-                    <span className="font-bold text-white">90%</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
-                      <span className="text-neutral-300">Marketing Site</span>
-                    </div>
-                    <span className="font-bold text-white">72%</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                      <span className="text-neutral-300">Mobile App</span>
-                    </div>
-                    <span className="font-bold text-white">45%</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-purple-400" />
-                      <span className="text-neutral-300">Dashboard</span>
-                    </div>
-                    <span className="font-bold text-white">60%</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Bottom Row: 60% System Status + 40% Notifications */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Left (60%): System Status */}
-              <div className="lg:col-span-7 bg-white/[0.06] backdrop-blur-2xl border border-white/10 rounded-3xl p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] flex flex-col justify-between">
-                <div>
-                  <span className="text-xs font-semibold text-neutral-400">System Status</span>
-                  <div className="grid grid-cols-3 gap-4 mt-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                        <span className="text-xs font-bold text-white">API Services</span>
-                      </div>
-                      <span className="text-[10px] text-emerald-400 font-mono">Operational</span>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                        <span className="text-xs font-bold text-white">Database</span>
-                      </div>
-                      <span className="text-[10px] text-emerald-400 font-mono">Operational</span>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                        <span className="text-xs font-bold text-white">Storage</span>
-                      </div>
-                      <span className="text-[10px] text-emerald-400 font-mono">Operational</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-white/10 flex items-center justify-between mt-4">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold text-white">Auto-updates</span>
-                    <span className="text-[10px] text-neutral-400">Keep everything up to date</span>
-                  </div>
-                  <button
-                    onClick={() => setAutoUpdates(!autoUpdates)}
-                    className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
-                      autoUpdates ? 'bg-gradient-to-r from-purple-500 to-cyan-500' : 'bg-white/20'
-                    }`}
-                  >
-                    <span
-                      className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
-                        autoUpdates ? 'right-1' : 'left-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-
-              {/* Right (40%): Notifications Feed */}
-              <div className="lg:col-span-5 bg-white/[0.06] backdrop-blur-2xl border border-white/10 rounded-3xl p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-neutral-400">Notifications</span>
-                  <button onClick={() => setActiveTab('photographers')} className="text-xs text-cyan-400 hover:underline cursor-pointer">
-                    View all
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/[0.03] border border-white/5">
-                    <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                      <Check className="w-4 h-4" />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-xs font-bold text-white truncate">Design System completed</span>
-                      <span className="text-[10px] text-neutral-400">2 hours ago</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/[0.03] border border-white/5">
-                    <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
-                      <Users className="w-4 h-4" />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-xs font-bold text-white truncate">New user registered</span>
-                      <span className="text-[10px] text-neutral-400">5 hours ago</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB 2: STUDIOS & USERS DIRECTORY                                         */}
-        {/* ========================================================================= */}
-        {activeTab === 'photographers' && (
-          <div className="bg-white/[0.06] backdrop-blur-2xl border border-white/10 rounded-3xl p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <h3 className="text-base font-bold text-white">Registered Studios Directory</h3>
-              <span className="text-xs text-neutral-400">{filteredPhotographers.length} Total Studios</span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-white/10 text-neutral-400 font-semibold">
-                    <th className="pb-3">Studio Name</th>
-                    <th className="pb-3">Plan</th>
-                    <th className="pb-3">Events</th>
-                    <th className="pb-3">Status</th>
-                    <th className="pb-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {filteredPhotographers.map((p) => {
-                    const plan = PLAN_INFO[p.subscription_plan] || PLAN_INFO.FREE_TRIAL;
-                    return (
-                      <tr key={p.id} className="hover:bg-white/[0.02]">
-                        <td className="py-3.5">
-                          <div className="flex flex-col">
-                            <span className="font-bold text-white">{p.studio_name}</span>
-                            <span className="text-[10px] text-neutral-400">{p.email}</span>
-                          </div>
-                        </td>
-                        <td className="py-3.5">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${plan.color}`}>
-                            {plan.label}
-                          </span>
-                        </td>
-                        <td className="py-3.5 font-mono text-neutral-300">{p.event_count} Events</td>
-                        <td className="py-3.5">
-                          <button
-                            onClick={() => handleTogglePhotographerStatus(p)}
-                            disabled={togglingId === p.id}
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer transition-all ${
-                              p.is_active
-                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                            }`}
-                          >
-                            {p.is_active ? 'Active' : 'Suspended'}
-                          </button>
-                        </td>
-                        <td className="py-3.5 text-right space-x-2">
-                          <button
-                            onClick={() => handleOpenProfile(p.id)}
-                            className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold transition-all cursor-pointer"
-                          >
-                            Manage
-                          </button>
-                          <button
-                            onClick={() => setPhotographerToDelete(p)}
-                            className="p-1.5 rounded-xl text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB 3: PROJECTS & EVENTS DIRECTORY                                        */}
-        {/* ========================================================================= */}
-        {activeTab === 'events' && (
-          <div className="bg-white/[0.06] backdrop-blur-2xl border border-white/10 rounded-3xl p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <h3 className="text-base font-bold text-white">Platform Events &amp; Live Ingestion</h3>
-              <span className="text-xs text-neutral-400">{filteredEvents.length} Total Events</span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-white/10 text-neutral-400 font-semibold">
-                    <th className="pb-3">Event Name</th>
-                    <th className="pb-3">Studio</th>
-                    <th className="pb-3">Photos</th>
-                    <th className="pb-3">Status</th>
-                    <th className="pb-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {filteredEvents.map((e) => (
-                    <tr key={e.id} className="hover:bg-white/[0.02]">
-                      <td className="py-3.5 font-bold text-white">{e.name}</td>
-                      <td className="py-3.5 text-neutral-300">{e.photographer_name}</td>
-                      <td className="py-3.5 font-mono text-cyan-300">{e.photo_count} Photos</td>
-                      <td className="py-3.5">
-                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                          {e.status}
-                        </span>
-                      </td>
-                      <td className="py-3.5 text-right">
-                        <button
-                          onClick={() => setEventToDelete(e)}
-                          className="p-1.5 rounded-xl text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </main>
-
-      {/* ========================================================================= */}
-      {/* 4. BANK VAULT & PAYMENT GATEWAY MODAL (CYBER GLASS)                       */}
-      {/* ========================================================================= */}
-      {isVaultModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xl">
-          <div className="max-w-2xl w-full bg-[#120B2E] border border-white/15 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 relative overflow-hidden text-white">
-            <div className="flex items-center justify-between pb-4 border-b border-white/10">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-300">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white">Master Bank Vault &amp; Payment Gateway</h3>
-                  <p className="text-[10px] text-neutral-400">Encrypted AES-256 financial routing credentials</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsVaultModalOpen(false)}
-                className="p-2 rounded-xl text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {!isVaultUnlocked ? (
-              <form onSubmit={handleUnlockVault} className="space-y-4">
-                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
-                  ⚠️ Enter your Super Admin master security password to decrypt gateway keys.
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-neutral-300 mb-1.5">Master Security Password</label>
-                  <input
-                    type="password"
-                    value={vaultPassword}
-                    onChange={(e) => setVaultPassword(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                    className="w-full bg-white/10 border border-white/15 rounded-2xl px-4 py-3 text-xs text-white placeholder:text-neutral-500 focus:outline-none focus:border-[#8B5CF6]"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={unlockingVault}
-                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-500 to-cyan-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer"
-                >
-                  {unlockingVault ? 'Decrypting Vault...' : 'Unlock Vault'}
-                </button>
-              </form>
+            {(!revenueData?.recent_transactions || revenueData.recent_transactions.length === 0) ? (
+              <div className="p-8 text-center text-xs text-[#6B6B6B]">No subscription payment transactions recorded yet.</div>
             ) : (
-              <form onSubmit={handleSaveVault} className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-                <div>
-                  <label className="block text-xs font-bold text-neutral-300 mb-1.5">Master UPI ID</label>
-                  <input
-                    type="text"
-                    value={gatewayConfig?.upi_id || ''}
-                    onChange={(e) => setGatewayConfig({ ...gatewayConfig, upi_id: e.target.value })}
-                    placeholder="getmymoment@upi"
-                    className="w-full bg-white/10 border border-white/15 rounded-2xl px-4 py-2.5 text-xs text-white focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-neutral-300 mb-1.5">Bank Account Holder</label>
-                  <input
-                    type="text"
-                    value={gatewayConfig?.bank_account_holder || ''}
-                    onChange={(e) => setGatewayConfig({ ...gatewayConfig, bank_account_holder: e.target.value })}
-                    placeholder="Get My Moment Studio OS Pvt Ltd"
-                    className="w-full bg-white/10 border border-white/15 rounded-2xl px-4 py-2.5 text-xs text-white focus:outline-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-neutral-300 mb-1.5">Bank Account Number</label>
-                    <input
-                      type="text"
-                      value={gatewayConfig?.bank_account_number || ''}
-                      onChange={(e) => setGatewayConfig({ ...gatewayConfig, bank_account_number: e.target.value })}
-                      className="w-full bg-white/10 border border-white/15 rounded-2xl px-4 py-2.5 text-xs text-white focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-neutral-300 mb-1.5">Bank IFSC Code</label>
-                    <input
-                      type="text"
-                      value={gatewayConfig?.bank_ifsc || ''}
-                      onChange={(e) => setGatewayConfig({ ...gatewayConfig, bank_ifsc: e.target.value })}
-                      className="w-full bg-white/10 border border-white/15 rounded-2xl px-4 py-2.5 text-xs text-white focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={savingGateway}
-                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer mt-4"
-                >
-                  {savingGateway ? 'Saving Credentials...' : 'Save Vault Configuration'}
-                </button>
-              </form>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead>
+                    <tr className="border-b border-[#E2DDD5] text-[#6B6B6B] uppercase text-[10px]">
+                      <th className="pb-3 font-bold">Date</th>
+                      <th className="pb-3 font-bold">Studio Name</th>
+                      <th className="pb-3 font-bold">Plan Tier</th>
+                      <th className="pb-3 font-bold">Gross Paid</th>
+                      <th className="pb-3 font-bold">Gateway Fee</th>
+                      <th className="pb-3 font-bold">Net Bank Deposit</th>
+                      <th className="pb-3 font-bold">Mode</th>
+                      <th className="pb-3 font-bold">Gateway Payment ID</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E2DDD5]">
+                    {revenueData.recent_transactions.map((tx: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-[#FAF9F7]">
+                        <td className="py-3 text-[#6B6B6B]">{new Date(tx.paid_at).toLocaleDateString('en-IN')}</td>
+                        <td className="py-3 font-bold text-[#1F1F1F]">{tx.studio_name}</td>
+                        <td className="py-3 font-bold text-[#E86A5B]">{tx.plan_key} ({tx.billing_cycle})</td>
+                        <td className="py-3 font-extrabold text-[#1F1F1F]">₹{tx.amount_inr.toLocaleString('en-IN')}</td>
+                        <td className="py-3 text-[#6B6B6B]">₹{tx.gateway_fee_inr.toLocaleString('en-IN')}</td>
+                        <td className="py-3 font-bold text-emerald-600">₹{tx.net_bank_settlement_inr.toLocaleString('en-IN')}</td>
+                        <td className="py-3"><span className="px-2 py-0.5 rounded-full bg-neutral-100 font-mono text-[10px]">{tx.payment_method}</span></td>
+                        <td className="py-3 font-mono text-[#6B6B6B]">{tx.gateway_payment_id}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Confirmation Dialogs */}
-      {photographerToDelete && (
-        <ConfirmDialog
-          isOpen={true}
-          title={`Delete Studio: ${photographerToDelete.studio_name}?`}
-          message="This action will permanently delete this studio, its events, and storage. This cannot be undone."
-          confirmText="Delete Studio"
-          confirmVariant="danger"
-          onConfirm={handleDeletePhotographer}
-          onCancel={() => setPhotographerToDelete(null)}
-          loading={actionLoading}
-        />
+      {/* TAB 1: OVERVIEW */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-7 rounded-3xl bg-white border border-[#E8E5E2] shadow-sm">
+              <h3 className="text-lg font-display font-extrabold text-[#1F1F1F] mb-4 flex items-center gap-2">
+                <Users className="w-5 h-5 text-[#E86A5B]" />
+                <span>Recent Studio Onboardings & Plans</span>
+              </h3>
+              <div className="space-y-3">
+                {photographers.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-[#6B6B6B]">No studios registered yet.</div>
+                ) : (
+                  photographers.slice(0, 5).map((p) => {
+                    const plan = PLAN_INFO[p.subscription_plan] || PLAN_INFO.SOLO_PRO;
+                    return (
+                      <div 
+                        key={p.id} 
+                        onClick={() => handleOpenPhotographerProfile(p.id)}
+                        className="p-4 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] hover:border-[#E86A5B] flex items-center justify-between cursor-pointer transition-all hover:scale-[1.01]"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-[#1F1F1F]">{p.studio_name}</span>
+                            {p.is_verified && (
+                              <span className="px-2 py-0.5 rounded-full bg-[#D9A441]/15 text-[#8F6420] border border-[#D9A441]/30 text-[10px] font-bold">
+                                Verified
+                              </span>
+                            )}
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${plan.color}`}>
+                              {plan.label}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-[#6B6B6B] mt-0.5 block">{p.email}</span>
+                        </div>
+                        <div className="text-right text-xs font-medium text-[#1F1F1F]">
+                          <div className="font-bold">{p.total_events} Events</div>
+                          <div className="text-[11px] text-[#6B6B6B]">{p.total_photos} Photos</div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="p-7 rounded-3xl bg-white border border-[#E8E5E2] shadow-sm">
+              <h3 className="text-lg font-display font-extrabold text-[#1F1F1F] mb-4 flex items-center gap-2">
+                <Camera className="w-5 h-5 text-[#E86A5B]" />
+                <span>Latest Platform Events</span>
+              </h3>
+              <div className="space-y-3">
+                {events.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-[#6B6B6B]">No events created across the platform yet.</div>
+                ) : (
+                  events.slice(0, 5).map((ev) => (
+                    <div key={ev.id} className="p-4 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-[#1F1F1F] block">{ev.name}</span>
+                        <span className="text-[11px] text-[#6B6B6B] mt-0.5 block">{ev.studio_name} • <code className="text-[#E86A5B] font-bold">{ev.access_token}</code></span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-bold text-[#D9A441] block">
+                          ₹{ev.package_amount_inr.toLocaleString('en-IN')}
+                        </span>
+                        <span className="text-[11px] text-[#6B6B6B]">
+                          {ev.photo_count} photos • {ev.guest_count} guests
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
-      {eventToDelete && (
-        <ConfirmDialog
-          isOpen={true}
-          title={`Delete Event: ${eventToDelete.name}?`}
-          message="This action will permanently remove all photos and face embeddings for this event."
-          confirmText="Delete Event"
-          confirmVariant="danger"
-          onConfirm={handleDeleteEvent}
-          onCancel={() => setEventToDelete(null)}
-          loading={actionLoading}
-        />
+      {/* TAB: STUDIO SUBSCRIPTION INVOICES (OWNER COPY) */}
+      {activeTab === 'invoices' && (
+        <div className="space-y-6 animate-tab-fade">
+          <div className="neu-card p-6 sm:p-7">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E8E5E2]">
+              <div>
+                <h3 className="text-lg font-display font-extrabold text-[#1F1F1F] flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-[#E86A5B]" />
+                  Studio Subscription GST Tax Invoices (Owner Copy)
+                </h3>
+                <p className="text-xs text-[#6B6B6B] mt-0.5">
+                  Platform owner copy of all official GST tax compliance invoices issued to subscribed studios.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="relative w-full sm:w-72">
+                  <Search className="w-4 h-4 text-[#8E8E8E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search studio, invoice #, email..."
+                    value={invoiceSearch}
+                    onChange={(e) => setInvoiceSearch(e.target.value)}
+                    className="neu-input w-full pl-9 text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {adminInvoices.length === 0 ? (
+              <div className="py-16 text-center text-xs text-[#6B6B6B]">
+                <FileText className="w-10 h-10 text-[#8E8E8E] mx-auto mb-2 opacity-50" />
+                <span>No subscription invoices generated yet.</span>
+              </div>
+            ) : (
+              <div className="overflow-x-auto mt-4">
+                <table className="w-full text-xs text-left">
+                  <thead>
+                    <tr className="border-b border-[#E8E5E2] text-[#6B6B6B] uppercase text-[10px]">
+                      <th className="pb-3 font-bold">Invoice Number</th>
+                      <th className="pb-3 font-bold">Date</th>
+                      <th className="pb-3 font-bold">Studio & Contact</th>
+                      <th className="pb-3 font-bold">Plan Name</th>
+                      <th className="pb-3 font-bold text-right">Taxable Amount</th>
+                      <th className="pb-3 font-bold text-right">18% GST</th>
+                      <th className="pb-3 font-bold text-right">Total Paid</th>
+                      <th className="pb-3 font-bold text-center">Status</th>
+                      <th className="pb-3 font-bold text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E8E5E2]">
+                    {adminInvoices
+                      .filter((inv) =>
+                        (inv.invoice_number || '').toLowerCase().includes(invoiceSearch.toLowerCase()) ||
+                        (inv.buyer_studio_name || '').toLowerCase().includes(invoiceSearch.toLowerCase()) ||
+                        (inv.buyer_email || '').toLowerCase().includes(invoiceSearch.toLowerCase()) ||
+                        (inv.plan_name || '').toLowerCase().includes(invoiceSearch.toLowerCase())
+                      )
+                      .map((inv) => (
+                        <tr key={inv.id} className="hover:bg-[#FAF9F7] transition-colors">
+                          <td className="py-3.5 font-bold font-mono text-[#E86A5B]">{inv.invoice_number}</td>
+                          <td className="py-3.5 text-[#6B6B6B]">{new Date(inv.invoice_date).toLocaleDateString('en-IN')}</td>
+                          <td className="py-3.5">
+                            <div className="font-bold text-[#1F1F1F]">{inv.buyer_studio_name}</div>
+                            <div className="text-[11px] text-[#6B6B6B]">{inv.buyer_email} {inv.buyer_phone ? `• ${inv.buyer_phone}` : ''}</div>
+                          </td>
+                          <td className="py-3.5 font-bold text-[#1F1F1F]">{inv.plan_name}</td>
+                          <td className="py-3.5 text-right font-medium text-[#1F1F1F]">₹{inv.taxable_amount_inr.toLocaleString('en-IN')}</td>
+                          <td className="py-3.5 text-right text-[#6B6B6B]">₹{inv.total_tax_inr.toLocaleString('en-IN')}</td>
+                          <td className="py-3.5 text-right font-extrabold text-[#3FA66B]">₹{inv.total_amount_inr.toLocaleString('en-IN')}</td>
+                          <td className="py-3.5 text-center">
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-[#3FA66B] font-bold text-[10px] border border-emerald-200">
+                              {inv.status}
+                            </span>
+                          </td>
+                          <td className="py-3.5 text-right">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const url = api.getInvoiceHtmlUrl(inv.id, true);
+                                window.open(url, '_blank', 'noopener,noreferrer');
+                              }}
+                              className="neu-btn-secondary py-1.5 px-3 text-[11px] inline-flex items-center gap-1.5 cursor-pointer hover:text-[#E86A5B]"
+                              title="Print or Save official GST Tax Invoice as PDF with Superadmin Stamp"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-[#E86A5B]" />
+                              <span>Print / PDF</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
       )}
+
+      {/* TAB 2: PHOTOGRAPHERS MANAGEMENT */}
+      {activeTab === 'photographers' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="relative max-w-sm w-full">
+              <Search className="w-4 h-4 text-[#8E8E8E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={photographerSearch}
+                onChange={(e) => setPhotographerSearch(e.target.value)}
+                placeholder="Search studio name or email..."
+                className="gmm-input pl-10 text-xs"
+              />
+            </div>
+            <span className="text-xs text-[#6B6B6B] font-medium">Showing {filteredPhotographers.length} Studios • Click any row to open Profile & Upgrade Plan</span>
+          </div>
+
+          <div className="overflow-x-auto rounded-3xl bg-white border border-[#E8E5E2] shadow-sm">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#FAF9F7] text-[#6B6B6B] font-bold uppercase text-[10px] border-b border-[#E8E5E2]">
+                <tr>
+                  <th className="py-4 px-5">Studio / Photographer</th>
+                  <th className="py-4 px-4">Active Plan & Tier</th>
+                  <th className="py-4 px-4">Quotas</th>
+                  <th className="py-4 px-4">Events</th>
+                  <th className="py-4 px-4">Photos</th>
+                  <th className="py-4 px-4">Status</th>
+                  <th className="py-4 px-4">Verification</th>
+                  <th className="py-4 px-5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E8E5E2] text-[#1F1F1F]">
+                {filteredPhotographers.map((p) => {
+                  const plan = PLAN_INFO[p.subscription_plan] || PLAN_INFO.SOLO_PRO;
+                  return (
+                    <tr 
+                      key={p.id} 
+                      onClick={() => handleOpenPhotographerProfile(p.id)}
+                      className="hover:bg-[#FAF9F7] transition-colors cursor-pointer group"
+                    >
+                      <td className="py-4 px-5">
+                        <div className="font-bold text-[#1F1F1F] group-hover:text-[#E86A5B] transition-colors flex items-center gap-1.5">
+                          <span>{p.studio_name}</span>
+                          <ArrowUpRight className="w-3.5 h-3.5 text-[#E86A5B] opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                        <div className="text-[11px] text-[#6B6B6B] font-medium">{p.email}</div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${plan.color}`}>
+                          <Crown className="w-3 h-3" />
+                          <span>{plan.label} ({plan.price})</span>
+                        </span>
+                      </td>
+                      <td className="py-4 px-4 text-[#6B6B6B] text-[11px]">
+                        <div className="font-bold text-[#1F1F1F]">{p.max_storage_gb} GB Storage</div>
+                        <div className="text-[10px] text-[#6B6B6B]">{p.max_events_per_month} events/mo</div>
+                      </td>
+                      <td className="py-4 px-4 font-bold text-[#1F1F1F]">{p.total_events}</td>
+                      <td className="py-4 px-4 text-[#6B6B6B]">{p.total_photos}</td>
+                      <td className="py-4 px-4">
+                        <button
+                          onClick={(e) => handleTogglePhotographerActive(p, e)}
+                          disabled={togglingId === p.id}
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
+                            p.is_active
+                              ? 'bg-emerald-50 text-[#3FA66B] border-emerald-200'
+                              : 'bg-rose-50 text-rose-600 border-rose-200'
+                          }`}
+                        >
+                          {p.is_active ? 'ACTIVE' : 'SUSPENDED'}
+                        </button>
+                      </td>
+                      <td className="py-4 px-4">
+                        <button
+                          onClick={(e) => handleTogglePhotographerVerified(p, e)}
+                          disabled={togglingId === p.id}
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
+                            p.is_verified
+                              ? 'bg-[#D9A441]/15 text-[#8F6420] border-[#D9A441]/30'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}
+                        >
+                          {p.is_verified ? '✨ Verified' : 'In Review'}
+                        </button>
+                      </td>
+                      <td className="py-4 px-5 text-right">
+                        <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => handleOpenPhotographerProfile(p.id)}
+                            className="px-3 py-1.5 rounded-xl border border-[#E8E5E2] hover:border-[#E86A5B] bg-white text-[#1F1F1F] text-[11px] font-bold transition-all cursor-pointer"
+                          >
+                            Profile & Plan
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPhotographerToDelete(p);
+                            }}
+                            className="p-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all cursor-pointer"
+                            title="Delete Studio"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: ALL EVENTS MASTER */}
+      {activeTab === 'events' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="relative max-w-sm w-full">
+              <Search className="w-4 h-4 text-[#8E8E8E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={eventSearch}
+                onChange={(e) => setEventSearch(e.target.value)}
+                placeholder="Search event, studio, token..."
+                className="gmm-input pl-10 text-xs"
+              />
+            </div>
+            <span className="text-xs text-[#6B6B6B] font-medium">Showing {filteredEvents.length} Events Across All Studios</span>
+          </div>
+
+          <div className="overflow-x-auto rounded-3xl bg-white border border-[#E8E5E2] shadow-sm">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#FAF9F7] text-[#6B6B6B] font-bold uppercase text-[10px] border-b border-[#E8E5E2]">
+                <tr>
+                  <th className="py-4 px-5">Event Name</th>
+                  <th className="py-4 px-4">Studio</th>
+                  <th className="py-4 px-4">Contract GMV</th>
+                  <th className="py-4 px-4">Photos</th>
+                  <th className="py-4 px-4">Guests</th>
+                  <th className="py-4 px-4">Status</th>
+                  <th className="py-4 px-5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E8E5E2] text-[#1F1F1F]">
+                {filteredEvents.map((ev) => (
+                  <tr key={ev.id} className="hover:bg-[#FAF9F7] transition-colors">
+                    <td className="py-4 px-5">
+                      <div className="font-bold text-[#1F1F1F]">{ev.name}</div>
+                      <div className="text-[11px] text-[#6B6B6B] font-mono">Token: {ev.access_token}</div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="text-[#1F1F1F] font-bold">{ev.studio_name}</div>
+                      <div className="text-[11px] text-[#6B6B6B]">{ev.photographer_email}</div>
+                    </td>
+                    <td className="py-4 px-4 font-bold text-[#D9A441]">
+                      ₹{ev.package_amount_inr.toLocaleString('en-IN')}
+                    </td>
+                    <td className="py-4 px-4 font-bold text-[#1F1F1F]">{ev.photo_count}</td>
+                    <td className="py-4 px-4 text-[#6B6B6B]">{ev.guest_count}</td>
+                    <td className="py-4 px-4">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-[#3FA66B] border border-emerald-200">
+                        {ev.status}
+                      </span>
+                    </td>
+                    <td className="py-4 px-5 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <a
+                          href={`/e/${ev.access_token}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-2 rounded-xl border border-[#E8E5E2] hover:bg-neutral-50 text-[#1F1F1F] transition-all inline-flex items-center"
+                          title="Open Guest View"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                        <button
+                          onClick={() => setEventToDelete(ev)}
+                          className="p-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all cursor-pointer"
+                          title="Force Delete Event"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: AI TELEMETRY */}
+      {activeTab === 'telemetry' && telemetry && (
+        <div className="space-y-6">
+          <div className="p-7 rounded-3xl bg-white border border-[#E8E5E2] shadow-sm">
+            <h3 className="text-lg font-display font-extrabold text-[#1F1F1F] mb-4 flex items-center gap-2">
+              <Cpu className="w-5 h-5 text-[#E86A5B]" />
+              <span>AI Face Engine Status & Calibration</span>
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-5 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] space-y-1">
+                <span className="text-xs text-[#6B6B6B] font-bold uppercase">Deep Face Detector</span>
+                <div className="text-base font-extrabold text-[#1F1F1F]">{telemetry.detector_model}</div>
+                <span className="text-[11px] text-[#3FA66B] font-bold block">Status: Online • ONNX Runtime Engine</span>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] space-y-1">
+                <span className="text-xs text-[#6B6B6B] font-bold uppercase">Face Recognizer & Embeddings</span>
+                <div className="text-base font-extrabold text-[#1F1F1F]">{telemetry.recognizer_model}</div>
+                <span className="text-[11px] text-[#3FA66B] font-bold block">Cosine Similarity Metric (&gt;= 0.90 Accuracy Filter)</span>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] space-y-1">
+                <span className="text-xs text-[#6B6B6B] font-bold uppercase">Stored Face Vector Embeddings</span>
+                <div className="text-2xl font-extrabold text-[#E86A5B]">{telemetry.total_embeddings_stored}</div>
+                <span className="text-[11px] text-[#6B6B6B]">128-dimensional float32 vectors</span>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] space-y-1">
+                <span className="text-xs text-[#6B6B6B] font-bold uppercase">Guest Searches Served</span>
+                <div className="text-2xl font-extrabold text-[#3FA66B]">{telemetry.total_guest_searches_served}</div>
+                <span className="text-[11px] text-[#6B6B6B]">&lt; 50ms average matching latency</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* PHOTOGRAPHER FULL PROFILE & SUBSCRIPTION UPGRADE MODAL */}
+      {/* ========================================================================= */}
+      <Modal
+        isOpen={!!selectedPhotographerId}
+        onClose={() => setSelectedPhotographerId(null)}
+        title={profileData?.studio_name || 'Studio Profile'}
+        subtitle="Manage studio subscription tier, storage quota, and professional verification status."
+        size="xl"
+        icon={<Crown className="w-5 h-5 text-[#E86A5B]" />}
+      >
+        {loadingProfile || !profileData ? (
+          <div className="py-16 flex flex-col items-center justify-center gap-3">
+            <div className="w-8 h-8 border-2 border-[#E86A5B] border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-xs text-[#6B6B6B]">Loading studio profile & metrics...</span>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Header Status Row */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E8E5E2]">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                    profileData.is_verified
+                      ? 'bg-[#D9A441]/15 text-[#8F6420] border-[#D9A441]/30'
+                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                  }`}>
+                    {profileData.is_verified ? '✨ Verified Studio Pro' : 'KYC Under Review'}
+                  </span>
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                    profileData.is_active 
+                      ? 'bg-emerald-50 text-[#3FA66B] border-emerald-200'
+                      : 'bg-rose-50 text-rose-600 border-rose-200'
+                  }`}>
+                    {profileData.is_active ? 'ACTIVE ACCOUNT' : 'SUSPENDED'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 text-xs text-[#6B6B6B] mt-2 flex-wrap">
+                  <span>Email: <strong className="text-[#1F1F1F]">{profileData.email}</strong></span>
+                  {profileData.phone && <span>Phone: <strong className="text-[#1F1F1F]">{profileData.phone}</strong></span>}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleTogglePhotographerActive(profileData as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                    profileData.is_active
+                      ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
+                      : 'bg-emerald-50 text-[#3FA66B] border-emerald-200 hover:bg-emerald-100'
+                  }`}
+                >
+                  {profileData.is_active ? 'Suspend Studio' : 'Activate Studio'}
+                </button>
+                <button
+                  onClick={() => handleTogglePhotographerVerified(profileData as any)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold border border-[#D9A441]/40 bg-[#D9A441]/15 hover:bg-[#D9A441]/25 text-[#8F6420] transition-all cursor-pointer"
+                >
+                  {profileData.is_verified ? 'Remove Verification' : 'Verify Studio ✨'}
+                </button>
+              </div>
+            </div>
+
+            {/* KYC Details Card */}
+            <div className="p-5 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] space-y-3">
+              <span className="text-xs font-bold text-[#E86A5B] uppercase block">Studio KYC & Professional Verification</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="p-3 bg-white rounded-xl border border-[#E8E5E2]">
+                  <span className="text-[10px] text-[#6B6B6B] block">Location</span>
+                  <span className="font-bold text-[#1F1F1F]">{profileData.city || 'Not specified'}{profileData.state ? `, ${profileData.state}` : ''}</span>
+                </div>
+                <div className="p-3 bg-white rounded-xl border border-[#E8E5E2]">
+                  <span className="text-[10px] text-[#6B6B6B] block">Instagram</span>
+                  <span className="font-bold text-[#E86A5B]">{profileData.instagram_handle || 'Not provided'}</span>
+                </div>
+                <div className="p-3 bg-white rounded-xl border border-[#E8E5E2]">
+                  <span className="text-[10px] text-[#6B6B6B] block">Experience</span>
+                  <span className="font-bold text-[#1F1F1F]">{profileData.years_of_experience || '3-5 Years'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Plan Upgrade Controls */}
+            <div className="p-5 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] space-y-4">
+              <span className="text-xs font-bold text-[#1F1F1F] uppercase flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-[#E86A5B]" />
+                <span>Upgrade / Change Studio Plan Tier</span>
+              </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {Object.entries(PLAN_INFO).map(([key, info]) => {
+                  const isSelected = upgradePlan === key;
+                  return (
+                    <div
+                      key={key}
+                      onClick={() => setUpgradePlan(key)}
+                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-white border-2 border-[#E86A5B] shadow-md scale-[1.01]'
+                          : 'bg-white border-[#E8E5E2] hover:border-[#F3A08F]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#1F1F1F]">{info.label}</span>
+                        <span className="text-xs font-bold text-[#E86A5B]">{info.price}</span>
+                      </div>
+                      <div className="text-[11px] text-[#6B6B6B] mt-1">
+                        {info.storage} • {info.events}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center justify-between gap-4 pt-2 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-[#6B6B6B] font-bold">Status:</span>
+                  <div className="w-40">
+                    <NeomorphicSelect
+                      value={upgradeStatus}
+                      onChange={setUpgradeStatus}
+                      options={[
+                        { value: 'ACTIVE', label: 'ACTIVE' },
+                        { value: 'TRIAL', label: 'TRIAL' },
+                        { value: 'EXPIRED', label: 'EXPIRED' },
+                        { value: 'SUSPENDED', label: 'SUSPENDED' },
+                      ]}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleApplySubscriptionUpgrade}
+                  disabled={savingUpgrade}
+                  className="btn-primary text-xs"
+                >
+                  <Crown className="w-4 h-4 stroke-[2.5]" />
+                  <span>{savingUpgrade ? 'Applying Plan Upgrade...' : 'Apply Plan Upgrade'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3.5 bg-[#FAF9F7] rounded-xl border border-[#E8E5E2]">
+                <span className="text-[10px] text-[#6B6B6B] font-bold uppercase">Contracted GMV</span>
+                <div className="text-base font-extrabold text-[#D9A441] mt-0.5">₹{profileData.total_contracted_gmv_inr.toLocaleString('en-IN')}</div>
+              </div>
+              <div className="p-3.5 bg-[#FAF9F7] rounded-xl border border-[#E8E5E2]">
+                <span className="text-[10px] text-[#6B6B6B] font-bold uppercase">Events Created</span>
+                <div className="text-base font-extrabold text-[#1F1F1F] mt-0.5">{profileData.total_events}</div>
+              </div>
+              <div className="p-3.5 bg-[#FAF9F7] rounded-xl border border-[#E8E5E2]">
+                <span className="text-[10px] text-[#6B6B6B] font-bold uppercase">Photos Ingested</span>
+                <div className="text-base font-extrabold text-[#E86A5B] mt-0.5">{profileData.total_photos}</div>
+              </div>
+              <div className="p-3.5 bg-[#FAF9F7] rounded-xl border border-[#E8E5E2]">
+                <span className="text-[10px] text-[#6B6B6B] font-bold uppercase">Guests Matched</span>
+                <div className="text-base font-extrabold text-[#3FA66B] mt-0.5">{profileData.total_guests_matched}</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* PASSWORD-PROTECTED GATEWAY & BANK VAULT POPUP MODAL */}
+      {isVaultModalOpen && (
+        <Modal
+          isOpen={true}
+          onClose={() => {
+            setIsVaultModalOpen(false);
+            setVaultPassword('');
+            setConfirmPassword('');
+          }}
+          title={isVaultUnlocked ? "🏦 Payment Gateway & Owner Bank Control" : "🔐 Security Vault Locked"}
+          subtitle={isVaultUnlocked ? "Configure settlement bank account, UPI ID, Razorpay keys & GST invoicing" : "SuperAdmin security password required to access credentials"}
+          size={isVaultUnlocked ? "xl" : "md"}
+        >
+          {!isVaultUnlocked ? (
+            /* LOCKED VAULT FORM */
+            <div className="py-3 text-center space-y-6 animate-tab-fade">
+              <div className="w-16 h-16 rounded-3xl bg-[#E86A5B]/10 text-[#E86A5B] flex items-center justify-center mx-auto shadow-inner transition-transform duration-300 hover:scale-105">
+                <Lock className="w-8 h-8 stroke-[2.5]" />
+              </div>
+
+              <div>
+                <h4 className="text-base font-display font-extrabold text-[#1F1F1F]">Enter SuperAdmin Password</h4>
+                <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">
+                  To view and modify Website Owner Bank Accounts, UPI ID, Razorpay API credentials, and GST Tax Invoicing, enter your SuperAdmin security password below.
+                </p>
+              </div>
+
+              <form onSubmit={handleUnlockVault} className="space-y-4 text-left">
+                <div>
+                  <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">SuperAdmin Password *</label>
+                  <div className="relative">
+                    <input
+                      type={showVaultSecret ? 'text' : 'password'}
+                      value={vaultPassword}
+                      onChange={(e) => setVaultPassword(e.target.value)}
+                      placeholder="Enter Admin@..."
+                      className="neu-input w-full text-xs pr-10 transition-all duration-200"
+                      autoFocus
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowVaultSecret(!showVaultSecret)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8E8E8E] hover:text-[#1F1F1F] transition-colors"
+                    >
+                      {showVaultSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 text-[10px] text-emerald-700 bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <span>Protected by 256-bit PBKDF2 encryption & audit logging.</span>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsVaultModalOpen(false);
+                      setVaultPassword('');
+                    }}
+                    className="neu-btn-secondary py-2.5 px-4 text-xs hover:scale-105 active:scale-95 transition-transform"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={unlockingVault}
+                    className="btn-primary py-2.5 px-6 text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary-500/25 cursor-pointer hover:scale-105 active:scale-95 transition-transform"
+                  >
+                    <Unlock className="w-4 h-4" />
+                    <span>{unlockingVault ? 'Verifying Password...' : 'Unlock Vault'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            /* UNLOCKED CONFIGURATION PANEL */
+            gatewayConfig && (
+              <form onSubmit={handleConfirmSaveGateway} className="space-y-6 py-1 animate-tab-fade">
+                {/* Segmented Section Navigation Tabs inside Modal */}
+                <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[#EBE8E1] shadow-[inset_2px_2px_5px_#D1CDC4,inset_-2px_-2px_5px_#FFFFFF]">
+                  <button
+                    type="button"
+                    onClick={() => setVaultSection('bank')}
+                    className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
+                      vaultSection === 'bank'
+                        ? 'bg-[#F3F1EC] text-[#E86A5B] shadow-[2px_2px_5px_#D4D0C7,-2px_-2px_5px_#FFFFFF]'
+                        : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
+                    }`}
+                  >
+                    <Building2 className="w-3.5 h-3.5" />
+                    <span>1. Owner Bank Details</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVaultSection('gateway')}
+                    className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
+                      vaultSection === 'gateway'
+                        ? 'bg-[#F3F1EC] text-[#E86A5B] shadow-[2px_2px_5px_#D4D0C7,-2px_-2px_5px_#FFFFFF]'
+                        : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
+                    }`}
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>2. Gateway & API Keys</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVaultSection('gst')}
+                    className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
+                      vaultSection === 'gst'
+                        ? 'bg-[#F3F1EC] text-[#E86A5B] shadow-[2px_2px_5px_#D4D0C7,-2px_-2px_5px_#FFFFFF]'
+                        : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>3. GST & Invoicing</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVaultSection('stamp')}
+                    className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
+                      vaultSection === 'stamp'
+                        ? 'bg-[#F3F1EC] text-[#E86A5B] shadow-[2px_2px_5px_#D4D0C7,-2px_-2px_5px_#FFFFFF]'
+                        : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
+                    }`}
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>4. Digital Stamp & Sign</span>
+                  </button>
+                </div>
+
+                {/* SECTION 1: WEBSITE OWNER BANK ACCOUNT */}
+                {vaultSection === 'bank' && (
+                  <div className="space-y-4 p-5 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] animate-tab-fade">
+                    <div>
+                      <h4 className="text-xs font-display font-extrabold text-[#1F1F1F] uppercase tracking-wider">
+                        Website Owner / Merchant Bank Settlement Account
+                      </h4>
+                      <p className="text-[11px] text-[#6B6B6B] mt-0.5">Subscription revenue is deposited into this bank account via T+1 daily settlement.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Beneficiary / Account Holder Name *</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.beneficiary_name || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, beneficiary_name: e.target.value })}
+                          className="neu-input w-full text-xs font-medium"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Bank Name *</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.bank_name || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, bank_name: e.target.value })}
+                          placeholder="e.g. HDFC Bank, ICICI Bank, SBI"
+                          className="neu-input w-full text-xs font-medium"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Account Number *</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.account_number || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, account_number: e.target.value })}
+                          className="neu-input w-full text-xs font-mono font-bold"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">IFSC Code *</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.ifsc_code || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, ifsc_code: e.target.value.toUpperCase() })}
+                          placeholder="e.g. HDFC0001234"
+                          className="neu-input w-full text-xs font-mono font-bold uppercase"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Account Type *</label>
+                        <select
+                          value={gatewayConfig.account_type || 'CURRENT'}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, account_type: e.target.value })}
+                          className="neu-input w-full text-xs font-bold"
+                        >
+                          <option value="CURRENT">Current Account (Business)</option>
+                          <option value="SAVINGS">Savings Account</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Primary Business UPI ID / VPA *</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.business_upi_id || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, business_upi_id: e.target.value })}
+                          placeholder="e.g. owner@okhdfcbank"
+                          className="neu-input w-full text-xs font-mono font-bold text-[#E86A5B]"
+                          required
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Bank Branch / City</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.bank_branch || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, bank_branch: e.target.value })}
+                          placeholder="e.g. Ring Road Branch, Surat, Gujarat"
+                          className="neu-input w-full text-xs font-medium"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SECTION 2: PAYMENT GATEWAY CREDENTIALS */}
+                {vaultSection === 'gateway' && (
+                  <div className="space-y-4 p-5 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] animate-tab-fade">
+                    <div>
+                      <h4 className="text-xs font-display font-extrabold text-[#1F1F1F] uppercase tracking-wider">
+                        Payment Gateway Provider & API Keys
+                      </h4>
+                      <p className="text-[11px] text-[#6B6B6B] mt-0.5">Configure live or test mode keys for Razorpay / UPI checkout.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Gateway Provider</label>
+                        <select
+                          value={gatewayConfig.gateway_provider || 'RAZORPAY'}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, gateway_provider: e.target.value })}
+                          className="neu-input w-full text-xs font-bold"
+                        >
+                          <option value="RAZORPAY">Razorpay (Cards, NetBanking, UPI, GPay)</option>
+                          <option value="CASHFREE">Cashfree Payments</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Environment Mode *</label>
+                        <select
+                          value={gatewayConfig.gateway_mode || 'TEST'}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, gateway_mode: e.target.value })}
+                          className={`neu-input w-full text-xs font-bold ${gatewayConfig.gateway_mode === 'LIVE' ? 'text-emerald-700 bg-emerald-50' : 'text-amber-700'}`}
+                        >
+                          <option value="TEST">TEST MODE (Sandbox / Mock Checkouts)</option>
+                          <option value="LIVE">LIVE MODE (Real Money Settlements)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Gateway Key ID *</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.key_id || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, key_id: e.target.value })}
+                          placeholder="rzp_live_... or rzp_test_..."
+                          className="neu-input w-full text-xs font-mono font-bold"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Gateway Key Secret *</label>
+                        <div className="relative">
+                          <input
+                            type={showVaultSecret ? 'text' : 'password'}
+                            value={gatewayConfig.key_secret || ''}
+                            onChange={(e) => setGatewayConfig({ ...gatewayConfig, key_secret: e.target.value })}
+                            className="neu-input w-full text-xs font-mono pr-10"
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowVaultSecret(!showVaultSecret)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8E8E8E] hover:text-[#1F1F1F]"
+                          >
+                            {showVaultSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Webhook Secret (for Signature Validation) *</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.webhook_secret || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, webhook_secret: e.target.value })}
+                          placeholder="whsec_..."
+                          className="neu-input w-full text-xs font-mono"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SECTION 3: INDIAN GST & INVOICING */}
+                {vaultSection === 'gst' && (
+                  <div className="space-y-4 p-5 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] animate-tab-fade">
+                    <div>
+                      <h4 className="text-xs font-display font-extrabold text-[#1F1F1F] uppercase tracking-wider">
+                        Legal Business & Indian GST Tax Invoicing
+                      </h4>
+                      <p className="text-[11px] text-[#6B6B6B] mt-0.5">Stamped on official computer-generated GST tax invoices (`GMM-2026-XXXXXX`).</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Seller Legal Entity Name *</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.seller_legal_name || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, seller_legal_name: e.target.value })}
+                          className="neu-input w-full text-xs font-medium"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Seller GSTIN *</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.seller_gstin || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, seller_gstin: e.target.value.toUpperCase() })}
+                          placeholder="e.g. 24AAACG1234F1Z5"
+                          className="neu-input w-full text-xs font-mono font-bold uppercase"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Seller PAN Number *</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.seller_pan || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, seller_pan: e.target.value.toUpperCase() })}
+                          placeholder="e.g. AAACG1234F"
+                          className="neu-input w-full text-xs font-mono font-bold uppercase"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Seller Registered State *</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.seller_state || 'Gujarat'}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, seller_state: e.target.value })}
+                          className="neu-input w-full text-xs font-medium"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">State Code (GST) *</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.seller_state_code || '24'}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, seller_state_code: e.target.value })}
+                          className="neu-input w-full text-xs font-mono"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">GST Rate Percentage (%) *</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={gatewayConfig.gst_rate_pct || 18.0}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, gst_rate_pct: parseFloat(e.target.value) || 18.0 })}
+                          className="neu-input w-full text-xs font-mono font-bold"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Billing Support Email *</label>
+                        <input
+                          type="email"
+                          value={gatewayConfig.seller_support_email || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, seller_support_email: e.target.value })}
+                          className="neu-input w-full text-xs"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Billing Support Phone</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.seller_support_phone || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, seller_support_phone: e.target.value })}
+                          className="neu-input w-full text-xs"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Registered Office Address *</label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.seller_address || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, seller_address: e.target.value })}
+                          className="neu-input w-full text-xs font-medium"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SECTION 4: OFFICIAL DIGITAL STAMP & AUTHORIZED SIGNATURE */}
+                {vaultSection === 'stamp' && (
+                  <div className="space-y-5 p-5 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] animate-tab-fade">
+                    <div>
+                      <h4 className="text-xs font-display font-extrabold text-[#1F1F1F] uppercase tracking-wider flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-[#E86A5B]" />
+                        <span>Official Digital Stamp & Authorized Signatory Settings</span>
+                      </h4>
+                      <p className="text-[11px] text-[#6B6B6B] mt-0.5">
+                        These official legal credentials, stamp/seal, and signature will print automatically on every client & studio GST tax invoice.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">
+                          Authorized Signatory Full Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.authorized_signatory_name || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, authorized_signatory_name: e.target.value })}
+                          placeholder="e.g. Aryan Patel / Founder Name"
+                          className="neu-input w-full text-xs font-bold"
+                          required
+                        />
+                        <p className="text-[10px] text-[#6B6B6B] mt-1">
+                          Full legal name printed under "Authorized Signatory" on tax invoices.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#1F1F1F] mb-1">
+                          Signatory Designation / Role *
+                        </label>
+                        <input
+                          type="text"
+                          value={gatewayConfig.authorized_signatory_designation || ''}
+                          onChange={(e) => setGatewayConfig({ ...gatewayConfig, authorized_signatory_designation: e.target.value })}
+                          placeholder="e.g. Managing Director & Founder"
+                          className="neu-input w-full text-xs font-medium"
+                          required
+                        />
+                        <p className="text-[10px] text-[#6B6B6B] mt-1">
+                          Title or position within the registered company (e.g. Director, Partner).
+                        </p>
+                      </div>
+
+                      {/* STAMP UPLOAD & URL */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-bold text-[#1F1F1F]">
+                            Company Round Stamp / Seal
+                          </label>
+                          {gatewayConfig.digital_stamp_url && (
+                            <button
+                              type="button"
+                              onClick={() => setGatewayConfig({ ...gatewayConfig, digital_stamp_url: '' })}
+                              className="text-[10px] text-rose-500 hover:underline font-bold"
+                            >
+                              Reset to Default Seal
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={gatewayConfig.digital_stamp_url || ''}
+                            onChange={(e) => setGatewayConfig({ ...gatewayConfig, digital_stamp_url: e.target.value })}
+                            placeholder="Upload PNG or paste image URL..."
+                            className="neu-input flex-1 text-xs font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => stampFileRef.current?.click()}
+                            className="neu-btn-secondary py-2 px-3 text-xs font-bold whitespace-nowrap flex items-center gap-1.5 cursor-pointer hover:text-[#E86A5B]"
+                            title="Upload PNG Stamp Image from your computer"
+                          >
+                            <UploadCloud className="w-4 h-4 text-[#E86A5B]" />
+                            <span>Upload PNG</span>
+                          </button>
+                          <input
+                            ref={stampFileRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 2 * 1024 * 1024) {
+                                toast.error('File size exceeds 2MB limit');
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                setGatewayConfig({ ...gatewayConfig, digital_stamp_url: reader.result as string });
+                                toast.success('Official PNG Stamp loaded successfully!');
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-[#6B6B6B]">
+                          💡 Upload your company round stamp PNG (transparent background recommended) or leave empty for default.
+                        </p>
+                      </div>
+
+                      {/* SIGNATURE UPLOAD & URL */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-bold text-[#1F1F1F]">
+                            Authorized Digital Signature
+                          </label>
+                          {gatewayConfig.digital_signature_url && (
+                            <button
+                              type="button"
+                              onClick={() => setGatewayConfig({ ...gatewayConfig, digital_signature_url: '' })}
+                              className="text-[10px] text-rose-500 hover:underline font-bold"
+                            >
+                              Reset to Default Signature
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={gatewayConfig.digital_signature_url || ''}
+                            onChange={(e) => setGatewayConfig({ ...gatewayConfig, digital_signature_url: e.target.value })}
+                            placeholder="Upload PNG or paste signature URL..."
+                            className="neu-input flex-1 text-xs font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => signFileRef.current?.click()}
+                            className="neu-btn-secondary py-2 px-3 text-xs font-bold whitespace-nowrap flex items-center gap-1.5 cursor-pointer hover:text-[#E86A5B]"
+                            title="Upload PNG Signature Image from your computer"
+                          >
+                            <UploadCloud className="w-4 h-4 text-[#E86A5B]" />
+                            <span>Upload PNG</span>
+                          </button>
+                          <input
+                            ref={signFileRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 2 * 1024 * 1024) {
+                                toast.error('File size exceeds 2MB limit');
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                setGatewayConfig({ ...gatewayConfig, digital_signature_url: reader.result as string });
+                                toast.success('Digital Signature PNG loaded successfully!');
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-[#6B6B6B]">
+                          💡 Upload your official signature PNG with transparent background or leave empty for cursive name.
+                        </p>
+                      </div>
+
+                      {/* LIVE VISUAL PREVIEW OF PRINTED STAMP & SIGNATURE */}
+                      <div className="sm:col-span-2 p-5 rounded-2xl bg-white border border-[#E2DDD5] shadow-sm">
+                        <div className="flex items-center justify-between pb-3 border-b border-[#E8E5E2] mb-3">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-[#D9A441]" />
+                            <span>Live Invoice Stamp & Sign Preview (As Seen on Printed PDF)</span>
+                          </span>
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            Valid Under GST Sec 31
+                          </span>
+                        </div>
+
+                        <div className="flex justify-end">
+                          <div className="text-right p-5 rounded-2xl bg-[#FAF9F7] border border-[#E2DDD5] max-w-sm w-full">
+                            <div className="font-extrabold text-xs text-[#1F1F1F]">
+                              For {gatewayConfig.seller_legal_name || 'Get My Moment Media Technologies Pvt Ltd'}
+                            </div>
+
+                            <div className="flex items-center justify-end gap-4 my-3">
+                              {gatewayConfig.digital_stamp_url ? (
+                                <img
+                                  src={gatewayConfig.digital_stamp_url}
+                                  alt="Custom Seal"
+                                  className="max-h-20 max-w-20 object-contain drop-shadow-sm"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = '';
+                                  }}
+                                />
+                              ) : (
+                                <div className="w-16 h-16 border-2 border-dashed border-[#E86A5B] rounded-full flex flex-col items-center justify-center text-[7px] font-extrabold text-[#E86A5B] text-center uppercase -rotate-6 p-1 bg-[#E86A5B]/5 shadow-sm">
+                                  <span>GET MY MOMENT</span>
+                                  <span className="text-[8px] text-[#D9A441]">★ SEAL ★</span>
+                                  <span>VERIFIED</span>
+                                </div>
+                              )}
+
+                              {gatewayConfig.digital_signature_url ? (
+                                <img
+                                  src={gatewayConfig.digital_signature_url}
+                                  alt="Custom Signature"
+                                  className="max-h-12 max-w-32 object-contain"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = '';
+                                  }}
+                                />
+                              ) : (
+                                <div className="font-serif italic text-xl font-bold text-[#1F1F1F] pr-2 tracking-tight">
+                                  {gatewayConfig.authorized_signatory_name || 'Aryan Patel'}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="border-t border-dashed border-[#8E8E8E] pt-1.5 text-xs font-bold text-[#1F1F1F]">
+                              {gatewayConfig.authorized_signatory_name || 'Aryan Patel'}
+                              <div className="text-[10px] text-[#6B6B6B] font-normal">
+                                {gatewayConfig.authorized_signatory_designation || 'Managing Director & Founder'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* BOTTOM AUTHORIZATION & SAVE ROW */}
+                <div className="p-4 rounded-2xl bg-[#EBE8E1]/80 border border-[#E2DDD5] space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex-1">
+                      <label className="block text-xs font-bold text-[#1F1F1F] mb-1">
+                        SuperAdmin Confirmation Password *
+                      </label>
+                      <input
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Re-enter SuperAdmin Password to authorize changes..."
+                        className="neu-input w-full text-xs"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-[#E2DDD5]/60">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsVaultUnlocked(false);
+                        setGatewayConfig(null);
+                        setIsVaultModalOpen(false);
+                        toast.info('🔒 Vault re-locked safely.');
+                      }}
+                      className="neu-btn-secondary py-2 px-4 text-xs flex items-center gap-1.5 text-[#6B6B6B]"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Lock & Close</span>
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={savingGateway}
+                      className="btn-primary py-2.5 px-6 text-xs font-bold flex items-center gap-2 shadow-lg shadow-primary-500/25 cursor-pointer"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{savingGateway ? 'Saving & Locking...' : 'Save & Auto-Lock Vault'}</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )
+          )}
+        </Modal>
+      )}
+
+      {/* CONFIRM DELETE PHOTOGRAPHER DIALOG */}
+      <ConfirmDialog
+        isOpen={!!photographerToDelete}
+        onClose={() => setPhotographerToDelete(null)}
+        onConfirm={handleConfirmDeletePhotographer}
+        title="Permanently Delete Studio?"
+        message={`Are you sure you want to delete studio "${photographerToDelete?.studio_name}" (${photographerToDelete?.email}) and all their events and photos? This action CANNOT be undone.`}
+        confirmText="Delete Studio"
+        isDanger={true}
+        loading={actionLoading}
+      />
+
+      {/* CONFIRM DELETE EVENT DIALOG */}
+      <ConfirmDialog
+        isOpen={!!eventToDelete}
+        onClose={() => setEventToDelete(null)}
+        onConfirm={handleConfirmDeleteEvent}
+        title="Superadmin Force Delete Event?"
+        message={`Are you sure you want to force delete event "${eventToDelete?.name}" created by studio "${eventToDelete?.studio_name}"?`}
+        confirmText="Force Delete Event"
+        isDanger={true}
+        loading={actionLoading}
+      />
     </div>
   );
 }
 
-export default function SuperAdminDashboard() {
+export default function SuperAdminDashboardPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-[#0F1015] flex items-center justify-center text-neutral-400">
-          <div className="w-8 h-8 border-2 border-[#E86A5B] border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      }
-    >
-      <AdminDashboardContent />
-    </Suspense>
+    <React.Suspense fallback={<div className="min-h-screen bg-[#F3F1EC] flex items-center justify-center font-bold text-slate-600">Loading Master Control...</div>}>
+      <SuperAdminDashboardContent />
+    </React.Suspense>
   );
 }
