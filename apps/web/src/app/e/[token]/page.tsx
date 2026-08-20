@@ -689,7 +689,7 @@ export default function GuestExperiencePage() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
                   {matchResult.matched_photos.map((p) => {
                     const score = matchResult.similarity_scores[p.id] || 0.95;
                     const pct = Math.round(score * 100);

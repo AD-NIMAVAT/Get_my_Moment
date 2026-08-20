@@ -679,7 +679,7 @@ export default function EventCommandCenterPage() {
           </div>
 
           {/* Photo Grid with Single Download Buttons */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
             {photos.filter(p => !p.is_guest_uploaded).map((ph) => (
               <div key={ph.id} className="aspect-square rounded-2xl overflow-hidden neu-card relative group border border-white/60">
                 <img
@@ -867,7 +867,7 @@ export default function EventCommandCenterPage() {
                   </div>
 
                   {/* Contributor's Photos Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                     {c.photos.map((p) => (
                       <div key={p.id} className="aspect-square rounded-2xl overflow-hidden neu-card relative group border border-white/60">
                         <img
