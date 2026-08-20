@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -29,7 +29,7 @@ const PLAN_INFO: Record<string, { label: string; price: string; color: string; s
   ENTERPRISE_VIP: { label: 'Enterprise VIP', price: '₹9,999/mo', color: 'text-pink-300 bg-pink-500/20 border-pink-500/30 font-bold', storage: '10,000 GB (10TB)', events: 'Unlimited' },
 };
 
-function SuperAdminDashboardContent() {
+function AdminDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { admin, loading: authLoading, logout } = useAdminAuth();
@@ -1022,17 +1022,14 @@ function SuperAdminDashboardContent() {
 
 export default function SuperAdminDashboard() {
   return (
-    <React.Suspense fallback={
-      <div className="min-h-screen bg-[#0E0A22] text-white flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#8B5CF6] via-[#EC4899] to-[#06B6D4] animate-spin flex items-center justify-center p-0.5">
-            <div className="w-full h-full bg-[#0E0A22] rounded-[14px]" />
-          </div>
-          <span className="text-xs font-bold text-neutral-400 tracking-wider">LOADING LUMINA DASHBOARD...</span>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#0F1015] flex items-center justify-center text-neutral-400">
+          <div className="w-8 h-8 border-2 border-[#E86A5B] border-t-transparent rounded-full animate-spin"></div>
         </div>
-      </div>
-    }>
-      <SuperAdminDashboardContent />
-    </React.Suspense>
+      }
+    >
+      <AdminDashboardContent />
+    </Suspense>
   );
 }

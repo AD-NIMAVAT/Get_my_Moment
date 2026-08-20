@@ -61,14 +61,104 @@ export function Navbar() {
     setMobileMenuOpen(false);
   }, [pathname]);
 
-  // 4. Hide Navbar on Guest Galleries, Client Album Selection, Field Crew Portals & Admin Dashboard
+  // 4. Hide Navbar on Guest Galleries, Client Album Selection & Field Crew Portals
   if (
     pathname.startsWith('/e/') || 
     pathname.startsWith('/selection/') || 
-    pathname.startsWith('/crew') ||
-    pathname.startsWith('/admin')
+    pathname.startsWith('/crew')
   ) {
     return null;
+  }
+
+  // 5. Dedicated SUPER ADMIN NAVBAR (When in /admin/* routes)
+  if (pathname.startsWith('/admin')) {
+    if (pathname === '/admin/login') {
+      return (
+        <header className="sticky top-0 z-50 w-full max-w-full bg-[#F3F1EC]/95 backdrop-blur-md border-b border-[#E2DDD5] shadow-[0_4px_16px_#D4D0C7] text-[#1F1F1F] box-border">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shadow-[4px_4px_10px_#D4D0C7,-4px_-4px_10px_#FFFFFF] shrink-0">
+                <KeyRound className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-display font-extrabold text-base sm:text-lg tracking-tight text-[#1F1F1F] leading-none truncate">
+                  Get My Moment
+                </span>
+                <span className="text-[9px] sm:text-[10px] font-bold tracking-widest text-[#E86A5B] uppercase mt-0.5 truncate">
+                  Super Admin Gateway
+                </span>
+              </div>
+            </div>
+
+            <Link
+              href="/"
+              className="text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F] flex items-center gap-1 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl neu-btn-secondary shrink-0"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back Home</span>
+            </Link>
+          </div>
+        </header>
+      );
+    }
+
+    // Inside Admin Dashboard
+    return (
+      <header className="sticky top-0 z-50 w-full max-w-full bg-[#F3F1EC]/95 backdrop-blur-md border-b border-[#E2DDD5] shadow-[0_4px_16px_#D4D0C7] text-[#1F1F1F] box-border">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
+          <Link href="/admin/dashboard" className="flex items-center gap-2.5 sm:gap-3 group min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shadow-[4px_4px_10px_#D4D0C7,-4px_-4px_10px_#FFFFFF] group-hover:scale-105 transition-all shrink-0">
+              <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="font-display font-extrabold text-sm sm:text-lg tracking-tight text-[#1F1F1F] leading-none truncate">
+                  Get My Moment
+                </span>
+                <span className="px-1.5 py-0.5 rounded-full bg-[#E86A5B]/15 text-[#E86A5B] text-[8px] sm:text-[10px] font-bold border border-[#E86A5B]/30 neu-pill shrink-0">
+                  SUPER ADMIN
+                </span>
+              </div>
+              <span className="text-[8px] sm:text-[10px] font-bold tracking-widest text-[#6B6B6B] uppercase mt-0.5 truncate">
+                Platform Owner &amp; Master Control
+              </span>
+            </div>
+          </Link>
+
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+            {admin && (
+              <div className="flex items-center gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('open-vault-modal'));
+                    }
+                  }}
+                  className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1 cursor-pointer neu-btn-secondary border border-[#E86A5B]/35 text-[#E86A5B] hover:bg-[#E86A5B]/10 hover:border-[#E86A5B]/60 shadow-[2px_2px_5px_#D4D0C7,-2px_-2px_5px_#FFFFFF] hover:scale-105 active:scale-95"
+                >
+                  <Lock className="w-3.5 h-3.5 text-[#E86A5B]" />
+                  <span className="hidden sm:inline">Gateway &amp; Bank Vault</span>
+                  <span className="sm:hidden">Vault</span>
+                </button>
+                <div className="hidden md:flex flex-col text-right">
+                  <span className="text-xs font-bold text-[#1F1F1F]">{admin.email}</span>
+                  <span className="text-[10px] font-bold text-[#E86A5B] tracking-wider">PLATFORM OWNER</span>
+                </div>
+                <button
+                  onClick={adminLogout}
+                  className="p-2 sm:px-3.5 sm:py-2 rounded-xl text-rose-600 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer neu-icon-btn"
+                  title="Logout Super Admin"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Admin Logout</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+    );
   }
 
   // 6. MAIN BRAND NAVBAR
