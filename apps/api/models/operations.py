@@ -4,7 +4,7 @@ Business OS - Event Operations, Multi-Ceremony & Crew Models
 
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Float, Integer, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Float, Integer, Boolean, DateTime, ForeignKey, Text, JSON, Index
 from sqlalchemy.orm import relationship
 from apps.api.database import Base
 
@@ -36,8 +36,14 @@ class CrewMember(Base):
     phone = Column(String(32), nullable=True)
     payout_inr = Column(Float, default=0.0, nullable=False)
     payout_status = Column(String(32), default="PENDING", nullable=False)  # PENDING, PAID
+    assigned_ceremonies = Column(JSON, default=list, nullable=True)  # List of assigned ceremony names/IDs e.g. ["Mandap", "Haldi"]
+    camera_tag = Column(String(64), nullable=True)  # e.g. "Sony-A7IV-CamA"
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_crew_phone_event", "phone", "event_id"),
+    )
 
     # Relationships
     event = relationship("Event", backref="crew_members")

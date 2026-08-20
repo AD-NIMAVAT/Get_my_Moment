@@ -1886,6 +1886,60 @@ class ApiClient {
     if (!res.ok) throw new Error('Failed to ingest wireless photo');
     return res.json();
   }
+
+  // Crew Operations & Field Portal
+  async crewLogin(phone: string, pin?: string): Promise<{ access_token: string; crew_id: string; name: string; phone: string; total_assigned_events: number }> {
+    const res = await fetch(`${this.baseUrl}/crew/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, pin }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Login failed. No crew assignments found for this number.');
+    }
+    const data = await res.json();
+    if (typeof window !== 'undefined' && data.access_token) {
+      localStorage.setItem('gmm_crew_token', data.access_token);
+      localStorage.setItem('gmm_crew_phone', data.phone);
+    }
+    return data;
+  }
+
+  async getCrewDashboard(phone?: string): Promise<any> {
+    const crewToken = typeof window !== 'undefined' ? localStorage.getItem('gmm_crew_token') : null;
+    const crewPhone = phone || (typeof window !== 'undefined' ? localStorage.getItem('gmm_crew_phone') : null);
+    const headers: Record<string, string> = {};
+    if (crewToken) headers['Authorization'] = `Bearer ${crewToken}`;
+    
+    const url = crewPhone ? `${this.baseUrl}/crew/dashboard?phone=${encodeURIComponent(crewPhone)}` : `${this.baseUrl}/crew/dashboard`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to load crew dashboard');
+    }
+    return res.json();
+  }
+
+  async setActiveCeremony(eventId: string, folderId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/crew/events/${eventId}/set-active-ceremony`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder_id: folderId }),
+    });
+    if (!res.ok) throw new Error('Failed to set active ceremony');
+    return res.json();
+  }
+
+  async crewUploadPhotos(eventId: string, formData: FormData): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/crew/events/${eventId}/upload-photos`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) throw new Error('Failed to upload crew photos');
+    return res.json();
+  }
 }
+
 
 export const api = new ApiClient();

@@ -70,6 +70,8 @@ export default function EventCommandCenterPage() {
   const [crewRole, setCrewRole] = useState('Candid Photo');
   const [crewPayout, setCrewPayout] = useState('15000');
   const [crewPhone, setCrewPhone] = useState('');
+  const [crewAssignedCeremonies, setCrewAssignedCeremonies] = useState<string[]>([]);
+  const [crewCameraTag, setCrewCameraTag] = useState('');
 
   // Finance Modals
   const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -327,17 +329,21 @@ export default function EventCommandCenterPage() {
         role: crewRole,
         phone: crewPhone.trim() || undefined,
         payout_inr: parseFloat(crewPayout) || 0,
+        assigned_ceremonies: crewAssignedCeremonies,
+        camera_tag: crewCameraTag.trim() || undefined,
       });
       setShowCrewModal(false);
       setCrewName('');
       setCrewPhone('');
+      setCrewCameraTag('');
+      setCrewAssignedCeremonies([]);
       const [updatedOps, updatedFin] = await Promise.all([
         api.getEventOperations(eventId),
         api.getEventFinance(eventId),
       ]);
       setOperations(updatedOps);
       setFinance(updatedFin);
-      toast.success('Crew member assigned to shoot!');
+      toast.success('🎉 Crew member assigned with ceremonies & camera tag!');
     } catch (err: any) {
       toast.error(err.message || 'Failed to assign crew member');
     }
@@ -868,6 +874,15 @@ export default function EventCommandCenterPage() {
                     <div key={c.id} className="p-4 rounded-2xl bg-[#EBE8E1] shadow-[inset_2px_2px_4px_#D1CDC4,inset_-2px_-2px_4px_#FFFFFF]">
                       <span className="text-xs font-bold text-[#1F1F1F] block">{c.name}</span>
                       <span className="text-[11px] text-[#6B6B6B] mt-1 block">{c.photo_count} Photos Assigned</span>
+                      {c.assigned_crew && c.assigned_crew.length > 0 && (
+                        <div className="mt-2.5 pt-2 border-t border-[#D1CDC4] flex flex-wrap gap-1">
+                          {c.assigned_crew.map((cr: any) => (
+                            <span key={cr.id} className="px-2 py-0.5 rounded-md bg-[#FAF9F7] text-[10px] font-bold text-[#E86A5B] border border-[#E8E5E2]">
+                              📷 {cr.name} ({cr.role})
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -897,10 +912,27 @@ export default function EventCommandCenterPage() {
               ) : (
                 <div className="space-y-3">
                   {operations?.crew_members.map((cr) => (
-                    <div key={cr.id} className="p-4 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] flex items-center justify-between gap-4">
+                    <div key={cr.id} className="p-4 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                       <div>
-                        <span className="text-xs font-bold text-[#1F1F1F] block">{cr.name} ({cr.role})</span>
-                        {cr.phone && <span className="text-[11px] text-[#6B6B6B]">{cr.phone}</span>}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-[#1F1F1F] block">{cr.name} ({cr.role})</span>
+                          {cr.camera_tag && (
+                            <span className="text-[10px] font-mono text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
+                              📷 {cr.camera_tag}
+                            </span>
+                          )}
+                        </div>
+                        {cr.phone && <span className="text-[11px] text-[#6B6B6B] block mt-0.5">{cr.phone}</span>}
+                        {cr.assigned_ceremonies && cr.assigned_ceremonies.length > 0 && (
+                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                            <span className="text-[10px] text-[#6B6B6B] font-semibold">Functions:</span>
+                            {cr.assigned_ceremonies.map((cName: string, i: number) => (
+                              <span key={i} className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 text-[10px] font-bold border border-emerald-200">
+                                {cName}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-xs font-bold text-[#1F1F1F]">₹{cr.payout_inr.toLocaleString('en-IN')}</span>
@@ -1245,6 +1277,30 @@ export default function EventCommandCenterPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
+              <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Mobile Phone (For Crew Login) *</label>
+              <input
+                type="tel"
+                required
+                value={crewPhone}
+                onChange={(e) => setCrewPhone(e.target.value)}
+                placeholder="e.g. 9876543210"
+                className="gmm-input w-full font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Camera Device / Model Tag</label>
+              <input
+                type="text"
+                value={crewCameraTag}
+                onChange={(e) => setCrewCameraTag(e.target.value)}
+                placeholder="e.g. Sony A7 IV (Cam 1)"
+                className="gmm-input w-full"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
               <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Role</label>
               <NeomorphicSelect
                 value={crewRole}
@@ -1268,6 +1324,44 @@ export default function EventCommandCenterPage() {
               />
             </div>
           </div>
+
+          {/* Assigned Ceremonies Multi-Select */}
+          {operations?.ceremonies && operations.ceremonies.length > 0 && (
+            <div>
+              <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">
+                Assign to Specific Ceremonies / Functions:
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-[#FAF9F7] rounded-xl border border-[#E8E5E2]">
+                {operations.ceremonies.map((c) => {
+                  const isSelected = crewAssignedCeremonies.includes(c.name);
+                  return (
+                    <label
+                      key={c.id}
+                      className={`flex items-center gap-2 p-2 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                        isSelected
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : 'hover:bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          if (isSelected) {
+                            setCrewAssignedCeremonies(crewAssignedCeremonies.filter((n) => n !== c.name));
+                          } else {
+                            setCrewAssignedCeremonies([...crewAssignedCeremonies, c.name]);
+                          }
+                        }}
+                        className="rounded text-emerald-600 cursor-pointer"
+                      />
+                      <span>{c.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E2DDD5]">
             <button type="button" onClick={() => setShowCrewModal(false)} className="px-4 py-2.5 text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F]">Cancel</button>
             <button type="submit" className="btn-primary py-2.5 px-5 text-xs font-bold">Assign Crew</button>

@@ -81,14 +81,26 @@ def process_incoming_camera_photo(
             event = None
             camera_name = "[CAMERA] Wi-Fi Direct Shoot"
 
-            # 1. Check path tokens in subfolders (e.g. /incoming/{access_token}/IMG_0001.JPG)
+            # 1. Check path tokens in subfolders (e.g. /incoming/{access_token}/{folder_slug}/IMG_0001.JPG)
+            matched_folder_from_path = None
             parts = file_path.replace("\\", "/").split("/")
             for i, part in enumerate(parts):
                 match = db.query(Event).filter((Event.access_token == part) | (Event.id == part)).first()
                 if match:
                     event = match
+                    # Check if next subfolder matches a ceremony or folder name
                     if i + 1 < len(parts) - 1:
-                        camera_name = f"[CAMERA] {parts[i+1]}"
+                        sub_name = parts[i+1].strip()
+                        sub_folder = db.query(Folder).filter(
+                            Folder.event_id == event.id,
+                            Folder.deleted_at.is_(None),
+                            (Folder.slug == sub_name) | (Folder.name == sub_name) | (Folder.name.ilike(f"%{sub_name}%"))
+                        ).first()
+                        if sub_folder:
+                            matched_folder_from_path = sub_folder
+                            camera_name = f"[CAMERA] {sub_folder.name}"
+                        else:
+                            camera_name = f"[CAMERA] {sub_name}"
                     break
 
             # 2. Check explicit target_event_id
@@ -115,15 +127,15 @@ def process_incoming_camera_photo(
             studio_id = event.photographer_id
 
             # Resolve Target Folder
-            target_folder = None
-            resolved_folder_id = target_folder_id or wireless_server.get_camera_folder(camera_name) or wireless_server.active_folder_id
-
-            if resolved_folder_id:
-                target_folder = db.query(Folder).filter(
-                    Folder.id == resolved_folder_id,
-                    Folder.event_id == event_id,
-                    Folder.deleted_at.is_(None)
-                ).first()
+            target_folder = matched_folder_from_path
+            if not target_folder:
+                resolved_folder_id = target_folder_id or wireless_server.get_camera_folder(camera_name) or wireless_server.active_folder_id
+                if resolved_folder_id:
+                    target_folder = db.query(Folder).filter(
+                        Folder.id == resolved_folder_id,
+                        Folder.event_id == event_id,
+                        Folder.deleted_at.is_(None)
+                    ).first()
 
             # Graceful Fallback to Uncategorized folder
             if not target_folder:

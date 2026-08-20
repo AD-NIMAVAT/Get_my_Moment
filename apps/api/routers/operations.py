@@ -27,6 +27,8 @@ class CrewMemberCreate(BaseModel):
     phone: Optional[str] = None
     payout_inr: float = 0.0
     payout_status: str = "PENDING"
+    assigned_ceremonies: List[str] = []  # List of ceremony names or IDs e.g. ["Mandap", "Haldi"]
+    camera_tag: Optional[str] = None  # e.g. "Sony-A7IV-Cam1"
     notes: Optional[str] = None
 
 
@@ -62,6 +64,12 @@ def get_event_operations(
     ceremonies_data = []
     for c in ceremonies:
         photo_count = db.query(Photo).filter(Photo.ceremony_id == c.id).count()
+        # Find crew members assigned to this ceremony
+        assigned_crew = [
+            {"id": cr.id, "name": cr.name, "role": cr.role}
+            for cr in crew_members
+            if cr.assigned_ceremonies and (c.name in cr.assigned_ceremonies or c.id in cr.assigned_ceremonies)
+        ]
         ceremonies_data.append({
             "id": c.id,
             "name": c.name,
@@ -69,6 +77,7 @@ def get_event_operations(
             "venue": c.venue,
             "order_index": c.order_index,
             "photo_count": photo_count,
+            "assigned_crew": assigned_crew,
         })
 
     return OperationsResponse(
@@ -83,6 +92,8 @@ def get_event_operations(
                 "phone": cr.phone,
                 "payout_inr": cr.payout_inr,
                 "payout_status": cr.payout_status,
+                "assigned_ceremonies": cr.assigned_ceremonies or [],
+                "camera_tag": cr.camera_tag,
                 "notes": cr.notes,
             }
             for cr in crew_members
@@ -145,12 +156,20 @@ def add_crew_member(
         phone=data.phone,
         payout_inr=data.payout_inr,
         payout_status=data.payout_status,
+        assigned_ceremonies=data.assigned_ceremonies or [],
+        camera_tag=data.camera_tag,
         notes=data.notes,
     )
     db.add(crew)
     db.commit()
     db.refresh(crew)
-    return {"id": crew.id, "name": crew.name, "message": "Crew member assigned."}
+    return {
+        "id": crew.id,
+        "name": crew.name,
+        "assigned_ceremonies": crew.assigned_ceremonies,
+        "camera_tag": crew.camera_tag,
+        "message": "Crew member assigned successfully."
+    }
 
 
 @router.patch("/crew/{crew_id}/payout")
