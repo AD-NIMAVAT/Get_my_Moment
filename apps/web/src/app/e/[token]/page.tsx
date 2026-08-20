@@ -2,16 +2,21 @@
 
 export const dynamic = 'force-dynamic';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { api, PublicEventItem, PhotoItem, MatchSearchResult } from '@/lib/api';
+import { 
+  api, PublicEventItem, PhotoItem, MatchSearchResult, FolderItem,
+  saveGuestSession, getGuestSession, clearGuestSession, GuestSessionData 
+} from '@/lib/api';
 import { 
   Camera, Sparkles, ShieldCheck, Download, Check, AlertCircle, 
   RefreshCw, X, ArrowRight, User, Phone, Lock, Eye, Image as ImageIcon, 
-  UploadCloud, Share2, MessageSquare, Heart 
+  UploadCloud, Share2, MessageSquare, Heart, LogOut, CheckCircle2,
+  ChevronRight, ArrowLeft, Layers, Folder as FolderIcon
 } from 'lucide-react';
 
 type Step = 'REGISTER' | 'OTP' | 'CONSENT' | 'SELFIE' | 'MATCHING' | 'GALLERY';
+type AuthMode = 'SIGNUP' | 'LOGIN';
 
 export default function GuestExperiencePage() {
   const params = useParams();
@@ -19,7 +24,8 @@ export default function GuestExperiencePage() {
 
   const [event, setEvent] = useState<PublicEventItem | null>(null);
   const [step, setStep] = useState<Step>('REGISTER');
-  const [activeGuestTab, setActiveGuestTab] = useState<'AI_SEARCH' | 'GUEST_UPLOAD'>('AI_SEARCH');
+  const [authMode, setAuthMode] = useState<AuthMode>('SIGNUP');
+  const [activeGuestTab, setActiveGuestTab] = useState<'AI_SEARCH' | 'GUEST_UPLOAD' | 'FOLDERS'>('AI_SEARCH');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,6 +51,10 @@ export default function GuestExperiencePage() {
   const [guestUploadName, setGuestUploadName] = useState('');
   const [guestUploadPhone, setGuestUploadPhone] = useState('');
 
+  // Folders State
+  const [folders, setFolders] = useState<FolderItem[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+
   // Matching & Results State
   const [matchResult, setMatchResult] = useState<MatchSearchResult | null>(null);
   const [selectedPhoto, setSelectedPhoto] = useState<PhotoItem | null>(null);
@@ -53,20 +63,79 @@ export default function GuestExperiencePage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const guestFileInputRef = useRef<HTMLInputElement>(null);
 
+  // 1. Initial Load & Refresh-Proof Session Restoration
   useEffect(() => {
     if (token) {
-      loadEvent();
+      initEventAndSession();
     }
   }, [token]);
 
-  const loadEvent = async () => {
+  // 2. Multi-Tab Session Synchronization
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === `gmm_guest_session_${token}` && !e.newValue) {
+        // Session cleared in another tab
+        handleSignOut(false);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [token]);
+
+  const initEventAndSession = async () => {
     try {
       setLoading(true);
-      const data = await api.getPublicEvent(token);
-      setEvent(data);
-      if (!data.allow_guest_uploads) {
-        setActiveGuestTab('AI_SEARCH');
+      setError(null);
+      const eventData = await api.getPublicEvent(token);
+      setEvent(eventData);
+
+      // Load folders
+      try {
+        const foldersData = await api.getFolders(eventData.id);
+        setFolders(foldersData);
+      } catch {
+        // Non-critical
       }
+
+      // Check stored session
+      const storedSession = getGuestSession(token);
+      if (storedSession && storedSession.guestId) {
+        // Validate with server source-of-truth
+        const validated = await api.validateGuestSession(eventData.id, storedSession.guestId);
+        if (validated && validated.is_valid) {
+          setGuestId(validated.guestId);
+          setName(validated.name);
+          setMobile(storedSession.mobileMasked || '');
+
+          // Check cached matches
+          if (validated.has_matched_photos) {
+            const cachedMatches = await api.getCachedGuestMatch(eventData.id, validated.guestId);
+            if (cachedMatches && cachedMatches.matched_photos && cachedMatches.matched_photos.length > 0) {
+              setMatchResult(cachedMatches);
+              setStep('GALLERY');
+              setLoading(false);
+              return;
+            }
+          }
+
+          // If valid session but no selfie matched yet
+          if (validated.has_consent) {
+            setStep('SELFIE');
+            startCamera();
+          } else {
+            setStep('CONSENT');
+          }
+          setLoading(false);
+          return;
+        } else {
+          // Session stale or invalid on server
+          clearGuestSession(token);
+        }
+      }
+
+      // Default state for first-time visitor
+      setStep('REGISTER');
+      setAuthMode('SIGNUP');
     } catch (err: any) {
       setError(err.message || 'Unable to access event.');
     } finally {
@@ -74,7 +143,7 @@ export default function GuestExperiencePage() {
     }
   };
 
-  // Step 1: Register
+  // Sign Up Handler
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!event) return;
@@ -84,6 +153,21 @@ export default function GuestExperiencePage() {
     try {
       const res = await api.registerGuest(event.id, { name: name.trim(), mobile: mobile.trim() });
       setGuestId(res.guest_id);
+
+      // Persist interim session
+      saveGuestSession(token, {
+        sessionToken: '',
+        guestId: res.guest_id,
+        eventId: event.id,
+        name: name.trim(),
+        mobileMasked: mobile.trim(),
+        otpVerified: !res.requires_otp,
+        hasConsent: false,
+        hasMatchedPhotos: false,
+        matchCount: 0,
+        expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+      });
+
       if (res.requires_otp) {
         setStep('OTP');
       } else {
@@ -96,7 +180,61 @@ export default function GuestExperiencePage() {
     }
   };
 
-  // Step 2: OTP
+  // Login Handler (Returning Guest)
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!event) return;
+    setError(null);
+    setLoading(true);
+
+    try {
+      const res = await api.guestLogin(event.id, mobile.trim());
+      setGuestId(res.guestId);
+      setName(res.name);
+
+      // Save valid server session
+      saveGuestSession(token, {
+        sessionToken: res.sessionToken,
+        guestId: res.guestId,
+        eventId: event.id,
+        name: res.name,
+        mobileMasked: res.mobileMasked,
+        otpVerified: res.otpVerified,
+        hasConsent: res.hasConsent,
+        hasMatchedPhotos: res.hasMatchedPhotos,
+        matchCount: res.matchCount,
+        expiresAt: res.expiresAt,
+      });
+
+      if (res.requires_otp) {
+        setStep('OTP');
+        return;
+      }
+
+      // Check if user already has matched moments
+      if (res.hasMatchedPhotos) {
+        const cached = await api.getCachedGuestMatch(event.id, res.guestId);
+        if (cached && cached.matched_photos && cached.matched_photos.length > 0) {
+          setMatchResult(cached);
+          setStep('GALLERY');
+          return;
+        }
+      }
+
+      if (!res.hasConsent) {
+        setStep('CONSENT');
+      } else {
+        setStep('SELFIE');
+        startCamera();
+      }
+    } catch (err: any) {
+      setError(err.message || 'No guest found with this mobile number. Please Sign Up.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // OTP Verification
   const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guestId || !otpCode) return;
@@ -107,13 +245,13 @@ export default function GuestExperiencePage() {
       await api.verifyGuestOTP(guestId, otpCode);
       setStep('CONSENT');
     } catch (err: any) {
-      setError(err.message || 'Invalid OTP code');
+      setError(err.message || 'Invalid OTP code. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Step 3: Consent
+  // Consent Submission
   const handleConsentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guestId || !faceConsent) return;
@@ -122,10 +260,18 @@ export default function GuestExperiencePage() {
 
     try {
       await api.recordConsent(guestId, faceConsent, marketingConsent);
+      
+      // Update session consent
+      const curr = getGuestSession(token);
+      if (curr) {
+        curr.hasConsent = true;
+        saveGuestSession(token, curr);
+      }
+
       setStep('SELFIE');
       startCamera();
     } catch (err: any) {
-      setError(err.message || 'Consent recording failed');
+      setError(err.message || 'Consent recording failed.');
     } finally {
       setLoading(false);
     }
@@ -146,7 +292,7 @@ export default function GuestExperiencePage() {
         videoRef.current.srcObject = stream;
       }
     } catch (err) {
-      console.warn('Camera stream inaccessible or not supported, falling back to file input:', err);
+      console.warn('Camera stream inaccessible, falling back to file picker:', err);
     }
   };
 
@@ -192,7 +338,7 @@ export default function GuestExperiencePage() {
     }
   };
 
-  // Step 4: Run AI Face Matching
+  // AI Face Matching
   const runMatching = async () => {
     if (!event || !selfieBlob || !guestId) return;
     setStep('MATCHING');
@@ -201,12 +347,50 @@ export default function GuestExperiencePage() {
     try {
       const results = await api.searchSelfie(event.id, guestId, selfieBlob);
       setMatchResult(results);
+
+      // Update session with match status
+      const curr = getGuestSession(token);
+      if (curr) {
+        curr.hasMatchedPhotos = true;
+        curr.matchCount = results.matched_count;
+        saveGuestSession(token, curr);
+      }
+
       setStep('GALLERY');
     } catch (err: any) {
       setError(err.message || 'Face matching search failed. Please try with another selfie.');
       setStep('SELFIE');
       startCamera();
     }
+  };
+
+  // Retake Selfie Handler
+  const handleRetakeSelfie = () => {
+    setSelfieBlob(null);
+    setSelfiePreviewUrl(null);
+    setStep('SELFIE');
+    startCamera();
+  };
+
+  // Sign Out / Switch Guest Handler
+  const handleSignOut = (confirmUser: boolean = true) => {
+    if (confirmUser && typeof window !== 'undefined') {
+      const ok = window.confirm('Are you sure you want to switch guest or sign out on this device?');
+      if (!ok) return;
+    }
+
+    clearGuestSession(token);
+    stopCamera();
+    setGuestId(null);
+    setName('');
+    setMobile('');
+    setOtpCode('');
+    setSelfieBlob(null);
+    setSelfiePreviewUrl(null);
+    setMatchResult(null);
+    setSelectedPhoto(null);
+    setStep('REGISTER');
+    setAuthMode('LOGIN');
   };
 
   // Guest Community Uploads
@@ -270,7 +454,7 @@ export default function GuestExperiencePage() {
   }
 
   return (
-    <div className="flex-1 max-w-lg w-full mx-auto px-4 py-6 sm:py-8 flex flex-col justify-center bg-[#F3F1EC]">
+    <div className="flex-1 max-w-2xl w-full mx-auto px-4 py-6 sm:py-8 flex flex-col justify-center bg-[#F3F1EC] selection:bg-[#E86A5B] selection:text-white">
       {/* Event Header Card */}
       {event && (
         <div className="p-6 sm:p-7 rounded-3xl neu-card text-center mb-6 relative overflow-hidden">
@@ -304,458 +488,623 @@ export default function GuestExperiencePage() {
         </div>
       )}
 
-      {/* Guest Mode Selector (Only rendered if studio owner has enabled guest uploads) */}
-      {event?.allow_guest_uploads && (
-        <div className="flex rounded-2xl bg-[#EBE8E1] p-1.5 mb-6 shadow-[inset_2px_2px_5px_#D1CDC4,inset_-2px_-2px_5px_#FFFFFF]">
-          <button
-            type="button"
-            onClick={() => setActiveGuestTab('AI_SEARCH')}
-            className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
-              activeGuestTab === 'AI_SEARCH'
-                ? 'bg-[#F3F1EC] text-[#E86A5B] shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF]'
-                : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Find My Photos (AI)</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveGuestTab('GUEST_UPLOAD')}
-            className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
-              activeGuestTab === 'GUEST_UPLOAD'
-                ? 'bg-[#F3F1EC] text-[#E86A5B] shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF]'
-                : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
-            }`}
-          >
-            <UploadCloud className="w-3.5 h-3.5" />
-            <span>Guest Uploads</span>
-          </button>
-        </div>
-      )}
+      {/* STEP 1: AUTHENTICATION / REGISTER / LOGIN SWITCHER */}
+      {step === 'REGISTER' && (
+        <div className="p-6 sm:p-8 rounded-3xl neu-card">
+          {/* Sign Up / Login Toggle */}
+          <div className="flex items-center p-1 rounded-2xl bg-[#EBE8E1] mb-6">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('SIGNUP');
+                setError(null);
+              }}
+              className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                authMode === 'SIGNUP'
+                  ? 'bg-[#F3F1EC] text-[#E86A5B] shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF]'
+                  : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
+              }`}
+            >
+              New Guest (Sign Up)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('LOGIN');
+                setError(null);
+              }}
+              className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                authMode === 'LOGIN'
+                  ? 'bg-[#F3F1EC] text-[#E86A5B] shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF]'
+                  : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
+              }`}
+            >
+              Already Registered (Login)
+            </button>
+          </div>
 
-      {/* GUEST UPLOADS TAB (Only accessible if enabled by studio) */}
-      {event?.allow_guest_uploads && activeGuestTab === 'GUEST_UPLOAD' && (
-        <div className="p-6 sm:p-8 rounded-3xl neu-card text-center">
-          <div>
-            <div className="w-12 h-12 rounded-2xl bg-cyan-50 border border-cyan-200 text-cyan-600 flex items-center justify-center mx-auto mb-4 shadow-sm">
-              <UploadCloud className="w-6 h-6" />
-            </div>
-            <h2 className="text-xl font-display font-extrabold text-[#1F1F1F] mb-1">Share Your Clicks with the Couple</h2>
-            <p className="text-xs text-[#6B6B6B] mb-5 leading-relaxed">
-              Did you take candid shots or selfies during the wedding? Upload them directly to the community guest album!
+          <div className="text-center mb-6">
+            <h2 className="text-lg font-display font-extrabold text-[#1F1F1F]">
+              {authMode === 'SIGNUP' ? 'Find Your Photos with AI' : 'Welcome Back'}
+            </h2>
+            <p className="text-xs text-[#6B6B6B] mt-1">
+              {authMode === 'SIGNUP'
+                ? 'Sign up once with your name & mobile to discover your moments in real time.'
+                : 'Enter your registered mobile number to instantly resume your gallery.'}
             </p>
+          </div>
 
-            <div className="space-y-3.5 mb-5 text-left">
+          {error && (
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-semibold mb-5 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* SIGN UP FORM */}
+          {authMode === 'SIGNUP' ? (
+            <form onSubmit={handleRegister} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Your Name *</label>
+                <label htmlFor="guest_signup_name" className="block text-xs font-bold text-[#1F1F1F] mb-1.5">
+                  Full Name *
+                </label>
                 <div className="relative">
-                  <User className="w-4 h-4 text-[#E86A5B] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
+                  <User className="w-4 h-4 text-[#E86A5B] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
+                    id="guest_signup_name"
+                    name="name"
                     type="text"
                     required
-                    value={guestUploadName || name}
-                    onChange={(e) => setGuestUploadName(e.target.value)}
-                    placeholder="e.g. Rahul Sharma"
-                    className="gmm-input w-full !pl-11 !pr-4 !py-2.5 text-xs"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Priya Sharma"
+                    className="gmm-input w-full !pl-11 !pr-4 !py-3 text-xs"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#1F1F1F] mb-1">Your Mobile (Optional)</label>
+                <label htmlFor="guest_signup_mobile" className="block text-xs font-bold text-[#1F1F1F] mb-1.5">
+                  Mobile Number (WhatsApp) *
+                </label>
                 <div className="relative">
-                  <Phone className="w-4 h-4 text-[#E86A5B] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
+                  <Phone className="w-4 h-4 text-[#E86A5B] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
+                    id="guest_signup_mobile"
+                    name="mobile"
                     type="tel"
-                    value={guestUploadPhone || mobile}
-                    onChange={(e) => setGuestUploadPhone(e.target.value)}
+                    required
+                    value={mobile}
+                    onChange={(e) => setMobile(e.target.value)}
                     placeholder="+91 98765 43210"
-                    className="gmm-input w-full !pl-11 !pr-4 !py-2.5 text-xs font-mono"
+                    className="gmm-input w-full !pl-11 !pr-4 !py-3 text-xs font-mono"
                   />
                 </div>
               </div>
-            </div>
 
-            <input
-              ref={guestFileInputRef}
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={(e) => handleGuestPhotosUpload(e.target.files)}
-              className="hidden"
-            />
-
-            <button
-              onClick={() => guestFileInputRef.current?.click()}
-              disabled={guestUploading}
-              className="btn-primary w-full py-3.5 text-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              <Camera className="w-4 h-4 stroke-[2.5]" />
-              <span>Select Photos from Gallery</span>
-            </button>
-
-            {guestUploadProgress && (
-              <div className="mt-4 p-3.5 rounded-2xl bg-[#EBE8E1] shadow-[inset_2px_2px_5px_#D1CDC4,inset_-2px_-2px_5px_#FFFFFF] text-[#1F1F1F] text-xs font-bold leading-relaxed">
-                {guestUploadProgress}
+              <div className="pt-2 flex items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  id="signup_consent_check"
+                  checked={faceConsent}
+                  onChange={(e) => setFaceConsent(e.target.checked)}
+                  className="mt-0.5 accent-[#E86A5B] cursor-pointer"
+                />
+                <label htmlFor="signup_consent_check" className="text-[11px] text-[#6B6B6B] leading-tight cursor-pointer">
+                  I consent to private AI face matching solely within this wedding event. My selfie is never shared publicly.
+                </label>
               </div>
-            )}
+
+              <button
+                type="submit"
+                disabled={loading || !faceConsent}
+                className="btn-primary w-full mt-4 py-3.5 text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#E86A5B]/25"
+              >
+                {loading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <>
+                    <span>Proceed to Selfie Capture</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+          ) : (
+            /* LOGIN FORM */
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label htmlFor="guest_login_mobile" className="block text-xs font-bold text-[#1F1F1F] mb-1.5">
+                  Registered Mobile Number *
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-[#E86A5B] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    id="guest_login_mobile"
+                    name="mobile"
+                    type="tel"
+                    required
+                    value={mobile}
+                    onChange={(e) => setMobile(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    className="gmm-input w-full !pl-11 !pr-4 !py-3 text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || !mobile.trim()}
+                className="btn-primary w-full mt-4 py-3.5 text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#E86A5B]/25"
+              >
+                {loading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <>
+                    <span>Log In &amp; Restore Photos</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* Biometric Privacy Guarantee */}
+          <div className="mt-6 pt-5 border-t border-[#E2DDD5] flex items-center justify-center gap-2 text-[11px] text-[#6B6B6B]">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>100% Event-Scoped Biometric Privacy Protected</span>
           </div>
         </div>
       )}
 
-      {/* AI SEARCH FLOW */}
-      {(!event?.allow_guest_uploads || activeGuestTab === 'AI_SEARCH') && (
-        <>
-          {/* Global Form Error */}
+      {/* STEP 2: OTP VERIFICATION */}
+      {step === 'OTP' && (
+        <div className="p-6 sm:p-8 rounded-3xl neu-card text-center">
+          <div className="w-12 h-12 rounded-2xl bg-[#E86A5B]/10 text-[#E86A5B] flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-6 h-6" />
+          </div>
+          <h2 className="text-xl font-display font-extrabold text-[#1F1F1F] mb-1">Verify Mobile Number</h2>
+          <p className="text-xs text-[#6B6B6B] mb-6">
+            Enter the 6-digit verification code sent to <strong className="text-[#1F1F1F]">{mobile}</strong>
+          </p>
+
           {error && (
-            <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs text-center font-bold shadow-sm">
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-semibold mb-5">
               {error}
             </div>
           )}
 
-          {/* STEP 1: Registration */}
-          {step === 'REGISTER' && (
-            <div className="p-6 sm:p-8 rounded-3xl neu-card relative overflow-hidden">
-              <h2 className="text-xl font-display font-extrabold text-[#1F1F1F] mb-1">Find Your Personal Moments</h2>
-              <p className="text-xs text-[#6B6B6B] mb-6 leading-relaxed">
-                Enter your name and mobile. Our AI facial engine will instantly search and deliver only your photos.
-              </p>
+          <form onSubmit={handleVerifyOTP} className="space-y-4">
+            <input
+              type="text"
+              required
+              maxLength={6}
+              value={otpCode}
+              onChange={(e) => setOtpCode(e.target.value)}
+              placeholder="123456"
+              className="gmm-input w-full text-center text-xl font-mono tracking-widest !py-3 font-bold"
+            />
 
-              <form onSubmit={handleRegister} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Your Name</label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-[#E86A5B] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
-                    <input
-                      type="text"
-                      required
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Alex Morgan"
-                      className="gmm-input w-full !pl-11 !pr-4 !py-3 text-xs"
-                    />
-                  </div>
-                </div>
+            <button
+              type="submit"
+              disabled={loading || otpCode.length < 4}
+              className="btn-primary w-full py-3.5 text-xs font-bold"
+            >
+              {loading ? 'Verifying...' : 'Confirm Verification Code'}
+            </button>
+          </form>
 
-                <div>
-                  <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">Mobile Number</label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-[#E86A5B] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
-                    <input
-                      type="tel"
-                      required
-                      value={mobile}
-                      onChange={(e) => setMobile(e.target.value)}
-                      placeholder="+91 98765 43210"
-                      className="gmm-input w-full !pl-11 !pr-4 !py-3 text-xs font-mono"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="btn-primary w-full mt-4 py-3.5 text-xs flex items-center justify-center gap-2"
-                >
-                  <span>Continue to Privacy Consent</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* STEP 2: OTP Verification */}
-          {step === 'OTP' && (
-            <div className="p-6 sm:p-8 rounded-3xl neu-card text-center">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white mx-auto mb-4 shadow-[4px_4px_10px_#D4D0C7,-4px_-4px_10px_#FFFFFF]">
-                <Lock className="w-6 h-6 stroke-[2.5]" />
-              </div>
-              <h2 className="text-xl font-display font-extrabold text-[#1F1F1F] mb-1">Verify Mobile Number</h2>
-              <p className="text-xs text-[#6B6B6B] mb-6">
-                We sent a verification code to <span className="text-[#1F1F1F] font-mono font-bold">{mobile}</span>
-              </p>
-
-              <div className="p-3 rounded-2xl bg-[#EBE8E1] shadow-[inset_2px_2px_5px_#D1CDC4,inset_-2px_-2px_5px_#FFFFFF] text-[#8F6420] text-xs font-mono mb-6 font-bold">
-                Development Mode: Use code <strong className="text-[#1F1F1F] font-bold">123456</strong>
-              </div>
-
-              <form onSubmit={handleVerifyOTP} className="space-y-4">
-                <input
-                  type="text"
-                  required
-                  maxLength={6}
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value)}
-                  placeholder="123456"
-                  className="gmm-input w-full text-center tracking-[0.4em] text-3xl font-mono px-4 py-3.5"
-                />
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="btn-primary w-full py-3.5 text-xs flex items-center justify-center gap-2"
-                >
-                  <span>Verify & Continue</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* STEP 3: Privacy & Consent */}
-          {step === 'CONSENT' && (
-            <div className="p-6 sm:p-8 rounded-3xl neu-card">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 mb-3">
-                <ShieldCheck className="w-3.5 h-3.5 text-[#3FA66B]" />
-                <span>TRANSPARENT BIOMETRIC PRIVACY</span>
-              </div>
-              <h2 className="text-xl font-display font-extrabold text-[#1F1F1F] mb-2">Privacy & Biometric Consent</h2>
-              <p className="text-xs text-[#6B6B6B] mb-6 leading-relaxed">
-                Please review our event privacy protections before taking your selfie.
-              </p>
-
-              <form onSubmit={handleConsentSubmit} className="space-y-4">
-                <label className="flex items-start gap-3.5 p-4 rounded-2xl bg-[#EBE8E1] shadow-[inset_2px_2px_5px_#D1CDC4,inset_-2px_-2px_5px_#FFFFFF] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    required
-                    checked={faceConsent}
-                    onChange={(e) => setFaceConsent(e.target.checked)}
-                    className="mt-1 w-4 h-4 rounded text-[#E86A5B] accent-[#E86A5B]"
-                  />
-                  <div className="text-xs">
-                    <span className="font-bold text-[#1F1F1F] block">Event Facial Search Consent (Required)</span>
-                    <span className="text-[#6B6B6B] block mt-1 leading-relaxed">
-                      I consent to the temporary AI matching of my selfie strictly within this event's photos. My selfie is discarded after matching.
-                    </span>
-                  </div>
-                </label>
-
-                <label className="flex items-start gap-3.5 p-4 rounded-2xl bg-[#EBE8E1] shadow-[inset_2px_2px_5px_#D1CDC4,inset_-2px_-2px_5px_#FFFFFF] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={marketingConsent}
-                    onChange={(e) => setMarketingConsent(e.target.checked)}
-                    className="mt-1 w-4 h-4 rounded text-[#E86A5B] accent-[#E86A5B]"
-                  />
-                  <div className="text-xs">
-                    <span className="font-bold text-[#1F1F1F] block">Studio Highlights (Optional)</span>
-                    <span className="text-[#6B6B6B] block mt-1 leading-relaxed">
-                      Allow {event?.studio_name} to contact me with high-res highlights and photography offers.
-                    </span>
-                  </div>
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={!faceConsent || loading}
-                  className="btn-primary w-full mt-4 py-3.5 text-xs flex items-center justify-center gap-2"
-                >
-                  <Camera className="w-4 h-4 stroke-[2.5]" />
-                  <span>Accept & Take Selfie</span>
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* STEP 4: Camera / Selfie */}
-          {step === 'SELFIE' && (
-            <div className="p-6 sm:p-8 rounded-3xl neu-card text-center">
-              <h2 className="text-xl font-display font-extrabold text-[#1F1F1F] mb-1">Take a Quick Selfie</h2>
-              <p className="text-xs text-[#6B6B6B] mb-6 leading-relaxed">
-                Face the camera directly in good lighting. We match your face in milliseconds.
-              </p>
-
-              <canvas ref={canvasRef} className="hidden" />
-
-              {selfiePreviewUrl ? (
-                <div className="space-y-4">
-                  <div className="relative aspect-square max-w-[280px] mx-auto rounded-3xl overflow-hidden border-2 border-[#E86A5B] shadow-[8px_8px_20px_#D4D0C7,-8px_-8px_20px_#FFFFFF]">
-                    <img src={selfiePreviewUrl} alt="Selfie preview" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      onClick={() => {
-                        setSelfiePreviewUrl(null);
-                        setSelfieBlob(null);
-                        startCamera();
-                      }}
-                      className="neu-btn-secondary flex-1 py-3 text-xs flex items-center justify-center gap-1.5 cursor-pointer font-bold"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Retake Photo</span>
-                    </button>
-                    <button
-                      onClick={runMatching}
-                      className="btn-primary flex-1 py-3 text-xs flex items-center justify-center gap-1.5"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 stroke-[2.5]" />
-                      <span>Find My Photos</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="relative aspect-square max-w-[280px] mx-auto rounded-3xl overflow-hidden bg-black shadow-[inset_4px_4px_8px_#000000]">
-                    <video
-                      ref={videoRef}
-                      playsInline
-                      autoPlay
-                      muted
-                      className="w-full h-full object-cover mirror"
-                    />
-                    <div className="absolute inset-0 border-2 border-dashed border-white/60 rounded-full m-8 pointer-events-none"></div>
-                  </div>
-
-                  <div className="flex flex-col gap-3 pt-2">
-                    <button
-                      onClick={capturePhoto}
-                      className="btn-primary w-full py-3.5 text-xs flex items-center justify-center gap-2"
-                    >
-                      <Camera className="w-4 h-4 stroke-[2.5]" />
-                      <span>Capture Selfie</span>
-                    </button>
-
-                    <div className="text-[11px] text-[#8C8C8C] font-bold uppercase tracking-wider">OR</div>
-
-                    <label className="neu-btn-secondary w-full py-3 text-xs cursor-pointer block text-center transition-all font-bold">
-                      <span className="flex items-center justify-center gap-2">
-                        <ImageIcon className="w-3.5 h-3.5 text-[#E86A5B]" />
-                        <span>Upload Photo from Phone Gallery</span>
-                      </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleSelfieFileUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* STEP 5: Matching Spinner */}
-          {step === 'MATCHING' && (
-            <div className="p-12 sm:p-16 rounded-3xl neu-card text-center flex flex-col items-center">
-              <div className="w-16 h-16 rounded-full border-4 border-[#E86A5B]/20 border-t-[#E86A5B] animate-spin mb-6"></div>
-              <h2 className="text-2xl font-display font-extrabold text-[#1F1F1F] mb-2">Analyzing Facial Geometry</h2>
-              <p className="text-xs text-[#6B6B6B] max-w-xs leading-relaxed">
-                Searching {event?.photo_count} event photos using local 128-dimensional cosine vector embeddings...
-              </p>
-            </div>
-          )}
-
-          {/* STEP 6: Private Matching Gallery */}
-          {step === 'GALLERY' && matchResult && (
-            <div className="space-y-6">
-              <div className="p-5 sm:p-6 rounded-3xl neu-card text-center">
-                <span className="text-base font-display font-extrabold text-[#1F1F1F] block">
-                  🎉 {matchResult.matched_count} Moments Found for {name}
-                </span>
-                <span className="text-xs text-[#6B6B6B] mt-1 block">
-                  Search completed in {matchResult.search_latency_ms} ms
-                </span>
-
-                <button
-                  onClick={shareMatchOnWhatsApp}
-                  className="mt-4 px-4 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-xs font-bold transition-all inline-flex items-center gap-2 cursor-pointer shadow-sm"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                  <span>Share My Moments on WhatsApp</span>
-                </button>
-              </div>
-
-              {matchResult.matched_photos.length === 0 ? (
-                <div className="p-8 sm:p-10 text-center rounded-3xl neu-card">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center mx-auto mb-4">
-                    <Camera className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-base font-display font-extrabold text-[#1F1F1F] mb-1">No Matching Moments Found</h3>
-                  <p className="text-xs text-[#6B6B6B] max-w-xs mx-auto leading-relaxed">
-                    No matching photos found for this selfie. Try again with direct front lighting!
-                  </p>
-                  <button
-                    onClick={() => {
-                      setStep('SELFIE');
-                      setSelfiePreviewUrl(null);
-                      startCamera();
-                    }}
-                    className="btn-primary mt-6 px-6 py-2.5 text-xs cursor-pointer"
-                  >
-                    Try Another Selfie
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-                  {matchResult.matched_photos.map((p) => {
-                    const score = matchResult.similarity_scores[p.id] || 0.95;
-                    const pct = Math.round(score * 100);
-                    return (
-                      <div
-                        key={p.id}
-                        onClick={() => setSelectedPhoto(p)}
-                        className="neu-card group relative aspect-square rounded-2xl overflow-hidden cursor-pointer"
-                      >
-                        <img
-                          src={api.getThumbnailUrl(p.id)}
-                          alt="Matched moment"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                        <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-white/90 backdrop-blur-md text-[10px] font-bold text-[#E86A5B] border border-white shadow-sm">
-                          {pct}%
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              <div className="text-center pt-2">
-                <button
-                  onClick={() => {
-                    setStep('SELFIE');
-                    setSelfiePreviewUrl(null);
-                    startCamera();
-                  }}
-                  className="text-xs text-[#6B6B6B] hover:text-[#E86A5B] transition-colors font-bold"
-                >
-                  ← Search with a different selfie
-                </button>
-              </div>
-            </div>
-          )}
-        </>
+          <button
+            onClick={() => setStep('REGISTER')}
+            className="mt-4 text-xs font-bold text-[#6B6B6B] hover:text-[#E86A5B]"
+          >
+            ← Change Mobile Number
+          </button>
+        </div>
       )}
 
-      {/* Fullscreen Photo Lightbox Modal */}
+      {/* STEP 3: BIOMETRIC PRIVACY CONSENT */}
+      {step === 'CONSENT' && (
+        <div className="p-6 sm:p-8 rounded-3xl neu-card">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-200">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-display font-extrabold text-[#1F1F1F]">Biometric Privacy Consent</h2>
+              <span className="text-[10px] text-[#6B6B6B] uppercase font-bold tracking-wider">Step 2 of 3 • Mandatory for AI search</span>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] text-xs text-[#6B6B6B] space-y-2 mb-6 leading-relaxed">
+            <p>
+              To find and organize your moments, <strong>Get My Moment</strong> extracts temporary 128-dimensional facial vector math from your selfie.
+            </p>
+            <ul className="list-disc pl-4 space-y-1 text-[11px]">
+              <li>Your vectors are strictly scoped to this wedding event ({event?.name}).</li>
+              <li>Your raw selfie is never sold or used for public training.</li>
+              <li>You can delete or update your selfie at any time.</li>
+            </ul>
+          </div>
+
+          <form onSubmit={handleConsentSubmit} className="space-y-4">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                required
+                checked={faceConsent}
+                onChange={(e) => setFaceConsent(e.target.checked)}
+                className="mt-0.5 accent-[#E86A5B]"
+              />
+              <span className="text-xs font-bold text-[#1F1F1F]">
+                I give consent to AI facial indexing solely for this event. *
+              </span>
+            </label>
+
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={marketingConsent}
+                onChange={(e) => setMarketingConsent(e.target.checked)}
+                className="mt-0.5 accent-[#E86A5B]"
+              />
+              <span className="text-xs text-[#6B6B6B]">
+                (Optional) Allow {event?.studio_name} to send me event highlights on WhatsApp.
+              </span>
+            </label>
+
+            <button
+              type="submit"
+              disabled={!faceConsent || loading}
+              className="btn-primary w-full mt-4 py-3.5 text-xs flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>Accept &amp; Take Selfie</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* STEP 4: SELFIE CAPTURE / UPLOAD */}
+      {step === 'SELFIE' && (
+        <div className="p-6 sm:p-8 rounded-3xl neu-card text-center">
+          <h2 className="text-lg font-display font-extrabold text-[#1F1F1F] mb-1">Take Your Selfie</h2>
+          <p className="text-xs text-[#6B6B6B] mb-5">
+            Position your face inside the frame in good lighting.
+          </p>
+
+          {error && (
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-semibold mb-4">
+              {error}
+            </div>
+          )}
+
+          {/* Camera Viewfinder / Preview */}
+          <div className="relative w-64 h-64 sm:w-72 sm:h-72 mx-auto rounded-3xl overflow-hidden bg-black shadow-inner border-2 border-[#E86A5B]/40 mb-6 flex items-center justify-center">
+            {selfiePreviewUrl ? (
+              <img src={selfiePreviewUrl} alt="Selfie Preview" className="w-full h-full object-cover" />
+            ) : (
+              <>
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`w-full h-full object-cover ${facingMode === 'user' ? '-scale-x-100' : ''}`}
+                />
+                <div className="absolute inset-4 rounded-full border-2 border-dashed border-white/60 pointer-events-none animate-pulse"></div>
+              </>
+            )}
+            <canvas ref={canvasRef} className="hidden" />
+          </div>
+
+          {/* Controls */}
+          {selfiePreviewUrl ? (
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                onClick={() => {
+                  setSelfiePreviewUrl(null);
+                  setSelfieBlob(null);
+                  startCamera();
+                }}
+                className="neu-btn-secondary py-3 px-5 text-xs font-bold flex items-center justify-center gap-1.5"
+              >
+                <RefreshCw className="w-4 h-4 text-[#E86A5B]" />
+                <span>Retake</span>
+              </button>
+              <button
+                onClick={runMatching}
+                className="btn-primary py-3 px-7 text-xs font-bold flex items-center justify-center gap-2"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Find My Photos with AI</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <button
+                onClick={capturePhoto}
+                className="btn-primary w-full py-3.5 text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#E86A5B]/25"
+              >
+                <Camera className="w-4 h-4" />
+                <span>Capture Selfie</span>
+              </button>
+
+              <div className="flex items-center justify-center gap-3">
+                <label className="text-xs font-bold text-[#E86A5B] hover:underline cursor-pointer">
+                  <span>Upload from Gallery instead</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleSelfieFileUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* STEP 5: AI MATCHING PROGRESS */}
+      {step === 'MATCHING' && (
+        <div className="p-10 rounded-3xl neu-card text-center">
+          <div className="relative w-20 h-20 mx-auto mb-6 flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full border-4 border-[#E86A5B]/20 animate-ping"></div>
+            <div className="w-16 h-16 rounded-full bg-[#E86A5B] text-white flex items-center justify-center shadow-lg shadow-[#E86A5B]/30">
+              <Sparkles className="w-8 h-8 animate-spin" />
+            </div>
+          </div>
+          <h2 className="text-xl font-display font-extrabold text-[#1F1F1F] mb-2">Analyzing Facial Vectors...</h2>
+          <p className="text-xs text-[#6B6B6B] max-w-sm mx-auto leading-relaxed">
+            Searching thousands of event photos with sub-50ms vector cosine similarity. Your moments are arriving...
+          </p>
+        </div>
+      )}
+
+      {/* STEP 6: GALLERY & RESULT DASHBOARD */}
+      {step === 'GALLERY' && (
+        <div className="space-y-6">
+          {/* Guest Identity & Actions Bar */}
+          <div className="p-4 sm:p-5 rounded-2xl neu-card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-[#FAF9F7]">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shrink-0 shadow-sm">
+                {name ? name.charAt(0).toUpperCase() : <User className="w-5 h-5" />}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-display font-extrabold text-sm text-[#1F1F1F] truncate">
+                    {name || 'Guest'}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-bold border border-emerald-200 shrink-0">
+                    AI Active
+                  </span>
+                </div>
+                <span className="text-[11px] text-[#6B6B6B] font-mono">
+                  {matchResult?.matched_count || 0} moments matched
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <button
+                onClick={handleRetakeSelfie}
+                className="px-3 py-1.5 rounded-xl neu-btn-secondary text-xs font-bold text-[#E86A5B] flex items-center gap-1 cursor-pointer"
+                title="Retake Selfie"
+              >
+                <Camera className="w-3.5 h-3.5 text-[#E86A5B]" />
+                <span>Update Selfie</span>
+              </button>
+              <button
+                onClick={() => handleSignOut(true)}
+                className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                title="Switch Guest / Sign Out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Navigation Tabs */}
+          <div className="flex items-center p-1 rounded-2xl bg-[#EBE8E1]">
+            <button
+              onClick={() => setActiveGuestTab('AI_SEARCH')}
+              className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                activeGuestTab === 'AI_SEARCH'
+                  ? 'bg-[#F3F1EC] text-[#E86A5B] shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF]'
+                  : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>My Photos ({matchResult?.matched_count || 0})</span>
+            </button>
+            {event?.allow_guest_uploads && (
+              <button
+                onClick={() => setActiveGuestTab('GUEST_UPLOAD')}
+                className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  activeGuestTab === 'GUEST_UPLOAD'
+                    ? 'bg-[#F3F1EC] text-[#E86A5B] shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF]'
+                    : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
+                }`}
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>Upload Moments</span>
+              </button>
+            )}
+            {folders.length > 0 && (
+              <button
+                onClick={() => setActiveGuestTab('FOLDERS')}
+                className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  activeGuestTab === 'FOLDERS'
+                    ? 'bg-[#F3F1EC] text-[#E86A5B] shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF]'
+                    : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Ceremonies</span>
+              </button>
+            )}
+          </div>
+
+          {/* TAB 1: AI MATCHED PHOTOS */}
+          {activeGuestTab === 'AI_SEARCH' && (
+            <div>
+              {matchResult && matchResult.matched_photos.length > 0 ? (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-bold text-[#1F1F1F]">
+                      Found {matchResult.matched_photos.length} moments containing your face
+                    </span>
+                    <button
+                      onClick={shareMatchOnWhatsApp}
+                      className="text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>Share on WhatsApp</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {matchResult.matched_photos.map((photo) => (
+                      <div
+                        key={photo.id}
+                        onClick={() => setSelectedPhoto(photo)}
+                        className="group relative aspect-square rounded-2xl overflow-hidden neu-card border border-[#E8E5E2] cursor-pointer"
+                      >
+                        <img
+                          src={`${api.getApiBaseUrl().replace('/api/v1', '')}${photo.thumbnail_url}`}
+                          alt={photo.original_file_name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                        />
+                        {photo.folder_name && (
+                          <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[10px] font-bold text-white">
+                            {photo.folder_name}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="p-10 rounded-3xl neu-card text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-[#FAF9F7] text-[#6B6B6B] flex items-center justify-center mx-auto mb-4 border border-[#E8E5E2]">
+                    <ImageIcon className="w-7 h-7" />
+                  </div>
+                  <h3 className="text-base font-display font-extrabold text-[#1F1F1F] mb-1">No Matching Moments Found Yet</h3>
+                  <p className="text-xs text-[#6B6B6B] max-w-sm mx-auto mb-5">
+                    Photographer is still shooting and indexing photos. As new shots arrive, they will appear here!
+                  </p>
+                  <button
+                    onClick={handleRetakeSelfie}
+                    className="btn-primary py-2.5 px-6 text-xs font-bold"
+                  >
+                    Try with a Different Selfie
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: GUEST PHOTO UPLOAD */}
+          {activeGuestTab === 'GUEST_UPLOAD' && (
+            <div className="p-6 sm:p-8 rounded-3xl neu-card text-center">
+              <div className="w-12 h-12 rounded-2xl bg-[#E86A5B]/10 text-[#E86A5B] flex items-center justify-center mx-auto mb-3">
+                <UploadCloud className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-display font-extrabold text-[#1F1F1F] mb-1">Add Your Captured Memories</h3>
+              <p className="text-xs text-[#6B6B6B] max-w-md mx-auto mb-6">
+                Captured great candids or selfies on your phone? Add them to the wedding album so the bride &amp; groom can see!
+              </p>
+
+              {guestUploadProgress && (
+                <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold mb-5">
+                  {guestUploadProgress}
+                </div>
+              )}
+
+              <div className="max-w-xs mx-auto space-y-3 mb-6 text-left">
+                <div>
+                  <label className="block text-[11px] font-bold text-[#1F1F1F] mb-1">Your Name</label>
+                  <input
+                    type="text"
+                    value={guestUploadName || name}
+                    onChange={(e) => setGuestUploadName(e.target.value)}
+                    placeholder="e.g. Rahul Verma"
+                    className="gmm-input w-full !py-2.5 text-xs"
+                  />
+                </div>
+              </div>
+
+              <input
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/webp"
+                ref={guestFileInputRef}
+                onChange={(e) => handleGuestPhotosUpload(e.target.files)}
+                className="hidden"
+              />
+
+              <button
+                type="button"
+                disabled={guestUploading}
+                onClick={() => guestFileInputRef.current?.click()}
+                className="btn-primary py-3 px-8 text-xs font-bold inline-flex items-center gap-2 cursor-pointer shadow-lg shadow-[#E86A5B]/25"
+              >
+                <UploadCloud className="w-4 h-4" />
+                <span>{guestUploading ? 'Uploading...' : 'Choose Photos from Phone'}</span>
+              </button>
+            </div>
+          )}
+
+          {/* TAB 3: CEREMONY FOLDERS */}
+          {activeGuestTab === 'FOLDERS' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {folders.map((f) => (
+                  <div
+                    key={f.id}
+                    className="p-4 rounded-2xl neu-card bg-[#FAF9F7] border border-[#E8E5E2] text-left cursor-pointer hover:border-[#E86A5B]/40 transition-all"
+                  >
+                    <FolderIcon className="w-5 h-5 text-[#E86A5B] mb-2" />
+                    <h4 className="text-xs font-bold text-[#1F1F1F] truncate">{f.name}</h4>
+                    <span className="text-[10px] text-[#6B6B6B]">{f.photo_count} photos</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* FULLSCREEN PHOTO PREVIEW MODAL */}
       {selectedPhoto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-          <div className="relative max-w-3xl w-full flex flex-col items-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center">
             <button
               onClick={() => setSelectedPhoto(null)}
-              className="absolute -top-12 right-0 text-[#1F1F1F] text-xs font-bold bg-white px-3.5 py-1.5 rounded-full flex items-center gap-1.5 hover:bg-neutral-100 transition-colors cursor-pointer shadow-md"
+              className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white cursor-pointer"
             >
-              <X className="w-3.5 h-3.5" />
-              <span>Close</span>
+              <X className="w-6 h-6" />
             </button>
+
             <img
-              src={api.getThumbnailUrl(selectedPhoto.id)}
-              alt="High-res preview"
-              className="max-h-[75vh] w-auto rounded-3xl object-contain shadow-2xl border border-white/20"
+              src={`${api.getApiBaseUrl().replace('/api/v1', '')}${selectedPhoto.download_url}`}
+              alt={selectedPhoto.original_file_name}
+              className="max-h-[75vh] w-auto object-contain rounded-2xl shadow-2xl"
             />
-            {event?.allow_downloads && (
+
+            <div className="mt-4 flex items-center gap-3">
               <a
-                href={api.getDownloadUrl(selectedPhoto.id)}
+                href={`${api.getApiBaseUrl().replace('/api/v1', '')}${selectedPhoto.download_url}`}
                 download={selectedPhoto.original_file_name}
-                className="btn-primary mt-5 px-6 py-3 text-xs flex items-center gap-2 cursor-pointer shadow-xl"
+                className="btn-primary py-2.5 px-6 text-xs font-bold flex items-center gap-1.5"
               >
-                <Download className="w-4 h-4 stroke-[2.5]" />
-                <span>Download Original High-Res</span>
+                <Download className="w-4 h-4" />
+                <span>Download High-Res Photo</span>
               </a>
-            )}
+            </div>
           </div>
         </div>
       )}

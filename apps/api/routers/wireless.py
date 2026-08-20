@@ -3,6 +3,7 @@ Wireless Camera Management & Wi-Fi Ingest Router
 Provides camera pairing credentials, step-by-step camera guides, and direct HTTP/FTP ingest status.
 """
 
+import os
 import socket
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form

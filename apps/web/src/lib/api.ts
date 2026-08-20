@@ -220,6 +220,53 @@ export interface MatchSearchResult {
   message: string;
 }
 
+export interface GuestSessionData {
+  sessionToken: string;
+  guestId: string;
+  eventId: string;
+  name: string;
+  mobileMasked: string;
+  otpVerified: boolean;
+  hasConsent: boolean;
+  hasMatchedPhotos: boolean;
+  matchCount: number;
+  expiresAt: string;
+}
+
+export function saveGuestSession(eventToken: string, session: GuestSessionData): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(`gmm_guest_session_${eventToken}`, JSON.stringify(session));
+  } catch (e) {
+    console.error('Failed to save guest session', e);
+  }
+}
+
+export function getGuestSession(eventToken: string): GuestSessionData | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(`gmm_guest_session_${eventToken}`);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data.expiresAt && new Date(data.expiresAt).getTime() < Date.now()) {
+      clearGuestSession(eventToken);
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export function clearGuestSession(eventToken: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(`gmm_guest_session_${eventToken}`);
+  } catch (e) {
+    console.error('Failed to clear guest session', e);
+  }
+}
+
 export interface LeadItem {
   id: string;
   photographer_id: string;
@@ -1173,10 +1220,80 @@ class ApiClient {
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Registration failed');
     }
     return res.json();
+  }
+
+  async guestLogin(eventId: string, mobile: string): Promise<GuestSessionData & { requires_otp: boolean }> {
+    const res = await fetch(`${this.baseUrl}/events/${eventId}/guests/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mobile }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'No guest registration found with this mobile number in this event.');
+    }
+    const data = await res.json();
+    return {
+      sessionToken: data.session_token,
+      guestId: data.guest_id,
+      eventId: data.event_id,
+      name: data.name,
+      mobileMasked: data.mobile_masked,
+      otpVerified: data.otp_verified,
+      requires_otp: data.requires_otp,
+      hasConsent: data.has_consent,
+      hasMatchedPhotos: data.has_matched_photos,
+      matchCount: data.match_count,
+      expiresAt: data.expires_at,
+    };
+  }
+
+  async validateGuestSession(eventId: string, guestId: string): Promise<GuestSessionData | null> {
+    try {
+      const res = await fetch(`${this.baseUrl}/events/${eventId}/guests/${guestId}/session/validate`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data.is_valid) return null;
+      return {
+        sessionToken: '',
+        guestId: data.guest_id,
+        eventId: data.event_id,
+        name: data.name,
+        mobileMasked: data.mobile_masked,
+        otpVerified: true,
+        hasConsent: data.has_consent,
+        hasMatchedPhotos: data.has_matched_photos,
+        matchCount: data.match_count,
+        expiresAt: data.expires_at,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async getCachedGuestMatch(eventId: string, guestId: string): Promise<MatchSearchResult | null> {
+    try {
+      const res = await fetch(`${this.baseUrl}/events/${eventId}/guests/${guestId}/cached-match`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data.status !== 'READY') return null;
+      return {
+        search_id: data.search_id,
+        event_id: data.event_id,
+        guest_id: data.guest_id,
+        matched_count: data.matched_count,
+        matched_photos: data.matched_photos,
+        similarity_scores: data.similarity_scores,
+        search_latency_ms: 0,
+        message: data.message,
+      };
+    } catch {
+      return null;
+    }
   }
 
   async verifyGuestOTP(guestId: string, otpCode: string): Promise<{ verified: boolean }> {

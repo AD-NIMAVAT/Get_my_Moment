@@ -1,27 +1,49 @@
-"""
-Guest Registration, Privacy Consent, and OTP Router
-"""
-
-from typing import List
+import time
+import base64
+import hmac
+import hashlib
+from typing import List, Optional, Dict
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from apps.api.database import get_db
-from apps.api.models import Event, Guest, Consent, Photographer
+from apps.api.models import Event, Guest, Consent, Photographer, Photo, GuestSearch
 from apps.api.auth import get_current_photographer
 from apps.api.schemas.guest import (
     GuestRegisterRequest,
     GuestRegisterResponse,
     ConsentRequest,
     ConsentResponse,
+    GuestLoginRequest,
+    GuestLoginResponse,
+    GuestSessionValidateResponse,
 )
 from apps.api.schemas.matching import (
     OTPVerificationRequest,
     OTPVerificationResponse,
+    SelfieSearchResponse,
 )
+from apps.api.schemas.photo import PhotoResponse
 from apps.api.services.otp_service import otp_service
-from packages.shared.constants import EventStatus
+from apps.api.config import settings
+from packages.shared.constants import EventStatus, PhotoStatus
 
 router = APIRouter(tags=["Guest Management"])
+
+
+def mask_mobile(mobile: str) -> str:
+    cleaned = mobile.strip()
+    if len(cleaned) <= 4:
+        return cleaned
+    return f"{cleaned[:3]}****{cleaned[-4:]}" if len(cleaned) >= 10 else f"{cleaned[:2]}***{cleaned[-2:]}"
+
+
+def generate_guest_session_token(guest_id: str, event_id: str) -> str:
+    secret = getattr(settings, "SECRET_KEY", "gmm_guest_session_master_key")
+    payload = f"{guest_id}:{event_id}:{int(time.time())}"
+    sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:24]
+    return base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
+
 
 
 @router.post("/events/{event_id}/guests/register", response_model=GuestRegisterResponse, status_code=status.HTTP_201_CREATED)
@@ -165,6 +187,214 @@ def record_guest_consent(
     )
 
 
+@router.post("/events/{event_id}/guests/login", response_model=GuestLoginResponse)
+def login_guest(
+    event_id: str,
+    request: GuestLoginRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Returning Guest Login by Mobile Number.
+    Validates event existence and looks up existing guest registration.
+    Issues a signed guest session token and returns match status for instant restoration.
+    """
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+    if event.status != EventStatus.ACTIVE.value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not active.")
+
+    raw_mobile = request.mobile.strip()
+    # Normalize phone: +919876543210 or 9876543210
+    digits_only = "".join(c for c in raw_mobile if c.isdigit())
+    last_10 = digits_only[-10:] if len(digits_only) >= 10 else digits_only
+
+    guest = db.query(Guest).filter(
+        Guest.event_id == event.id,
+        (Guest.mobile == raw_mobile) | (Guest.mobile.like(f"%{last_10}"))
+    ).first()
+
+    if not guest:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No guest registration found with this mobile number for this event. Please sign up."
+        )
+
+    # Check OTP requirement
+    if event.require_otp and not guest.otp_verified:
+        otp_service.send_otp(guest.mobile, event.name)
+        session_token = generate_guest_session_token(guest.id, event.id)
+        expires_at = datetime.utcnow() + timedelta(days=7)
+        return GuestLoginResponse(
+            session_token=session_token,
+            guest_id=guest.id,
+            event_id=guest.event_id,
+            name=guest.name,
+            mobile_masked=mask_mobile(guest.mobile),
+            otp_verified=False,
+            requires_otp=True,
+            has_consent=bool(guest.consent and guest.consent.face_search_consent),
+            has_matched_photos=False,
+            match_count=0,
+            expires_at=expires_at,
+        )
+
+    # Fetch latest search
+    latest_search = db.query(GuestSearch).filter(
+        GuestSearch.guest_id == guest.id,
+        GuestSearch.event_id == event.id
+    ).order_by(GuestSearch.created_at.desc()).first()
+
+    match_count = latest_search.matched_photo_count if latest_search else 0
+    has_matched = bool(latest_search and match_count > 0)
+    has_consent = bool(guest.consent and guest.consent.face_search_consent)
+
+    session_token = generate_guest_session_token(guest.id, event.id)
+    expires_at = datetime.utcnow() + timedelta(days=7)
+
+    return GuestLoginResponse(
+        session_token=session_token,
+        guest_id=guest.id,
+        event_id=guest.event_id,
+        name=guest.name,
+        mobile_masked=mask_mobile(guest.mobile),
+        otp_verified=True,
+        requires_otp=False,
+        has_consent=has_consent,
+        has_matched_photos=has_matched,
+        match_count=match_count,
+        expires_at=expires_at,
+    )
+
+
+@router.get("/events/{event_id}/guests/{guest_id}/session/validate", response_model=GuestSessionValidateResponse)
+def validate_guest_session(
+    event_id: str,
+    guest_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Server-side Source-of-Truth Session Validation.
+    Validates that guest exists, belongs strictly to event_id, and returns live status.
+    """
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event or event.status != EventStatus.ACTIVE.value:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event inactive or not found.")
+
+    guest = db.query(Guest).filter(Guest.id == guest_id, Guest.event_id == event_id).first()
+    if not guest:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guest session invalid or expired.")
+
+    latest_search = db.query(GuestSearch).filter(
+        GuestSearch.guest_id == guest.id,
+        GuestSearch.event_id == event.id
+    ).order_by(GuestSearch.created_at.desc()).first()
+
+    match_count = latest_search.matched_photo_count if latest_search else 0
+    has_matched = bool(latest_search and match_count > 0)
+    has_consent = bool(guest.consent and guest.consent.face_search_consent)
+    expires_at = datetime.utcnow() + timedelta(days=7)
+
+    return GuestSessionValidateResponse(
+        is_valid=True,
+        guest_id=guest.id,
+        event_id=guest.event_id,
+        name=guest.name,
+        mobile_masked=mask_mobile(guest.mobile),
+        has_consent=has_consent,
+        has_matched_photos=has_matched,
+        match_count=match_count,
+        expires_at=expires_at,
+    )
+
+
+@router.get("/events/{event_id}/guests/{guest_id}/cached-match")
+def get_cached_guest_match(
+    event_id: str,
+    guest_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve cached AI facial match results for a valid guest session.
+    Strictly event-scoped and guest-scoped.
+    """
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+
+    guest = db.query(Guest).filter(Guest.id == guest_id, Guest.event_id == event_id).first()
+    if not guest:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guest record not found.")
+
+    latest_search = db.query(GuestSearch).filter(
+        GuestSearch.guest_id == guest.id,
+        GuestSearch.event_id == event.id
+    ).order_by(GuestSearch.created_at.desc()).first()
+
+    if not latest_search:
+        return {
+            "status": "NOT_FOUND",
+            "search_id": None,
+            "event_id": event.id,
+            "guest_id": guest.id,
+            "matched_count": 0,
+            "matched_photos": [],
+            "similarity_scores": {},
+            "message": "No selfie match on record. Please capture a selfie."
+        }
+
+    photo_ids = latest_search.matched_photo_ids or []
+    similarity_scores = latest_search.similarity_scores or {}
+
+    matched_photos = []
+    if photo_ids:
+        photos = db.query(Photo).filter(
+            Photo.id.in_(photo_ids),
+            Photo.status == PhotoStatus.PROCESSED.value,
+            Photo.is_deleted == False
+        ).all()
+        photo_dict = {p.id: p for p in photos}
+
+        for pid in photo_ids:
+            if pid in photo_dict:
+                p = photo_dict[pid]
+                if p.folder and not p.folder.allow_guest_view:
+                    continue
+
+                matched_photos.append({
+                    "id": p.id,
+                    "event_id": p.event_id,
+                    "original_file_name": p.original_file_name,
+                    "sha256_hash": p.sha256_hash,
+                    "file_size": p.file_size,
+                    "width": p.width,
+                    "height": p.height,
+                    "mime_type": p.mime_type,
+                    "status": p.status,
+                    "faces_detected_count": p.faces_detected_count,
+                    "thumbnail_url": f"/api/v1/photos/{p.id}/thumbnail",
+                    "download_url": f"/api/v1/photos/{p.id}/download",
+                    "is_guest_uploaded": bool(p.is_guest_uploaded),
+                    "uploaded_by_guest_name": p.uploaded_by_guest_name,
+                    "uploaded_by_guest_phone": p.uploaded_by_guest_phone,
+                    "folder_id": p.folder_id,
+                    "folder_name": p.folder.name if p.folder else None,
+                    "created_at": p.created_at.isoformat() if p.created_at else None,
+                })
+
+    return {
+        "status": "READY",
+        "search_id": latest_search.id,
+        "event_id": event.id,
+        "guest_id": guest.id,
+        "matched_count": len(matched_photos),
+        "matched_photos": matched_photos,
+        "similarity_scores": similarity_scores,
+        "created_at": latest_search.created_at.isoformat() if latest_search.created_at else None,
+        "message": f"Found {len(matched_photos)} matching moments!" if matched_photos else "No matching photos found in this event."
+    }
+
+
 # Photographer Lead Review Endpoint
 @router.get("/events/{event_id}/leads")
 def get_event_leads(
@@ -194,3 +424,4 @@ def get_event_leads(
             "registered_at": g.created_at,
         })
     return leads
+

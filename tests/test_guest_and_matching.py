@@ -163,3 +163,91 @@ def test_cross_event_isolation(client, db_session):
     # ZERO matches because Event 1 has no photos, proving complete event isolation!
     assert search_res.json()["matched_count"] == 0
     assert len(search_res.json()["matched_photos"]) == 0
+
+
+def test_guest_login_and_session_flow(client, db_session):
+    """Test returning guest login by mobile number and session validation."""
+    signup_res = client.post(
+        "/api/v1/auth/signup",
+        json={"email": "login_test@example.com", "password": "Password123!", "studio_name": "Login Studio"}
+    )
+    headers = {"Authorization": f"Bearer {signup_res.json()['access_token']}"}
+
+    event_res = client.post("/api/v1/events", headers=headers, json={"name": "Login Test Wedding"})
+    event_id = event_res.json()["id"]
+
+    # 1. First-time registration
+    reg_res = client.post(
+        f"/api/v1/events/{event_id}/guests/register",
+        json={"name": "Kavita Patel", "mobile": "+919876500001"}
+    )
+    assert reg_res.status_code == 201
+    guest_id = reg_res.json()["guest_id"]
+
+    # Provide consent
+    client.post(f"/api/v1/guests/{guest_id}/consent", json={"guest_id": guest_id, "face_search_consent": True})
+
+    # 2. Returning guest login
+    login_res = client.post(
+        f"/api/v1/events/{event_id}/guests/login",
+        json={"mobile": "+919876500001"}
+    )
+    assert login_res.status_code == 200
+    login_data = login_res.json()
+    assert login_data["guest_id"] == guest_id
+    assert login_data["name"] == "Kavita Patel"
+    assert login_data["has_consent"] is True
+    assert "session_token" in login_data
+
+    # 3. Server-side session validation
+    val_res = client.get(f"/api/v1/events/{event_id}/guests/{guest_id}/session/validate")
+    assert val_res.status_code == 200
+    assert val_res.json()["is_valid"] is True
+    assert val_res.json()["name"] == "Kavita Patel"
+
+    # 4. Unknown mobile returns 404
+    unknown_res = client.post(
+        f"/api/v1/events/{event_id}/guests/login",
+        json={"mobile": "+919999999999"}
+    )
+    assert unknown_res.status_code == 404
+
+
+def test_cached_match_persistence_and_isolation(client, db_session):
+    """Test that cached matches are persisted and retrievable on page refresh."""
+    signup_res = client.post(
+        "/api/v1/auth/signup",
+        json={"email": "cache_test@example.com", "password": "Password123!", "studio_name": "Cache Studio"}
+    )
+    headers = {"Authorization": f"Bearer {signup_res.json()['access_token']}"}
+
+    event_res = client.post("/api/v1/events", headers=headers, json={"name": "Cache Test Wedding"})
+    event_id = event_res.json()["id"]
+
+    # Register guest
+    reg_res = client.post(
+        f"/api/v1/events/{event_id}/guests/register",
+        json={"name": "Rohan Sharma", "mobile": "+919876500002"}
+    )
+    guest_id = reg_res.json()["guest_id"]
+    client.post(f"/api/v1/guests/{guest_id}/consent", json={"guest_id": guest_id, "face_search_consent": True})
+
+    # Initial cached match is NOT_FOUND
+    cache_res1 = client.get(f"/api/v1/events/{event_id}/guests/{guest_id}/cached-match")
+    assert cache_res1.status_code == 200
+    assert cache_res1.json()["status"] == "NOT_FOUND"
+
+    # Perform selfie search
+    selfie_bytes = create_dummy_face_image()
+    search_res = client.post(
+        f"/api/v1/events/{event_id}/guests/{guest_id}/search",
+        files=[("selfie", ("selfie.jpg", selfie_bytes, "image/jpeg"))]
+    )
+    assert search_res.status_code == 200
+
+    # Subsequent cached match is READY
+    cache_res2 = client.get(f"/api/v1/events/{event_id}/guests/{guest_id}/cached-match")
+    assert cache_res2.status_code == 200
+    assert cache_res2.json()["status"] == "READY"
+    assert cache_res2.json()["guest_id"] == guest_id
+
