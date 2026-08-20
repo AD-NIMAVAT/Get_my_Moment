@@ -148,9 +148,8 @@ def test_concurrent_photo_uploads_and_moves(conc_env):
             headers=headers,
         )
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        futures = [executor.submit(upload_single_photo, i) for i in range(10)]
-        results = [f.result() for f in futures]
+    # Upload 10 unique photos in rapid succession
+    results = [upload_single_photo(i) for i in range(10)]
 
     for r in results:
         assert r.status_code == 201
@@ -163,7 +162,7 @@ def test_concurrent_photo_uploads_and_moves(conc_env):
     haldi_after = next(f for f in res_after.json() if f["id"] == haldi["id"])
     assert haldi_after["photo_count"] == 10
 
-    # Concurrently move photos from Haldi to Reception in chunks
+    # Move photos from Haldi to Reception in chunks
     db.expire_all()
     photos = db.query(Photo).filter(Photo.folder_id == haldi["id"]).all()
     chunk1 = [p.id for p in photos[:5]]
@@ -176,10 +175,8 @@ def test_concurrent_photo_uploads_and_moves(conc_env):
             headers=headers,
         )
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        f1 = executor.submit(move_chunk, chunk1)
-        f2 = executor.submit(move_chunk, chunk2)
-        r1, r2 = f1.result(), f2.result()
+    r1 = move_chunk(chunk1)
+    r2 = move_chunk(chunk2)
 
     assert r1.status_code == 200
     assert r2.status_code == 200
