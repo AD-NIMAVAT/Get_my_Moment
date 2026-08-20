@@ -156,10 +156,10 @@ function LoginForm() {
   };
 
   return (
-    <div className="w-full max-w-lg p-7 sm:p-10 rounded-3xl neu-card relative z-10">
-      <div className="text-center mb-7">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#EE7E6F] via-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold mx-auto mb-4 shadow-[4px_4px_10px_#D4D0C7,-4px_-4px_10px_#FFFFFF]">
-          <Camera className="w-7 h-7 stroke-[2.5]" />
+    <div className="w-full max-w-lg p-5 sm:p-8 md:p-10 rounded-3xl neu-card relative z-10 my-3 sm:my-6 shadow-[6px_6px_16px_#D4D0C7,-6px_-6px_16px_#FFFFFF]">
+      <div className="text-center mb-6 sm:mb-7">
+        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-[#EE7E6F] via-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold mx-auto mb-3 sm:mb-4 shadow-[4px_4px_10px_#D4D0C7,-4px_-4px_10px_#FFFFFF]">
+          <Camera className="w-6 h-6 sm:w-7 sm:h-7 stroke-[2.5]" />
         </div>
         <h2 className="text-2xl sm:text-3xl font-display font-extrabold text-[#1F1F1F] tracking-tight">
           {mode === 'login' ? 'Photographer Portal' : 'Register Studio'}
@@ -549,9 +549,9 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="flex-1 flex flex-col justify-center items-center px-4 py-12 sm:py-16 relative overflow-hidden bg-[#F3F1EC]">
+    <div className="flex-1 flex flex-col justify-center items-center px-3 sm:px-6 py-4 sm:py-12 relative overflow-hidden bg-[#F3F1EC] min-h-[calc(100dvh-4rem)]">
       <Suspense fallback={
-        <div className="w-full max-w-lg p-10 rounded-3xl neu-card text-center">
+        <div className="w-full max-w-lg p-8 rounded-3xl neu-card text-center">
           <div className="w-8 h-8 border-3 border-[#E86A5B] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
           <span className="text-xs font-bold text-[#6B6B6B]">Loading Studio Portal...</span>
         </div>

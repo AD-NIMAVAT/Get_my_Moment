@@ -107,7 +107,7 @@ export default function DashboardPage() {
   const totalGuests = events.reduce((acc, ev) => acc + (ev.guest_count || 0), 0);
 
   return (
-    <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+    <div className="flex-1 max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1850px] w-full mx-auto px-4 sm:px-6 lg:px-10 py-8 sm:py-10">
       {/* Studio Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-[#E2DDD5]">
         <div>
@@ -128,13 +128,13 @@ export default function DashboardPage() {
             )}
           </div>
           <p className="text-xs sm:text-sm text-[#6B6B6B] mt-1 font-normal">
-            Unified workspace for client event galleries, AI facial matching, and business telemetry.
+            Manage your high-resolution event workspaces, AI vector matching, and client galleries.
           </p>
         </div>
 
         <button
           onClick={() => setShowCreateModal(true)}
-          className="btn-primary self-start md:self-auto"
+          className="btn-primary py-3 px-5 text-xs sm:text-sm flex items-center gap-2 self-start md:self-auto cursor-pointer"
         >
           <Plus className="w-4 h-4 stroke-[3]" />
           <span>Create New Event</span>
@@ -155,17 +155,17 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Metrics Row (2x2 on mobile, 4-col on desktop) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5 my-6 sm:my-8">
+      {/* Metrics Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 my-8">
         <div className="neu-card p-4 sm:p-6">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-xs font-bold text-[#6B6B6B] uppercase tracking-wider">Active Events</span>
+            <span className="text-[10px] sm:text-xs font-bold text-[#6B6B6B] uppercase tracking-wider">Events</span>
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-2xl bg-[#F3F1EC] shadow-[inset_2px_2px_4px_#D1CDC4,inset_-2px_-2px_4px_#FFFFFF] flex items-center justify-center text-[#E86A5B]">
-              <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
+              <Layers className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
           </div>
           <div className="text-2xl sm:text-3xl font-extrabold text-[#1F1F1F] mt-2 sm:mt-3">{events.length}</div>
-          <div className="text-[10px] sm:text-xs text-[#6B6B6B] mt-0.5 sm:mt-1">Active event galleries</div>
+          <div className="text-[10px] sm:text-xs text-[#6B6B6B] mt-0.5 sm:mt-1">Active workspaces</div>
         </div>
 
         <div className="neu-card p-4 sm:p-6">
@@ -228,8 +228,8 @@ export default function DashboardPage() {
         </div>
 
         {loading && events.length === 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
               <div key={i} className="p-7 rounded-3xl neu-card space-y-4">
                 <div className="w-20 h-5 rounded-full skeleton-shimmer" />
                 <div className="w-3/4 h-7 rounded-xl skeleton-shimmer" />
@@ -254,7 +254,7 @@ export default function DashboardPage() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
             {events.map((event) => (
               <div
                 key={event.id}

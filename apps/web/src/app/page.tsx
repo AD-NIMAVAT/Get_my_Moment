@@ -17,9 +17,9 @@ export default function HomePage() {
       {/* Hero Section */}
       <section className="relative overflow-hidden pt-16 pb-20 lg:pt-28 lg:pb-32 border-b border-[#E8E5E2]">
         {/* Subtle Ambient Warm Radial Lighting */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-gradient-to-tr from-[#E86A5B]/10 via-[#D9A441]/10 to-transparent blur-[120px] pointer-events-none rounded-full" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(90vw,1200px)] h-[min(50vh,600px)] bg-gradient-to-tr from-[#E86A5B]/10 via-[#D9A441]/10 to-transparent blur-[140px] pointer-events-none rounded-full" />
         
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+        <div className="max-w-7xl 2xl:max-w-[1500px] 3xl:max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-12 text-center relative z-10">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide bg-[#E86A5B]/10 text-[#E86A5B] border border-[#E86A5B]/20 mb-6 shadow-sm">
             <Sparkles className="w-3.5 h-3.5 text-[#E86A5B]" />
             <span>
@@ -27,14 +27,14 @@ export default function HomePage() {
             </span>
           </div>
 
-          <h1 className="text-4xl sm:text-6xl lg:text-7xl font-display font-extrabold tracking-tight text-[#1F1F1F] max-w-5xl mx-auto leading-[1.15]">
+          <h1 className="text-4xl sm:text-6xl lg:text-7xl 2xl:text-8xl font-display font-extrabold tracking-tight text-[#1F1F1F] max-w-5xl 2xl:max-w-7xl mx-auto leading-[1.12]">
             From First Lead Inquiry to{' '}
             <span className="text-[#E86A5B]">
               Instant AI Photo Delivery.
             </span>
           </h1>
 
-          <p className="mt-6 text-base sm:text-lg text-[#6B6B6B] max-w-3xl mx-auto leading-relaxed font-normal">
+          <p className="mt-6 text-base sm:text-lg 2xl:text-xl text-[#6B6B6B] max-w-3xl 2xl:max-w-5xl mx-auto leading-relaxed font-normal">
             A warm, photo-focused Business OS for Indian wedding photographers. Run leads CRM, automated WhatsApp quotes, date booking calendar, and AI face recognition galleries in one seamless platform.
           </p>
 
@@ -78,30 +78,30 @@ export default function HomePage() {
           </div>
 
           {/* Quick Metrics Bar */}
-          <div className="mt-14 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
-            <div className="bg-white p-5 rounded-2xl border border-[#E8E5E2] shadow-sm">
-              <div className="text-2xl font-bold text-[#E86A5B]">100%</div>
-              <div className="text-xs text-[#6B6B6B] mt-1 font-medium">Biometric Privacy</div>
+          <div className="mt-14 grid grid-cols-2 md:grid-cols-4 gap-4 2xl:gap-6 max-w-4xl 2xl:max-w-6xl mx-auto">
+            <div className="bg-white p-5 2xl:p-7 rounded-2xl border border-[#E8E5E2] shadow-sm">
+              <div className="text-2xl 2xl:text-3xl font-bold text-[#E86A5B]">100%</div>
+              <div className="text-xs 2xl:text-sm text-[#6B6B6B] mt-1 font-medium">Biometric Privacy</div>
             </div>
-            <div className="bg-white p-5 rounded-2xl border border-[#E8E5E2] shadow-sm">
-              <div className="text-2xl font-bold text-[#1F1F1F]">&lt; 50ms</div>
-              <div className="text-xs text-[#6B6B6B] mt-1 font-medium">AI Matching Latency</div>
+            <div className="bg-white p-5 2xl:p-7 rounded-2xl border border-[#E8E5E2] shadow-sm">
+              <div className="text-2xl 2xl:text-3xl font-bold text-[#1F1F1F]">&lt; 50ms</div>
+              <div className="text-xs 2xl:text-sm text-[#6B6B6B] mt-1 font-medium">AI Matching Latency</div>
             </div>
-            <div className="bg-white p-5 rounded-2xl border border-[#E8E5E2] shadow-sm">
-              <div className="text-2xl font-bold text-[#3FA66B]">90%+</div>
-              <div className="text-xs text-[#6B6B6B] mt-1 font-medium">Face Accuracy Filter</div>
+            <div className="bg-white p-5 2xl:p-7 rounded-2xl border border-[#E8E5E2] shadow-sm">
+              <div className="text-2xl 2xl:text-3xl font-bold text-[#3FA66B]">90%+</div>
+              <div className="text-xs 2xl:text-sm text-[#6B6B6B] mt-1 font-medium">Face Accuracy Filter</div>
             </div>
-            <div className="bg-white p-5 rounded-2xl border border-[#E8E5E2] shadow-sm">
-              <div className="text-2xl font-bold text-[#D9A441]">₹0 Setup</div>
-              <div className="text-xs text-[#6B6B6B] mt-1 font-medium">Instant Free Trial</div>
+            <div className="bg-white p-5 2xl:p-7 rounded-2xl border border-[#E8E5E2] shadow-sm">
+              <div className="text-2xl 2xl:text-3xl font-bold text-[#D9A441]">₹0 Setup</div>
+              <div className="text-xs 2xl:text-sm text-[#6B6B6B] mt-1 font-medium">Instant Free Trial</div>
             </div>
           </div>
         </div>
       </section>
 
       {/* 3 Signature Pillars */}
-      <section id="killer-features" className="py-20 bg-white relative border-b border-[#E8E5E2]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section id="killer-features" className="py-20 2xl:py-28 bg-white relative border-b border-[#E8E5E2]">
+        <div className="max-w-7xl 2xl:max-w-[1500px] 3xl:max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-12">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <span className="text-xs font-bold uppercase tracking-widest text-[#E86A5B]">SIGNATURE CAPABILITIES</span>
             <h2 className="text-3xl sm:text-4xl font-display font-extrabold text-[#1F1F1F] mt-2">
@@ -165,8 +165,8 @@ export default function HomePage() {
       </section>
 
       {/* Pricing Plans */}
-      <section id="pricing" className="py-20 bg-[#FAF9F7] relative border-b border-[#E8E5E2]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section id="pricing" className="py-20 2xl:py-28 bg-[#FAF9F7] relative border-b border-[#E8E5E2]">
+        <div className="max-w-7xl 2xl:max-w-[1500px] 3xl:max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-12">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <span className="text-xs font-bold uppercase tracking-widest text-[#E86A5B]">SIMPLE & TRANSPARENT PLANS</span>
             <h2 className="text-3xl sm:text-4xl font-display font-extrabold text-[#1F1F1F] mt-2">

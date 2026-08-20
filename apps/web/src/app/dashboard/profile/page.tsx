@@ -453,7 +453,7 @@ export default function ProfileAndPricingPage() {
   const eventsPercentage = profile ? Math.min(100, Math.round((profile.monthly_events_used / profile.max_events_per_month) * 100)) : 0;
 
   return (
-    <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+    <div className="flex-1 max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1850px] w-full mx-auto px-4 sm:px-6 lg:px-10 py-8 sm:py-10">
       {/* Hero Studio Banner */}
       <div className="p-7 sm:p-8 rounded-3xl neu-card relative overflow-hidden mb-8">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">

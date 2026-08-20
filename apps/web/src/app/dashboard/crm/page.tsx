@@ -175,7 +175,7 @@ export default function LeadsCrmPage() {
   }
 
   return (
-    <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+    <div className="flex-1 max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1850px] w-full mx-auto px-4 sm:px-6 lg:px-10 py-8 sm:py-10">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-[#E8E5E2]">
         <div>
@@ -277,7 +277,7 @@ export default function LeadsCrmPage() {
           <p className="text-xs text-[#6B6B6B] mt-1">Click "Add New Inquiry" to log wedding leads.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
           {filteredLeads.map((lead) => (
             <div
               key={lead.id}

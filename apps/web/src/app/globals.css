@@ -30,6 +30,28 @@
     max-width: 100vw;
   }
 
+  /* Ultra-wide, 2K, 4K & Zoomed-out proportional responsive scaling */
+  @media (min-width: 1600px) {
+    html {
+      font-size: 17px;
+    }
+  }
+  @media (min-width: 1920px) {
+    html {
+      font-size: 18px;
+    }
+  }
+  @media (min-width: 2560px) {
+    html {
+      font-size: 20px;
+    }
+  }
+  @media (min-width: 3440px) {
+    html {
+      font-size: 22px;
+    }
+  }
+
   body {
     background-color: #F3F1EC;
     color: #1F1F1F;

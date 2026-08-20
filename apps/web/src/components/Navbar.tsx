@@ -116,16 +116,16 @@ export function Navbar() {
   // 3. WARM NEOMORPHIC GET MY MOMENT NAVBAR
   return (
     <header className="sticky top-0 z-50 w-full bg-[#F3F1EC]/95 backdrop-blur-md border-b border-[#E2DDD5] shadow-[0_4px_16px_#D4D0C7] text-[#1F1F1F]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-3 group">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#EE7E6F] via-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shadow-[4px_4px_10px_#D4D0C7,-4px_-4px_10px_#FFFFFF] group-hover:scale-105 transition-all duration-300">
-            <Camera className="w-5 h-5 text-white stroke-[2.5]" />
+      <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1850px] mx-auto px-3 sm:px-6 lg:px-10 min-h-[3.75rem] sm:min-h-[4rem] flex items-center justify-between gap-2">
+        <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-2.5 sm:gap-3 group shrink-0 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-[#EE7E6F] via-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shadow-[3px_3px_8px_#D4D0C7,-3px_-3px_8px_#FFFFFF] group-hover:scale-105 transition-all duration-300 shrink-0">
+            <Camera className="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2.5]" />
           </div>
-          <div className="flex flex-col">
-            <span className="font-display font-extrabold text-lg tracking-tight text-[#1F1F1F] leading-none">
+          <div className="flex flex-col min-w-0">
+            <span className="font-display font-extrabold text-base sm:text-lg tracking-tight text-[#1F1F1F] leading-none truncate">
               Get My Moment
             </span>
-            <span className="text-[10px] font-bold tracking-widest text-[#E86A5B] uppercase mt-0.5">
+            <span className="text-[9px] sm:text-[10px] font-bold tracking-widest text-[#E86A5B] uppercase mt-0.5 truncate">
               STUDIO OS & AI DELIVERY
             </span>
           </div>
@@ -203,19 +203,19 @@ export function Navbar() {
         </nav>
 
         {/* Right Side Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {user ? (
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <Link
                 href="/dashboard/profile"
-                className="flex items-center gap-2 text-xs sm:text-sm font-bold text-[#1F1F1F] hover:text-[#E86A5B] transition-all px-3.5 py-2 rounded-2xl bg-[#F3F1EC] shadow-[4px_4px_8px_#D4D0C7,-4px_-4px_8px_#FFFFFF] border border-white/60 group"
+                className="flex items-center gap-2 text-xs sm:text-sm font-bold text-[#1F1F1F] hover:text-[#E86A5B] transition-all px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-2xl bg-[#F3F1EC] shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF] border border-white/60 group"
                 title="Studio Profile & Subscription Plan"
               >
-                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#E86A5B] to-[#C94F43] text-white flex items-center justify-center text-[11px] font-extrabold shadow-sm">
+                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-br from-[#E86A5B] to-[#C94F43] text-white flex items-center justify-center text-[10px] sm:text-[11px] font-extrabold shadow-sm shrink-0">
                   {user.studio_name ? user.studio_name.charAt(0).toUpperCase() : 'S'}
                 </div>
-                <span className="hidden sm:inline font-bold max-w-[130px] truncate">{user.studio_name}</span>
-                <span className="sm:hidden font-bold">Profile</span>
+                <span className="hidden sm:inline font-bold max-w-[120px] truncate">{user.studio_name}</span>
+                <span className="sm:hidden font-bold text-xs">Profile</span>
               </Link>
               <button
                 onClick={logout}
@@ -226,17 +226,25 @@ export function Navbar() {
                 <span className="hidden md:inline">Sign Out</span>
               </button>
             </div>
+          ) : pathname === '/login' ? (
+            <Link
+              href="/"
+              className="text-xs font-bold text-[#6B6B6B] hover:text-[#1F1F1F] flex items-center gap-1 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl neu-btn-secondary"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back Home</span>
+            </Link>
           ) : (
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <Link
                 href="/login"
-                className="text-xs sm:text-sm font-semibold text-[#1F1F1F] hover:text-[#E86A5B] transition-colors px-3 py-2"
+                className="text-xs sm:text-sm font-semibold text-[#1F1F1F] hover:text-[#E86A5B] transition-colors px-2.5 py-1.5"
               >
                 Sign In
               </Link>
               <Link
                 href="/login?mode=signup"
-                className="btn-primary py-2 px-4 text-xs sm:text-sm shadow-[4px_4px_10px_#D4D0C7,-4px_-4px_10px_#FFFFFF]"
+                className="btn-primary py-1.5 px-3 sm:py-2 sm:px-4 text-xs sm:text-sm shadow-[3px_3px_8px_#D4D0C7,-3px_-3px_8px_#FFFFFF] whitespace-nowrap"
               >
                 Register Studio
               </Link>

@@ -358,7 +358,7 @@ export default function EventCommandCenterPage() {
   const guestUrl = typeof window !== 'undefined' ? `${window.location.origin}/e/${event.access_token}` : `/e/${event.access_token}`;
 
   return (
-    <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+    <div className="flex-1 max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1850px] w-full mx-auto px-4 sm:px-6 lg:px-10 py-8 sm:py-10">
       {/* Back Link */}
       <div className="mb-4 flex items-center justify-between">
         <Link

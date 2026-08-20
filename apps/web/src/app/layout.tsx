@@ -34,7 +34,7 @@ export default function RootLayout({
           {children}
         </Providers>
         <footer className="border-t border-[#E8E5E2] bg-white py-8 text-center text-xs text-[#6B6B6B]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1850px] mx-auto px-4 sm:px-6 lg:px-10 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 text-[#6B6B6B]">
               <p className="flex items-center gap-1.5">
                 © {new Date().getFullYear()} <span className="font-bold text-[#1F1F1F]">Get My Moment</span>. All rights reserved.
