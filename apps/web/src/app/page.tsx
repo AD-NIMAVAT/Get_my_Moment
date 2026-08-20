@@ -89,15 +89,15 @@ export default function HomePage() {
         <div className="max-w-7xl 2xl:max-w-[1500px] 3xl:max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-12 relative z-10">
           <div className="text-center max-w-4xl mx-auto">
             {/* Pill Badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold bg-[#E86A5B]/10 text-[#E86A5B] border border-[#E86A5B]/20 mb-6 shadow-sm neu-pill">
-              <Sparkles className="w-3.5 h-3.5 text-[#E86A5B]" />
-              <span>AI-POWERED PHOTO DELIVERY &amp; STUDIO BUSINESS OS</span>
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[10px] sm:text-xs font-bold bg-[#E86A5B]/10 text-[#E86A5B] border border-[#E86A5B]/20 mb-6 shadow-sm neu-pill max-w-full text-center">
+              <Sparkles className="w-3.5 h-3.5 text-[#E86A5B] shrink-0" />
+              <span>AI PHOTO DELIVERY &amp; STUDIO OS</span>
             </div>
 
             {/* Main Headline */}
-            <h1 className="text-3xl sm:text-5xl lg:text-6xl 2xl:text-7xl font-display font-extrabold tracking-tight text-[#1F1F1F] leading-[1.12]">
+            <h1 className="text-3xl sm:text-5xl lg:text-6xl 2xl:text-7xl font-display font-extrabold tracking-tight text-[#1F1F1F] leading-[1.15]">
               AI-Powered Photo Delivery for{' '}
-              <span className="text-[#E86A5B]">Wedding Photographers.</span>
+              <span className="text-[#E86A5B] block sm:inline">Wedding Photographers.</span>
             </h1>
 
             {/* Subtext explaining Upload -> QR -> Selfie -> AI Search -> WhatsApp */}
@@ -170,7 +170,7 @@ export default function HomePage() {
             <div className="neu-card p-4 sm:p-6 rounded-3xl relative overflow-hidden">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
                 {/* Left Card: Photographer Wi-Fi Stream */}
-                <div className="lg:col-span-5 bg-[#FAF9F7] rounded-2xl p-5 border border-[#E8E5E2] space-y-4">
+                <div className="lg:col-span-5 bg-[#FAF9F7] rounded-2xl p-4 sm:p-5 border border-[#E8E5E2] space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping" />
@@ -183,18 +183,18 @@ export default function HomePage() {
                     </span>
                   </div>
 
-                  <div className="p-3.5 rounded-xl bg-[#F3F1EC] border border-[#E2DDD5] space-y-1.5 text-xs font-mono">
-                    <div className="flex justify-between text-[#6B6B6B]">
+                  <div className="p-3.5 rounded-xl bg-[#F3F1EC] border border-[#E2DDD5] space-y-1.5 text-xs font-mono overflow-hidden">
+                    <div className="flex justify-between items-center text-[#6B6B6B]">
                       <span>Event:</span>
-                      <span className="font-bold text-[#1F1F1F]">Mehta Wedding</span>
+                      <span className="font-bold text-[#1F1F1F] truncate ml-2">Mehta Wedding</span>
                     </div>
-                    <div className="flex justify-between text-[#6B6B6B]">
+                    <div className="flex justify-between items-center text-[#6B6B6B]">
                       <span>Active Folder:</span>
-                      <span className="font-bold text-[#E86A5B]">01_Mandap</span>
+                      <span className="font-bold text-[#E86A5B] truncate ml-2">01_Mandap</span>
                     </div>
-                    <div className="flex justify-between text-[#6B6B6B]">
+                    <div className="flex justify-between items-center text-[#6B6B6B]">
                       <span>Synced Photos:</span>
-                      <span className="font-bold text-emerald-700">1,248 Images</span>
+                      <span className="font-bold text-emerald-700 truncate ml-2">1,248 Images</span>
                     </div>
                   </div>
 
