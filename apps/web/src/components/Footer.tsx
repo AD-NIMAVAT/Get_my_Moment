@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   Camera, Sparkles, ShieldCheck, Heart, ArrowRight, 
-  MessageSquare, ChevronDown, Instagram, Youtube, Mail, 
-  Lock, CheckCircle2, QrCode, Cpu, Layers, HardDrive, Play
+  ChevronDown, Instagram, Youtube, Mail, 
+  CheckCircle2, HardDrive, Play, Lock
 } from 'lucide-react';
 import { LiveDemoModal } from '@/components/home/LiveDemoModal';
 
@@ -60,13 +60,13 @@ export function Footer() {
       ]
     },
     company: {
-      title: 'Company & Support',
+      title: 'Company & Trust',
       links: [
         { label: 'About Get My Moment', href: '/about' },
         { label: 'Pricing Plans', href: '/#pricing' },
         { label: 'Frequently Asked Questions', href: '/#faq' },
         { label: 'Contact Studio Support', href: '/contact' },
-        { label: 'Super Admin Gateway', href: '/admin/login' },
+        { label: 'Biometric Privacy Policy', href: '/about#privacy' },
       ]
     },
     connect: {
@@ -82,65 +82,67 @@ export function Footer() {
 
   return (
     <>
-      <footer className="bg-[#121316] text-[#FAF9F7] relative overflow-hidden border-t border-white/10 selection:bg-[#E86A5B] selection:text-white" aria-labelledby="footer-heading">
+      <footer className="bg-[#F3F1EC] text-[#1F1F1F] relative overflow-hidden border-t border-[#E2DDD5] selection:bg-[#E86A5B] selection:text-white" aria-labelledby="footer-heading">
         <h2 id="footer-heading" className="sr-only">Get My Moment Footer</h2>
 
-        {/* Ambient Warm Photographic Lighting */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[min(95vw,1400px)] h-80 bg-gradient-to-b from-[#E86A5B]/10 via-[#D9A441]/5 to-transparent blur-[120px] pointer-events-none" />
-
         {/* ========================================================================= */}
-        {/* SECTION A: EMOTIONAL BRAND HERO CTA                                       */}
+        {/* SECTION A: EMOTIONAL BRAND HERO CTA (Warm Neomorphic Card)                */}
         {/* ========================================================================= */}
-        <div className="border-b border-white/10 relative z-10">
-          <div className="max-w-7xl 2xl:max-w-[1500px] 3xl:max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-12 py-16 sm:py-24 text-center">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-white/10 text-white/90 border border-white/15 mb-6 backdrop-blur-md">
-              <Sparkles className="w-3.5 h-3.5 text-[#E86A5B]" />
-              <span>THE FUTURE OF WEDDING PHOTOGRAPHY DELIVERY</span>
-            </div>
+        <div className="border-b border-[#E2DDD5] relative z-10 py-12 sm:py-16">
+          <div className="max-w-6xl 2xl:max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-10">
+            <div className="neu-card p-6 sm:p-12 lg:p-14 rounded-3xl bg-[#FAF9F7] border border-[#E8E5E2] text-center shadow-[9px_9px_18px_#D4D0C7,-9px_-9px_18px_#FFFFFF] relative overflow-hidden">
+              {/* Subtle Warm Amber Light */}
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-40 bg-gradient-to-b from-[#E86A5B]/10 to-transparent blur-3xl pointer-events-none" />
 
-            <h3 className="text-3xl sm:text-5xl lg:text-6xl font-display font-black tracking-tight text-white max-w-4xl mx-auto leading-[1.12]">
-              Your moments. <br />
-              Your memories. <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#F07465] via-[#E86A5B] to-[#D9A441]">
-                Forever.
-              </span>
-            </h3>
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-[#E86A5B]/10 text-[#E86A5B] border border-[#E86A5B]/20 mb-5 shadow-sm neu-pill">
+                <Sparkles className="w-3.5 h-3.5 text-[#E86A5B]" />
+                <span>THE FUTURE OF WEDDING PHOTOGRAPHY DELIVERY</span>
+              </div>
 
-            <p className="mt-6 text-sm sm:text-base text-neutral-400 max-w-2xl mx-auto leading-relaxed">
-              Stop sharing messy Google Drive folders. Deliver unforgettable client experiences with sub-50ms AI face recognition and complete studio business automation.
-            </p>
+              <h3 className="text-3xl sm:text-5xl lg:text-6xl font-display font-black tracking-tight text-[#1F1F1F] max-w-4xl mx-auto leading-[1.12]">
+                Your moments. <br />
+                Your memories. <br />
+                <span className="text-[#E86A5B]">
+                  Forever.
+                </span>
+              </h3>
 
-            <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link
-                href="/login?mode=signup"
-                className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-[#F07465] to-[#D95748] hover:from-[#F38578] hover:to-[#E26354] text-white font-bold text-sm shadow-xl shadow-[#E86A5B]/25 transition-all flex items-center justify-center gap-2.5 active:scale-95"
-              >
-                <Camera className="w-4 h-4" />
-                <span>Start Free Studio Trial</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-              <button
-                onClick={() => setIsDemoModalOpen(true)}
-                className="w-full sm:w-auto px-7 py-4 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-sm backdrop-blur-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-              >
-                <Play className="w-4 h-4 text-[#E86A5B] fill-current" />
-                <span>Try Live Demo Wedding</span>
-              </button>
-            </div>
+              <p className="mt-5 text-xs sm:text-sm lg:text-base text-[#6B6B6B] max-w-2xl mx-auto leading-relaxed font-normal">
+                Stop sharing messy Google Drive folders. Deliver unforgettable client experiences with sub-50ms AI face recognition and complete studio business automation.
+              </p>
 
-            <div className="mt-6 flex items-center justify-center gap-6 text-[11px] sm:text-xs text-neutral-400 flex-wrap">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span>5 GB Free Storage</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span>No Credit Card Required</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Setup in 2 Minutes</span>
-              </span>
+              <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3.5">
+                <Link
+                  href="/login?mode=signup"
+                  className="w-full sm:w-auto btn-primary py-3.5 px-8 text-sm font-bold shadow-lg shadow-[#E86A5B]/25 flex items-center justify-center gap-2.5 active:scale-95"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>Start Free Studio Trial</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+                <button
+                  onClick={() => setIsDemoModalOpen(true)}
+                  className="w-full sm:w-auto neu-btn-secondary py-3.5 px-7 text-sm font-bold flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                >
+                  <Play className="w-4 h-4 text-[#E86A5B] fill-current" />
+                  <span>Try Live Demo Wedding</span>
+                </button>
+              </div>
+
+              <div className="mt-6 flex items-center justify-center gap-6 text-[11px] sm:text-xs text-[#6B6B6B] flex-wrap">
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>5 GB Free Storage</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>No Credit Card Required</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Setup in 2 Minutes</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -153,11 +155,11 @@ export function Footer() {
             {/* Column 1: Brand & Trust Badge */}
             <div className="lg:col-span-4 space-y-4">
               <Link href="/" className="flex items-center gap-2.5 group shrink-0">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-[#EE7E6F] via-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shadow-lg shadow-[#E86A5B]/30 group-hover:scale-105 transition-all duration-300 shrink-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-[#EE7E6F] via-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shadow-[3px_3px_8px_#D4D0C7,-3px_-3px_8px_#FFFFFF] group-hover:scale-105 transition-all duration-300 shrink-0">
                   <Camera className="w-5 h-5 text-white stroke-[2.5]" />
                 </div>
                 <div className="flex flex-col min-w-0">
-                  <span className="font-display font-extrabold text-lg sm:text-xl tracking-tight text-white leading-none">
+                  <span className="font-display font-extrabold text-lg sm:text-xl tracking-tight text-[#1F1F1F] leading-none">
                     Get My Moment
                   </span>
                   <span className="text-[9px] font-bold tracking-widest text-[#E86A5B] uppercase mt-0.5">
@@ -166,18 +168,18 @@ export function Footer() {
                 </div>
               </Link>
 
-              <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed max-w-sm">
+              <p className="text-xs sm:text-sm text-[#6B6B6B] leading-relaxed max-w-sm">
                 The next-generation AI photo delivery platform and studio business operating system engineered specifically for Indian wedding photographers.
               </p>
 
               {/* Trust Badges */}
               <div className="pt-2 flex flex-col gap-2">
-                <div className="inline-flex items-center gap-2 text-xs text-neutral-300">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#1F1F1F]">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>100% Event-Scoped Biometric Privacy</span>
                 </div>
-                <div className="inline-flex items-center gap-2 text-xs text-neutral-300">
-                  <HardDrive className="w-4 h-4 text-blue-400 shrink-0" />
+                <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#1F1F1F]">
+                  <HardDrive className="w-4 h-4 text-[#E86A5B] shrink-0" />
                   <span>Encrypted Cloud Storage with SHA-256</span>
                 </div>
               </div>
@@ -187,10 +189,10 @@ export function Footer() {
             <div className="hidden md:grid md:grid-cols-4 lg:col-span-8 gap-8">
               {/* Col 2: Platform */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#1F1F1F]">
                   {footerSections.platform.title}
                 </h4>
-                <ul className="space-y-2 text-xs text-neutral-400">
+                <ul className="space-y-2 text-xs text-[#6B6B6B]">
                   {footerSections.platform.links.map((link, idx) => (
                     <li key={idx}>
                       <Link href={link.href} className="hover:text-[#E86A5B] transition-colors">
@@ -201,7 +203,7 @@ export function Footer() {
                   <li>
                     <button
                       onClick={() => setIsDemoModalOpen(true)}
-                      className="text-xs text-[#E86A5B] hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-xs text-[#E86A5B] font-bold hover:underline flex items-center gap-1 cursor-pointer"
                     >
                       <span>Try Demo Wedding</span>
                       <ArrowRight className="w-3 h-3" />
@@ -212,10 +214,10 @@ export function Footer() {
 
               {/* Col 3: Studio Business OS */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#1F1F1F]">
                   {footerSections.studioOs.title}
                 </h4>
-                <ul className="space-y-2 text-xs text-neutral-400">
+                <ul className="space-y-2 text-xs text-[#6B6B6B]">
                   {footerSections.studioOs.links.map((link, idx) => (
                     <li key={idx}>
                       <Link href={link.href} className="hover:text-[#E86A5B] transition-colors">
@@ -226,12 +228,12 @@ export function Footer() {
                 </ul>
               </div>
 
-              {/* Col 4: Company & Support */}
+              {/* Col 4: Company & Trust */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#1F1F1F]">
                   {footerSections.company.title}
                 </h4>
-                <ul className="space-y-2 text-xs text-neutral-400">
+                <ul className="space-y-2 text-xs text-[#6B6B6B]">
                   {footerSections.company.links.map((link, idx) => (
                     <li key={idx}>
                       <Link href={link.href} className="hover:text-[#E86A5B] transition-colors">
@@ -244,10 +246,10 @@ export function Footer() {
 
               {/* Col 5: Connect */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#1F1F1F]">
                   {footerSections.connect.title}
                 </h4>
-                <ul className="space-y-2 text-xs text-neutral-400">
+                <ul className="space-y-2 text-xs text-[#6B6B6B]">
                   {footerSections.connect.links.map((link, idx) => (
                     <li key={idx}>
                       <a
@@ -269,10 +271,10 @@ export function Footer() {
               {Object.entries(footerSections).map(([key, section]) => {
                 const isOpen = !!openAccordions[key];
                 return (
-                  <div key={key} className="border border-white/10 rounded-2xl overflow-hidden bg-white/[0.03]">
+                  <div key={key} className="border border-[#E2DDD5] rounded-2xl overflow-hidden bg-[#FAF9F7] shadow-sm">
                     <button
                       onClick={() => toggleAccordion(key)}
-                      className="w-full p-4 text-left flex items-center justify-between gap-3 text-xs font-bold text-white cursor-pointer"
+                      className="w-full p-4 text-left flex items-center justify-between gap-3 text-xs font-bold text-[#1F1F1F] cursor-pointer"
                       aria-expanded={isOpen}
                       aria-controls={`footer-accordion-${key}`}
                     >
@@ -280,8 +282,8 @@ export function Footer() {
                       <ChevronDown className={`w-4 h-4 text-[#E86A5B] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                     </button>
                     {isOpen && (
-                      <div id={`footer-accordion-${key}`} className="px-4 pb-4 space-y-2 border-t border-white/10 pt-3">
-                        <ul className="space-y-2 text-xs text-neutral-400">
+                      <div id={`footer-accordion-${key}`} className="px-4 pb-4 space-y-2 border-t border-[#E2DDD5] pt-3 bg-[#F3F1EC]/60">
+                        <ul className="space-y-2 text-xs text-[#6B6B6B]">
                           {section.links.map((link, idx) => (
                             <li key={idx}>
                               {link.isExternal ? (
@@ -289,14 +291,14 @@ export function Footer() {
                                   href={link.href}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="hover:text-[#E86A5B] transition-colors block py-1"
+                                  className="hover:text-[#E86A5B] transition-colors block py-1 font-medium"
                                 >
                                   {link.label}
                                 </a>
                               ) : (
                                 <Link
                                   href={link.href}
-                                  className="hover:text-[#E86A5B] transition-colors block py-1"
+                                  className="hover:text-[#E86A5B] transition-colors block py-1 font-medium"
                                 >
                                   {link.label}
                                 </Link>
@@ -314,30 +316,30 @@ export function Footer() {
         </div>
 
         {/* ========================================================================= */}
-        {/* SECTION D: LEGAL & COPYRIGHT BAR                                          */}
+        {/* SECTION D: LEGAL & COPYRIGHT BAR (Warm Neomorphic Cream)                  */}
         {/* ========================================================================= */}
-        <div className="border-t border-white/10 bg-black/40 relative z-10">
-          <div className="max-w-7xl 2xl:max-w-[1500px] 3xl:max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-12 py-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-400">
+        <div className="border-t border-[#E2DDD5] bg-[#EBE8E1]/70 relative z-10">
+          <div className="max-w-7xl 2xl:max-w-[1500px] 3xl:max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-12 py-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#6B6B6B]">
             <div className="flex items-center gap-2 text-center sm:text-left">
-              <span>© {new Date().getFullYear()} Get My Moment. All rights reserved.</span>
-              <span className="hidden sm:inline text-neutral-600">•</span>
-              <span className="hidden sm:inline text-[11px] text-neutral-500">Made for Indian Wedding Studios</span>
+              <span>© {new Date().getFullYear()} <strong className="text-[#1F1F1F]">Get My Moment</strong>. All rights reserved.</span>
+              <span className="hidden sm:inline text-[#D4D0C7]">•</span>
+              <span className="hidden sm:inline text-[11px] text-[#8C8C8C]">Made for Indian Wedding Studios</span>
             </div>
 
-            <div className="flex items-center gap-4 text-[11px] sm:text-xs font-medium text-neutral-400 flex-wrap justify-center">
-              <Link href="/about#privacy" className="hover:text-white transition-colors">
+            <div className="flex items-center gap-4 text-[11px] sm:text-xs font-medium text-[#6B6B6B] flex-wrap justify-center">
+              <Link href="/about#privacy" className="hover:text-[#E86A5B] transition-colors">
                 Privacy Policy
               </Link>
-              <span className="text-neutral-700">•</span>
-              <Link href="/about#terms" className="hover:text-white transition-colors">
+              <span className="text-[#D4D0C7]">•</span>
+              <Link href="/about#terms" className="hover:text-[#E86A5B] transition-colors">
                 Terms of Service
               </Link>
-              <span className="text-neutral-700">•</span>
-              <Link href="/about#biometric" className="hover:text-white transition-colors">
+              <span className="text-[#D4D0C7]">•</span>
+              <Link href="/about#biometric" className="hover:text-[#E86A5B] transition-colors">
                 Biometric Consent
               </Link>
-              <span className="text-neutral-700">•</span>
-              <Link href="/contact" className="hover:text-white transition-colors">
+              <span className="text-[#D4D0C7]">•</span>
+              <Link href="/contact" className="hover:text-[#E86A5B] transition-colors">
                 Studio Support
               </Link>
             </div>
