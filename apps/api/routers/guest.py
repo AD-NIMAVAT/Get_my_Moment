@@ -38,12 +38,18 @@ def mask_mobile(mobile: str) -> str:
     return f"{cleaned[:3]}****{cleaned[-4:]}" if len(cleaned) >= 10 else f"{cleaned[:2]}***{cleaned[-2:]}"
 
 
+def normalize_phone(raw: str) -> tuple[str, str]:
+    digits = "".join(c for c in raw if c.isdigit())
+    last_10 = digits[-10:] if len(digits) >= 10 else digits
+    standard_e164 = f"+91{last_10}" if len(last_10) == 10 else (f"+{digits}" if digits else raw)
+    return standard_e164, last_10
+
+
 def generate_guest_session_token(guest_id: str, event_id: str) -> str:
     secret = getattr(settings, "SECRET_KEY", "gmm_guest_session_master_key")
     payload = f"{guest_id}:{event_id}:{int(time.time())}"
     sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:24]
     return base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
-
 
 
 @router.post("/events/{event_id}/guests/register", response_model=GuestRegisterResponse, status_code=status.HTTP_201_CREATED)
@@ -54,28 +60,36 @@ def register_guest(
 ):
     """
     Register an event guest before selfie capture.
-    If event requires OTP, triggers verification workflow.
+    Supports both event ID and access token for seamless mobile QR resolution.
     """
-    event = db.query(Event).filter(Event.id == event_id).first()
+    event = db.query(Event).filter(
+        (Event.id == event_id) | (Event.access_token == event_id)
+    ).first()
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
     if event.status != EventStatus.ACTIVE.value:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not active.")
 
+    standard_mobile, last_10 = normalize_phone(request.mobile)
+
     # Check if guest already registered for this event with same mobile
     existing_guest = db.query(Guest).filter(
         Guest.event_id == event.id,
-        Guest.mobile == request.mobile.strip()
+        (Guest.mobile == request.mobile.strip()) |
+        (Guest.mobile == standard_mobile) |
+        (Guest.mobile == last_10) |
+        (Guest.mobile.like(f"%{last_10}"))
     ).first()
 
     if existing_guest:
         guest = existing_guest
         guest.name = request.name.strip()
+        guest.mobile = standard_mobile
     else:
         guest = Guest(
             event_id=event.id,
             name=request.name.strip(),
-            mobile=request.mobile.strip(),
+            mobile=standard_mobile,
             otp_verified=not event.require_otp,
         )
         db.add(guest)
@@ -198,20 +212,22 @@ def login_guest(
     Validates event existence and looks up existing guest registration.
     Issues a signed guest session token and returns match status for instant restoration.
     """
-    event = db.query(Event).filter(Event.id == event_id).first()
+    event = db.query(Event).filter(
+        (Event.id == event_id) | (Event.access_token == event_id)
+    ).first()
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
     if event.status != EventStatus.ACTIVE.value:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not active.")
 
-    raw_mobile = request.mobile.strip()
-    # Normalize phone: +919876543210 or 9876543210
-    digits_only = "".join(c for c in raw_mobile if c.isdigit())
-    last_10 = digits_only[-10:] if len(digits_only) >= 10 else digits_only
+    standard_mobile, last_10 = normalize_phone(request.mobile)
 
     guest = db.query(Guest).filter(
         Guest.event_id == event.id,
-        (Guest.mobile == raw_mobile) | (Guest.mobile.like(f"%{last_10}"))
+        (Guest.mobile == request.mobile.strip()) |
+        (Guest.mobile == standard_mobile) |
+        (Guest.mobile == last_10) |
+        (Guest.mobile.like(f"%{last_10}"))
     ).first()
 
     if not guest:
@@ -277,11 +293,13 @@ def validate_guest_session(
     Server-side Source-of-Truth Session Validation.
     Validates that guest exists, belongs strictly to event_id, and returns live status.
     """
-    event = db.query(Event).filter(Event.id == event_id).first()
+    event = db.query(Event).filter(
+        (Event.id == event_id) | (Event.access_token == event_id)
+    ).first()
     if not event or event.status != EventStatus.ACTIVE.value:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event inactive or not found.")
 
-    guest = db.query(Guest).filter(Guest.id == guest_id, Guest.event_id == event_id).first()
+    guest = db.query(Guest).filter(Guest.id == guest_id, Guest.event_id == event.id).first()
     if not guest:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guest session invalid or expired.")
 
@@ -318,11 +336,13 @@ def get_cached_guest_match(
     Retrieve cached AI facial match results for a valid guest session.
     Strictly event-scoped and guest-scoped.
     """
-    event = db.query(Event).filter(Event.id == event_id).first()
+    event = db.query(Event).filter(
+        (Event.id == event_id) | (Event.access_token == event_id)
+    ).first()
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
 
-    guest = db.query(Guest).filter(Guest.id == guest_id, Guest.event_id == event_id).first()
+    guest = db.query(Guest).filter(Guest.id == guest_id, Guest.event_id == event.id).first()
     if not guest:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guest record not found.")
 

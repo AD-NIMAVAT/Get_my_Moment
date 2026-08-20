@@ -1234,7 +1234,10 @@ class ApiClient {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'No guest registration found with this mobile number in this event.');
+      const msg = err.detail && err.detail !== 'Not Found' 
+        ? err.detail 
+        : 'No registered guest found with this mobile number for this event. Please Sign Up.';
+      throw new Error(msg);
     }
     const data = await res.json();
     return {

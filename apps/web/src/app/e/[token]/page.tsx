@@ -228,7 +228,10 @@ export default function GuestExperiencePage() {
         startCamera();
       }
     } catch (err: any) {
-      setError(err.message || 'No guest found with this mobile number. Please Sign Up.');
+      const msg = (err.message && err.message.toLowerCase().includes('not found'))
+        ? 'No registered guest found with this mobile number for this event. Please click "New Guest (Sign Up)" to register first.'
+        : (err.message || 'Login failed. Please check your mobile number or sign up.');
+      setError(msg);
     } finally {
       setLoading(false);
     }
