@@ -23,8 +23,13 @@ from packages.shared.constants import PhotoStatus
 router = APIRouter(prefix="/wireless", tags=["Wireless Camera Ingestion"])
 
 
-def get_local_ip() -> str:
-    """Detect active local LAN IP for camera Wi-Fi pairing."""
+def get_public_ip() -> str:
+    """Return public FTP host IP. Uses FTP_PUBLIC_HOST env var (set on AWS/cloud), falls back to local LAN IP."""
+    # Cloud/AWS deployment: use explicitly configured public host
+    public_host = os.environ.get("FTP_PUBLIC_HOST")
+    if public_host:
+        return public_host
+    # Local venue Wi-Fi: detect LAN IP automatically
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
@@ -32,7 +37,7 @@ def get_local_ip() -> str:
         s.close()
         return ip
     except Exception:
-        return "192.168.31.37"
+        return "127.0.0.1"
 
 
 @router.get("/status")
@@ -41,7 +46,7 @@ def get_wireless_status():
     return {
         "is_running": wireless_server.is_running,
         "ftp_port": wireless_server.port,
-        "server_ip": get_local_ip(),
+        "server_ip": get_public_ip(),
         "supported_brands": ["Sony Alpha", "Canon EOS", "Nikon Z", "Fujifilm X", "Pocket Mobile Relay"],
     }
 
@@ -50,7 +55,7 @@ def get_wireless_status():
 def start_wireless_server():
     """Start the wireless camera FTP receiver."""
     wireless_server.start()
-    return {"status": "started", "port": wireless_server.port, "server_ip": get_local_ip()}
+    return {"status": "started", "port": wireless_server.port, "server_ip": get_public_ip()}
 
 
 @router.get("/events/{event_id}/credentials")
