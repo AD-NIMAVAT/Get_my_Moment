@@ -63,6 +63,8 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - STORAGE_DRIVER=${STORAGE_DRIVER:-local}
       - STORAGE_LOCAL_ROOT=/app/storage
+      - FTP_PUBLIC_HOST=${FTP_PUBLIC_HOST:-16.170.81.162}
+      - FTP_PUBLIC_PORT=${FTP_PUBLIC_PORT:-2121}
     volumes:
       - storage_data:/app/storage
     depends_on:
