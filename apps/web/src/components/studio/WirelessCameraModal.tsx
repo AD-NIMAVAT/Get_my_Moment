@@ -34,8 +34,6 @@ export function WirelessCameraModal({
   const [folders, setFolders] = useState<FolderItem[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const [customIp, setCustomIp] = useState("");
-  const [isEditingIp, setIsEditingIp] = useState(false);
   const [ingestedPhotos, setIngestedPhotos] = useState<Array<{ id: string; name: string; time: string; faces: number }>>([]);
   const [simulating, setSimulating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -57,21 +55,6 @@ export function WirelessCameraModal({
       setFolders(foldersData);
       if (foldersData.length > 0 && !selectedFolderId) {
         setSelectedFolderId(foldersData[0].id);
-      }
-      // Use the host returned by API directly — private/internal IPs (10.x, 172.x) mean
-      // the server is behind NAT; in that case fall back to empty so effectiveIp uses the
-      // API value which already contains FTP_PUBLIC_HOST on AWS.
-      if (credsData?.ftp_settings?.host) {
-        const apiHost = credsData.ftp_settings.host;
-        const isPrivate =
-          apiHost.startsWith("10.") ||
-          apiHost.startsWith("172.") ||
-          apiHost.startsWith("127.");
-        // Only override customIp if the API returned a real public IP
-        if (!isPrivate) {
-          setCustomIp(apiHost);
-        }
-        // If private, leave customIp empty so effectiveIp falls back to API host directly
       }
     } catch (e) {
       console.error("Could not load credentials", e);
@@ -121,9 +104,7 @@ export function WirelessCameraModal({
 
   if (!isOpen) return null;
 
-  const apiHost = credentials?.ftp_settings?.host || "";
-  const isPrivateApiHost = apiHost.startsWith("10.") || apiHost.startsWith("172.") || apiHost.startsWith("127.");
-  const effectiveIp = customIp || (!isPrivateApiHost ? apiHost : "") || "";
+  const ftpHost = credentials?.ftp_settings?.host || "";
   const ftpPort = credentials?.ftp_settings?.port || 2121;
   const destinationPath = `/${accessToken}`;
 
@@ -175,15 +156,7 @@ export function WirelessCameraModal({
               <Radio className="w-4 h-4 text-[#E86A5B]" />
               Camera Wi-Fi FTP Credentials
             </span>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setIsEditingIp(!isEditingIp)}
-                className="text-xs text-[#E86A5B] hover:underline font-bold"
-              >
-                {isEditingIp ? "Save IP" : "Change Wi-Fi IP"}
-              </button>
-              <span className="text-xs text-[#6B6B6B] font-mono">Port: {ftpPort}</span>
-            </div>
+            <span className="text-xs text-[#6B6B6B] font-mono font-bold">Port: {ftpPort}</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
@@ -191,19 +164,9 @@ export function WirelessCameraModal({
             <div className="bg-[#FAF9F7] p-3 rounded-xl border border-[#E8E5E2]">
               <span className="text-[10px] text-[#6B6B6B] uppercase font-bold">FTP Host IP</span>
               <div className="flex items-center justify-between mt-1">
-                {isEditingIp ? (
-                  <input
-                    type="text"
-                    value={customIp}
-                    onChange={(e) => setCustomIp(e.target.value)}
-                    className="w-full bg-white border border-[#E86A5B] rounded px-1.5 py-0.5 text-xs text-[#1F1F1F] font-mono outline-none"
-                    placeholder="192.168.1.50"
-                  />
-                ) : (
-                  <span className="font-mono text-xs font-bold text-[#1F1F1F] truncate">{effectiveIp}</span>
-                )}
+                <span className="font-mono text-xs font-bold text-[#1F1F1F] truncate">{ftpHost}</span>
                 <button
-                  onClick={() => copyToClipboard(effectiveIp, "host")}
+                  onClick={() => copyToClipboard(ftpHost, "host")}
                   className="p-1 text-[#6B6B6B] hover:text-[#E86A5B]"
                   title="Copy IP"
                 >
@@ -370,7 +333,7 @@ export function WirelessCameraModal({
                 <li>Go to <span className="text-[#E86A5B] font-mono">Menu → Network → [FTP Transfer] → [FTP Transfer Func.] → ON</span>.</li>
                 <li>Select <span className="text-[#E86A5B] font-mono">[Server Setting 1]</span>:
                   <ul className="list-disc list-inside pl-4 mt-1 space-y-1 text-[#1F1F1F] font-mono">
-                    <li>Host Name: <span className="text-emerald-700 font-bold">{effectiveIp}</span></li>
+                    <li>Host Name: <span className="text-emerald-700 font-bold">{ftpHost}</span></li>
                     <li>Port: <span className="text-emerald-700 font-bold">{ftpPort}</span></li>
                     <li>Directory / Target Path: <span className="text-[#E86A5B] font-bold">{destinationPath}</span></li>
                     <li>User: <span className="font-bold">camera</span> | Password: <span className="font-bold">shoot123</span></li>
@@ -385,7 +348,7 @@ export function WirelessCameraModal({
               <>
                 <li>Connect Canon camera to Wi-Fi (<span className="text-[#E86A5B] font-mono">Menu → Communication settings → Wi-Fi</span>).</li>
                 <li>Go to <span className="text-[#E86A5B] font-mono">[FTP transfer settings] → [Create New Connection]</span>.</li>
-                <li>Select <span className="text-[#E86A5B] font-mono">[FTP]</span>: Set Target Host to <span className="text-emerald-700 font-mono font-bold">{effectiveIp}</span> (Port {ftpPort}).</li>
+                <li>Select <span className="text-[#E86A5B] font-mono">[FTP]</span>: Set Target Host to <span className="text-emerald-700 font-mono font-bold">{ftpHost}</span> (Port {ftpPort}).</li>
                 <li>Set Target Directory to <span className="text-[#E86A5B] font-mono font-bold">{destinationPath}</span>.</li>
                 <li>Enter Login: <span className="font-mono font-bold text-[#1F1F1F]">camera</span> | Password: <span className="font-mono font-bold text-[#1F1F1F]">shoot123</span>.</li>
                 <li>Enable <span className="text-[#E86A5B] font-mono">[Automatic transfer]</span>. New clicks stream instantly!</li>
@@ -395,7 +358,7 @@ export function WirelessCameraModal({
             {selectedBrand === "nikon" && (
               <>
                 <li>Connect Nikon camera to Wi-Fi (<span className="text-[#E86A5B] font-mono">Network menu → Connect to PC / FTP</span>).</li>
-                <li>Select <span className="text-[#E86A5B] font-mono">[FTP server] → [Add profile]</span>: Host: <span className="text-emerald-700 font-mono font-bold">{effectiveIp}</span>.</li>
+                <li>Select <span className="text-[#E86A5B] font-mono">[FTP server] → [Add profile]</span>: Host: <span className="text-emerald-700 font-mono font-bold">{ftpHost}</span>.</li>
                 <li>Set Remote Directory to <span className="text-[#E86A5B] font-mono font-bold">{destinationPath}</span>.</li>
                 <li>Enter User: <span className="font-mono font-bold text-[#1F1F1F]">camera</span> | Pass: <span className="font-mono font-bold text-[#1F1F1F]">shoot123</span>.</li>
                 <li>Turn ON <span className="text-[#E86A5B] font-mono">[Auto send]</span>. Clicks transmit seamlessly in real-time.</li>
@@ -405,7 +368,7 @@ export function WirelessCameraModal({
             {selectedBrand === "fuji" && (
               <>
                 <li>Go to <span className="text-[#E86A5B] font-mono">Set-up → Connection Setting → Network Settings</span>.</li>
-                <li>Create an FTP profile with Host: <span className="text-emerald-700 font-mono font-bold">{effectiveIp}</span> and Directory: <span className="text-[#E86A5B] font-mono font-bold">{destinationPath}</span>.</li>
+                <li>Create an FTP profile with Host: <span className="text-emerald-700 font-mono font-bold">{ftpHost}</span> and Directory: <span className="text-[#E86A5B] font-mono font-bold">{destinationPath}</span>.</li>
                 <li>User: <span className="font-mono font-bold text-[#1F1F1F]">camera</span> | Pass: <span className="font-mono font-bold text-[#1F1F1F]">shoot123</span>.</li>
                 <li>Enable <span className="text-[#E86A5B] font-mono">Auto Image Transfer</span>.</li>
               </>
