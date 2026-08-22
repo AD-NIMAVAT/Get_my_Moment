@@ -1,60 +1,96 @@
-# 🚀 Get My Moment — Cloud Deployment Guide (Railway Backend + Vercel Frontend)
+# 🚀 Get My Moment — Cloud Deployment Guide (AWS EC2 Backend + Next.js Frontend)
 
-This guide provides the exact steps to deploy **Get My Moment** with:
-* **Backend API & AI Engine**: Hosted on **Railway** (`https://web-production-08582.up.railway.app`)
-* **Frontend Web Application**: Hosted on **Vercel** (`https://getmymoment.fun` & `https://www.getmymoment.fun`)
+This guide provides the exact steps to manage **Get My Moment** with:
+* **Backend API & AI Engine**: Hosted on **AWS EC2** (`https://getmymoment.fun/api/v1`)
+* **Frontend Web Application**: Served via **Nginx on AWS EC2** (`https://getmymoment.fun`)
 
 ---
 
-## 📋 Architecture & DNS Routing Matrix (Hostinger / GoDaddy)
+## 🖥️ AWS EC2 Server Details
 
-| Domain / Subdomain | Target Platform | DNS Record Type | Target / Value |
+| Item | Value |
+| :--- | :--- |
+| **Public IP** | `16.170.81.162` |
+| **OS** | Ubuntu Linux |
+| **SSH Key** | `pro_technologies_124336.pem` |
+| **SSH Command** | `ssh -i "pro_technologies_124336.pem" ubuntu@16.170.81.162` |
+
+---
+
+## 📋 Architecture & DNS Routing Matrix
+
+| Domain / Subdomain | Target | DNS Record Type | Target / Value |
 | :--- | :--- | :---: | :--- |
-| **`getmymoment.fun`** | Vercel (Next.js Frontend) | **A** | `76.76.21.21` |
-| **`www.getmymoment.fun`** | Vercel Alias | **CNAME** | `cname.vercel-dns.com.` |
-| **`api.getmymoment.fun`** *(Optional)* | Railway Backend Alias | **CNAME** | `web-production-08582.up.railway.app` |
+| **`getmymoment.fun`** | AWS EC2 Nginx | **A** | `16.170.81.162` |
+| **`www.getmymoment.fun`** | AWS EC2 Nginx | **A** | `16.170.81.162` |
+| **`api.getmymoment.fun`** *(Optional)* | AWS EC2 Nginx | **A** | `16.170.81.162` |
 
 ---
 
-## ⚡ STEP 1: Backend on Railway (ALREADY LIVE! ✅)
-* Live API Endpoint: `https://web-production-08582.up.railway.app/api/v1`
-* Live Health Check: `https://web-production-08582.up.railway.app/api/v1/health`
+## 🐳 Docker Containers on EC2
+
+| Container | Image | Port | Status |
+| :--- | :--- | :--- | :--- |
+| `getmymoment_prod_api` | FastAPI/Uvicorn | 8000, 2121, 30000-30100 | ✅ Running |
+| `getmymoment_prod_web` | Next.js | 3000 | ✅ Running |
+| `getmymoment_prod_worker` | Celery Worker | - | ✅ Running |
+| `getmymoment_prod_redis` | Redis 7 | 6379 | ✅ Running |
+| `getmymoment_prod_postgres` | pgvector PostgreSQL | 5432 | ✅ Running |
 
 ---
 
-## 🌐 STEP 2: Deploy Frontend on Vercel (In 1 Minute)
+## ⚡ STEP 1: SSH into EC2
 
-1. Log in to **[vercel.com](https://vercel.com)** with your GitHub account.
-2. Click **"Add New..."** ➡️ **"Project"**.
-3. Select your repository: **`AD-NIMAVAT/Get_my_Moment`** and click **Import**.
-4. In the **Configure Project** screen:
-   * **Framework Preset**: Next.js (automatically detected)
-   * **Root Directory**: Click **Edit** ➡️ Select **`apps/web`** ➡️ Click **Continue**.
-   * **Environment Variables**: Add the following:
-     | Name | Value |
-     | :--- | :--- |
-     | `NEXT_PUBLIC_API_URL` | `https://web-production-08582.up.railway.app/api/v1` |
-     | `NEXT_PUBLIC_APP_URL` | `https://getmymoment.fun` |
-5. Click **"Deploy"**!
-6. Vercel will build and launch your site in ~45 seconds.
+```bash
+ssh -i "C:\Users\himalaya\Downloads\pro_technologies_124336.pem" ubuntu@16.170.81.162
+```
 
 ---
 
-## 🔗 STEP 3: Connect Your Domain (`getmymoment.fun`) on Vercel
+## 🔄 STEP 2: Deploy Latest Code
 
-1. In your Vercel Project ➡️ Go to **"Settings"** ➡️ **"Domains"**.
-2. Type `getmymoment.fun` and click **Add**.
-3. Vercel will prompt you to also add `www.getmymoment.fun` (recommended).
-4. In your DNS Provider (Hostinger DNS Table):
-   * Set **A Record** for `@` pointing to: `76.76.21.21`
-   * Set **CNAME Record** for `www` pointing to: `cname.vercel-dns.com.`
-5. Vercel will automatically issue a free SSL/TLS certificate!
+```bash
+cd /home/ubuntu/Get_my_Moment
+git pull origin main
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+---
+
+## 🌐 STEP 3: Nginx (System Service — NOT Docker)
+
+Nginx runs as a **system service** on EC2, not inside Docker.
+
+```bash
+# Status check
+sudo systemctl status nginx
+
+# Reload config
+sudo systemctl reload nginx
+
+# Config test
+sudo nginx -t
+```
+
+Config file: `/etc/nginx/sites-enabled/getmymoment`
+
+---
+
+## 📷 Wireless Camera FTP
+
+| Item | Value |
+| :--- | :--- |
+| **FTP Host** | `16.170.81.162` |
+| **FTP Port** | `2121` |
+| **Passive Ports** | `30000 - 30100` |
+| **Users** | `camera/shoot123`, `sony/sony123`, `canon/canon123`, `nikon/nikon123`, `fuji/fuji123` |
 
 ---
 
 ## ✅ Deployment Verification Checklist
 
-- [x] Backend API Health: `https://web-production-08582.up.railway.app/api/v1/health` returns `200 OK`
-- [ ] Vercel Frontend: `https://getmymoment.fun` loads landing page
-- [ ] Studio Registration & Login at `/login` connects to Railway API
-- [ ] Guest Selfie Search & QR Standee matching connects seamlessly
+- [x] Backend API Health: `https://getmymoment.fun/api/v1/health` returns `200 OK`
+- [x] Frontend: `https://getmymoment.fun` loads landing page
+- [x] SSL Certificate (Let's Encrypt): Active ✅
+- [x] Docker containers: All 5 running ✅
+- [x] Wireless Camera FTP: Port 2121 listening ✅

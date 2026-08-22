@@ -20,7 +20,7 @@ from pyftpdlib.servers import FTPServer
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("CameraBridge")
 
-DEFAULT_API_URL = "https://web-production-08582.up.railway.app/api/v1"
+DEFAULT_API_URL = "https://getmymoment.fun/api/v1"
 INCOMING_DIR = Path("./data/local_camera_incoming")
 INCOMING_DIR.mkdir(parents=True, exist_ok=True)
 
