@@ -34,7 +34,7 @@ export function WirelessCameraModal({
   const [folders, setFolders] = useState<FolderItem[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const [customIp, setCustomIp] = useState("192.168.31.37");
+  const [customIp, setCustomIp] = useState("");
   const [isEditingIp, setIsEditingIp] = useState(false);
   const [ingestedPhotos, setIngestedPhotos] = useState<Array<{ id: string; name: string; time: string; faces: number }>>([]);
   const [simulating, setSimulating] = useState(false);
@@ -58,12 +58,20 @@ export function WirelessCameraModal({
       if (foldersData.length > 0 && !selectedFolderId) {
         setSelectedFolderId(foldersData[0].id);
       }
+      // Use the host returned by API directly — private/internal IPs (10.x, 172.x) mean
+      // the server is behind NAT; in that case fall back to empty so effectiveIp uses the
+      // API value which already contains FTP_PUBLIC_HOST on AWS.
       if (credsData?.ftp_settings?.host) {
-        if (credsData.ftp_settings.host.startsWith("10.") || credsData.ftp_settings.host.startsWith("172.")) {
-          setCustomIp("192.168.31.37");
-        } else {
-          setCustomIp(credsData.ftp_settings.host);
+        const apiHost = credsData.ftp_settings.host;
+        const isPrivate =
+          apiHost.startsWith("10.") ||
+          apiHost.startsWith("172.") ||
+          apiHost.startsWith("127.");
+        // Only override customIp if the API returned a real public IP
+        if (!isPrivate) {
+          setCustomIp(apiHost);
         }
+        // If private, leave customIp empty so effectiveIp falls back to API host directly
       }
     } catch (e) {
       console.error("Could not load credentials", e);
@@ -113,7 +121,9 @@ export function WirelessCameraModal({
 
   if (!isOpen) return null;
 
-  const effectiveIp = customIp || credentials?.ftp_settings?.host || "192.168.31.37";
+  const apiHost = credentials?.ftp_settings?.host || "";
+  const isPrivateApiHost = apiHost.startsWith("10.") || apiHost.startsWith("172.") || apiHost.startsWith("127.");
+  const effectiveIp = customIp || (!isPrivateApiHost ? apiHost : "") || "";
   const ftpPort = credentials?.ftp_settings?.port || 2121;
   const destinationPath = `/${accessToken}`;
 
