@@ -41,13 +41,29 @@ def test_photo_pipeline_telemetry_timestamps(client, db_session):
     assert create_res.status_code == 201
     event_id = create_res.json()["id"]
 
-    # 1. Create photo in UPLOADED state
-    photo = Photo(
+    # 1. Create a 100x100 RGB dummy image
+    from PIL import Image
+    import io
+    from apps.api.services.storage import storage_service
+
+    img = Image.new("RGB", (100, 100), color=(73, 109, 137))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    file_bytes = buf.getvalue()
+
+    file_id, rel_path, file_size, sha256_hash = storage_service.save_original(
         event_id=event_id,
-        file_path="storage/photos/test_telemetry.jpg",
-        original_file_name="telemetry.jpg",
-        sha256_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        file_size=2048,
+        file_bytes=file_bytes,
+        original_filename="telemetry_test.jpg",
+    )
+
+    photo = Photo(
+        id=file_id,
+        event_id=event_id,
+        file_path=rel_path,
+        original_file_name="telemetry_test.jpg",
+        sha256_hash=sha256_hash,
+        file_size=file_size,
         mime_type="image/jpeg",
         status=PhotoStatus.UPLOADED.value,
     )
@@ -59,8 +75,13 @@ def test_photo_pipeline_telemetry_timestamps(client, db_session):
     dispatch_photo_processing(photo_id=photo.id, event_id=event_id, db=db_session)
     db_session.refresh(photo)
 
-    # In test mode, dispatch executes synchronously and records queued_at
+    # In test mode, dispatch executes synchronously and records telemetry
     assert photo.queued_at is not None
+    assert photo.processing_started_at is not None
+    assert photo.guest_ready_at is not None
+    assert photo.processing_duration_ms is not None
+    assert photo.processing_duration_ms >= 0
+    assert photo.status == PhotoStatus.PROCESSED.value
 
 
 def test_event_health_endpoint_and_tenancy(client, db_session):
