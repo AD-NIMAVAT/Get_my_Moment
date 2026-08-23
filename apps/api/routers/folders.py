@@ -125,9 +125,6 @@ def list_folders(
         Folder.deleted_at.is_(None)
     ).order_by(Folder.order_index.asc(), Folder.created_at.asc()).all()
 
-    # Reconcile counters
-    reconcile_folder_counters(db, event_id=event.id)
-
     # Build hierarchical tree
     folder_dict = {}
     root_folders = []

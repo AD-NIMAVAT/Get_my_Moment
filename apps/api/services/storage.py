@@ -63,8 +63,9 @@ class LocalStorageService(StorageService):
 
     def _safe_resolve(self, relative_path: str) -> str:
         """Resolve path and guard against directory traversal attacks."""
-        resolved = os.path.abspath(os.path.join(self.root_dir, relative_path.lstrip("/\\")))
-        if not resolved.startswith(self.root_dir):
+        norm_path = relative_path.replace("\\", "/").lstrip("/")
+        resolved = os.path.abspath(os.path.join(self.root_dir, norm_path))
+        if not (resolved == self.root_dir or resolved.startswith(self.root_dir + os.sep)):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Security Violation: Invalid file path traversal attempt."
