@@ -1,53 +1,46 @@
-# Get My Moment - P0 Security Remediation Plan
+# Get My Moment — P0 Security Remediation Plan
 
-**Target Phase:** P0 Security Foundation
-**Strategy:** Minimal, safe, reversible, non-disruptive remediation batches
-
----
-
-## 1. FIRST SAFE REMEDIATION BATCH (P0-BATCH-1)
-
-### Remediation Item 1: Original Photo Download Authorization Hardening (SEC-01)
-- **Files Affected:** pps/api/routers/photos.py
-- **Current Behavior:** If 	oken query param is not provided, the route streams the file without verifying photographer JWT or event token.
-- **Proposed Change:** Require either:
-  1. A valid 	oken matching event.access_token or event.selection_token (with event.allow_downloads == True), OR
-  2. An authenticated Photographer / AdminUser owning the event containing the photo.
-  3. If neither condition is met, return HTTP 401 Unauthorized / HTTP 403 Forbidden.
-- **Database Impact:** None.
-- **Infrastructure Impact:** None.
-- **Production Impact:** High security improvement. Zero impact on legitimate users.
-- **Required Tests:** Negative test verifying that unauthenticated request without token returns 401/403.
-- **Rollback:** Revert pps/api/routers/photos.py.
+**Target Phase:** P0 Security Foundation & Verification  
+**Strategy:** Minimal, safe, reversible, non-disruptive remediation batches  
+**Execution Status:** `P0-BATCH-1A (FIXED)`, `P0-BATCH-1B (FIXED)`, `P0-BATCH-1C (VERIFIED)`  
 
 ---
 
-### Remediation Item 2: Rate Limiting Middleware Implementation (SEC-02)
-- **Files Affected:** pps/api/main.py, pps/api/routers/auth.py, pps/api/routers/guest.py, pps/api/routers/matching.py, pps/api/routers/admin.py
-- **Current Behavior:** No rate limiting on expensive or brute-force-sensitive endpoints.
-- **Proposed Tier Limits:**
-  - POST /api/v1/auth/login: 5 req/min per IP
-  - POST /api/v1/admin/login: 3 req/5 min per IP
-  - POST /api/v1/admin/gateway-settings/unlock: 3 req/5 min per IP
-  - POST /api/v1/events/{id}/guests/register: 5 req/min per IP
-  - POST /api/v1/guests/{id}/otp/verify: 3 req/min per IP
-  - POST /api/v1/events/{id}/guests/{id}/search: 10 req/min per guest
-  - GET /api/v1/events/public/{token}: 20 req/min per IP
-  - GET /api/v1/photos/{id}/download: 30 req/min per token
-- **Database Impact:** None (uses Redis backend).
-- **Infrastructure Impact:** Minimal Redis memory footprint.
-- **Production Impact:** Prevents brute-force, OTP exhaustion, and CPU overload during live events.
-- **Required Tests:** Automated rate limit violation test verifying HTTP 429 response.
-- **Rollback:** Remove limiter decorators.
+## 1. COMPLETED REMEDIATION BATCHES
+
+### P0-BATCH-1A: Original Photo Download Authorization Hardening (SEC-01)
+- **Status:** `FIXED & PRODUCTION VERIFIED`
+- **Files Affected:** `apps/api/routers/photos.py`, `tests/security/test_download_auth.py`
+- **Implementation:** Server-side fail-closed authorization requiring valid capability token or photographer/admin JWT. Unauthenticated requests return HTTP 401.
+- **Verification:** 12/12 automated test cases passed. Verified live on EC2.
 
 ---
 
-### Remediation Item 3: Automated Daily Database Backup Script & Runbook (SEC-03)
-- **Files Affected:** scripts/backup_database.sh, docs/runbooks/backup-restore.md
-- **Current Behavior:** Manual baseline backup exists. No automated scheduling or encryption.
-- **Proposed Change:** Create a standardized, non-destructive backup shell script with timestamping, gzip compression, and integrity check.
-- **Database Impact:** Read-only snapshot (pg_dump); zero production disruption.
-- **Infrastructure Impact:** Minimal CPU/disk during scheduled off-peak hours (03:00 AM UTC).
-- **Production Impact:** High disaster-recovery reliability.
-- **Required Tests:** Test restoration into a temporary PostgreSQL database container.
-- **Rollback:** Remove cron entry.
+### P0-BATCH-1B: Redis-Backed Atomic Rate Limiting (SEC-02)
+- **Status:** `FIXED & PRODUCTION VERIFIED`
+- **Files Affected:** `apps/api/services/rate_limiter.py`, `apps/api/config.py`, routers (`auth.py`, `admin.py`, `guest.py`, `matching.py`, `events.py`, `photos.py`)
+- **Implementation:** Atomic Redis Lua sliding window with thread-safe in-memory fallback, trusted proxy client IP extraction, and SHA-256 privacy hashing.
+- **Verification:** 9/9 automated rate limit tests passed. Full test suite (93 tests) passed. Verified live on EC2.
+
+---
+
+### P0-BATCH-1C: PostgreSQL Backup & Restore Foundation (SEC-03)
+- **Status:** `FIXED & PRODUCTION VERIFIED`
+- **Files Affected:** `scripts/backup_database.sh`, `scripts/verify_restore.sh`, `docs/runbooks/backup-restore.md`, `tests/security/test_backup_restore.py`
+- **Implementation:** Production-safe PostgreSQL custom-format dump (`-F c`) with lockfile collision protection, SHA-256 checksums, and non-destructive isolated sandbox restore script.
+- **Verification:** Live isolated restore drill into sandbox database `gmm_restore_test_*` passed with 100% row-count parity across all 9 critical tables. Full suite (98 tests) passed.
+
+---
+
+## 2. PROPOSED NEXT BATCH: P0-BATCH-1D (BACKUP AUTOMATION ACTIVATION)
+
+*(Awaiting User Approval — Not Yet Implemented)*
+
+- **Objective:** Activate local daily automated backup cron based on approved 03:00 UTC schedule.
+- **Files Affected:** `/etc/cron.d/gmm-db-backup`, `scripts/backup_database.sh` (retention rotation logic).
+- **Scope:**
+  1. Install cron entry: `0 3 * * * ubuntu /home/ubuntu/Get_my_Moment/scripts/backup_database.sh >> /var/log/gmm_backup.log 2>&1`.
+  2. Implement rolling 7-successful-backup local retention cleanup.
+  3. Verify disk space safeguard (minimum 1 GB free).
+  4. Perform dry-run and single live manual invocation test.
+- **Rollback:** `rm -f /etc/cron.d/gmm-db-backup`.
