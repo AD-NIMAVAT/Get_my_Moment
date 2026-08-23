@@ -12,11 +12,13 @@ import {
   Camera, Sparkles, ShieldCheck, Download, Check, AlertCircle, 
   RefreshCw, X, ArrowRight, User, Phone, Lock, Eye, Image as ImageIcon, 
   UploadCloud, Share2, MessageSquare, Heart, LogOut, CheckCircle2,
-  ChevronRight, ArrowLeft, Layers, Folder as FolderIcon
+  ChevronRight, ChevronLeft, ArrowLeft, Layers, Folder as FolderIcon
 } from 'lucide-react';
 
 type Step = 'REGISTER' | 'OTP' | 'CONSENT' | 'SELFIE' | 'MATCHING' | 'GALLERY';
 type AuthMode = 'SIGNUP' | 'LOGIN';
+
+const GALLERY_PAGE_SIZE = 24;
 
 export default function GuestExperiencePage() {
   const params = useParams();
@@ -57,7 +59,8 @@ export default function GuestExperiencePage() {
 
   // Matching & Results State
   const [matchResult, setMatchResult] = useState<MatchSearchResult | null>(null);
-  const [selectedPhoto, setSelectedPhoto] = useState<PhotoItem | null>(null);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
+  const [visiblePhotosCount, setVisiblePhotosCount] = useState<number>(GALLERY_PAGE_SIZE);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -375,6 +378,42 @@ export default function GuestExperiencePage() {
     startCamera();
   };
 
+  // Keyboard navigation for photo modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (selectedPhotoIndex === null || !matchResult) return;
+      if (e.key === 'Escape') {
+        setSelectedPhotoIndex(null);
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        setSelectedPhotoIndex((prev) => 
+          prev !== null && prev < matchResult.matched_photos.length - 1 ? prev + 1 : 0
+        );
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        setSelectedPhotoIndex((prev) => 
+          prev !== null && prev > 0 ? prev - 1 : matchResult.matched_photos.length - 1
+        );
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedPhotoIndex, matchResult]);
+
+  const handleNextPhoto = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (selectedPhotoIndex === null || !matchResult) return;
+    setSelectedPhotoIndex((prev) => 
+      prev !== null && prev < matchResult.matched_photos.length - 1 ? prev + 1 : 0
+    );
+  };
+
+  const handlePrevPhoto = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (selectedPhotoIndex === null || !matchResult) return;
+    setSelectedPhotoIndex((prev) => 
+      prev !== null && prev > 0 ? prev - 1 : matchResult.matched_photos.length - 1
+    );
+  };
+
   // Sign Out / Switch Guest Handler
   const handleSignOut = (confirmUser: boolean = true) => {
     if (confirmUser && typeof window !== 'undefined') {
@@ -391,7 +430,8 @@ export default function GuestExperiencePage() {
     setSelfieBlob(null);
     setSelfiePreviewUrl(null);
     setMatchResult(null);
-    setSelectedPhoto(null);
+    setSelectedPhotoIndex(null);
+    setVisiblePhotosCount(GALLERY_PAGE_SIZE);
     setStep('REGISTER');
     setAuthMode('LOGIN');
   };
@@ -955,7 +995,7 @@ export default function GuestExperiencePage() {
             <div>
               {matchResult && matchResult.matched_photos.length > 0 ? (
                 <>
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                     <span className="text-xs font-bold text-[#1F1F1F]">
                       Found {matchResult.matched_photos.length} moments containing your face
                     </span>
@@ -968,12 +1008,13 @@ export default function GuestExperiencePage() {
                     </button>
                   </div>
 
+                  {/* Progressive / Paginated Grid */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {matchResult.matched_photos.map((photo) => (
+                    {matchResult.matched_photos.slice(0, visiblePhotosCount).map((photo, idx) => (
                       <div
                         key={photo.id}
-                        onClick={() => setSelectedPhoto(photo)}
-                        className="group relative aspect-square rounded-2xl overflow-hidden neu-card border border-[#E8E5E2] cursor-pointer"
+                        onClick={() => setSelectedPhotoIndex(idx)}
+                        className="group relative aspect-square rounded-2xl overflow-hidden neu-card border border-[#E8E5E2] cursor-pointer hover:border-[#E86A5B]/50 transition-all duration-300 shadow-sm"
                       >
                         <img
                           src={`${api.getApiBaseUrl().replace('/api/v1', '')}${photo.thumbnail_url}`}
@@ -989,6 +1030,22 @@ export default function GuestExperiencePage() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Load More Pagination Controls */}
+                  {visiblePhotosCount < matchResult.matched_photos.length && (
+                    <div className="mt-6 text-center space-y-2">
+                      <button
+                        onClick={() => setVisiblePhotosCount((prev) => prev + GALLERY_PAGE_SIZE)}
+                        className="btn-primary py-3 px-8 text-xs font-bold shadow-md shadow-[#E86A5B]/20 cursor-pointer inline-flex items-center gap-2"
+                      >
+                        <span>Load More Moments</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                      <p className="text-[11px] text-[#6B6B6B] font-medium">
+                        Showing {Math.min(visiblePhotosCount, matchResult.matched_photos.length)} of {matchResult.matched_photos.length} photos
+                      </p>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="p-10 rounded-3xl neu-card text-center">
@@ -1081,28 +1138,67 @@ export default function GuestExperiencePage() {
         </div>
       )}
 
-      {/* FULLSCREEN PHOTO PREVIEW MODAL */}
-      {selectedPhoto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center">
-            <button
-              onClick={() => setSelectedPhoto(null)}
-              className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white cursor-pointer"
-            >
-              <X className="w-6 h-6" />
-            </button>
+      {/* FULLSCREEN PHOTO PREVIEW MODAL WITH NEXT/PREV NAVIGATION */}
+      {selectedPhotoIndex !== null && matchResult && matchResult.matched_photos[selectedPhotoIndex] && (
+        <div 
+          onClick={() => setSelectedPhotoIndex(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center"
+          >
+            {/* Top Bar: Counter & Close */}
+            <div className="w-full flex items-center justify-between text-white/90 mb-3 px-2">
+              <span className="text-xs font-mono font-bold tracking-wide">
+                Moment {selectedPhotoIndex + 1} of {matchResult.matched_photos.length}
+              </span>
+              <button
+                onClick={() => setSelectedPhotoIndex(null)}
+                className="p-2 text-white/80 hover:text-white rounded-full bg-white/10 hover:bg-white/20 transition-all cursor-pointer"
+                title="Close (Esc)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            <img
-              src={`${api.getApiBaseUrl().replace('/api/v1', '')}${selectedPhoto.download_url}`}
-              alt={selectedPhoto.original_file_name}
-              className="max-h-[75vh] w-auto object-contain rounded-2xl shadow-2xl"
-            />
+            {/* Photo Container with Chevrons */}
+            <div className="relative w-full flex items-center justify-center">
+              {/* Previous Button */}
+              {matchResult.matched_photos.length > 1 && (
+                <button
+                  onClick={handlePrevPhoto}
+                  className="absolute left-2 sm:left-4 z-10 p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md transition-all cursor-pointer border border-white/20"
+                  title="Previous Photo (←)"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
+              )}
 
+              <img
+                src={`${api.getApiBaseUrl().replace('/api/v1', '')}${matchResult.matched_photos[selectedPhotoIndex].download_url}`}
+                alt={matchResult.matched_photos[selectedPhotoIndex].original_file_name}
+                className="max-h-[72vh] w-auto max-w-full object-contain rounded-2xl shadow-2xl"
+              />
+
+              {/* Next Button */}
+              {matchResult.matched_photos.length > 1 && (
+                <button
+                  onClick={handleNextPhoto}
+                  className="absolute right-2 sm:right-4 z-10 p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md transition-all cursor-pointer border border-white/20"
+                  title="Next Photo (→)"
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </button>
+              )}
+            </div>
+
+            {/* Bottom Actions */}
             <div className="mt-4 flex items-center gap-3">
               <a
-                href={`${api.getApiBaseUrl().replace('/api/v1', '')}${selectedPhoto.download_url}`}
-                download={selectedPhoto.original_file_name}
-                className="btn-primary py-2.5 px-6 text-xs font-bold flex items-center gap-1.5"
+                href={`${api.getApiBaseUrl().replace('/api/v1', '')}${matchResult.matched_photos[selectedPhotoIndex].download_url}`}
+                download={matchResult.matched_photos[selectedPhotoIndex].original_file_name}
+                className="btn-primary py-2.5 px-6 text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-[#E86A5B]/30"
               >
                 <Download className="w-4 h-4" />
                 <span>Download High-Res Photo</span>
