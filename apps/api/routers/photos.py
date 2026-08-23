@@ -5,6 +5,7 @@ Supports multi-tenant studio_id, folder_id target uploading, folder filtering, a
 
 import os
 import io
+import uuid
 import zipfile
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response, Form, Query
