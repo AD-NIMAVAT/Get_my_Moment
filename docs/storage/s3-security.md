@@ -32,7 +32,7 @@ The EC2 instance hosting Get My Moment must authenticate using an **IAM Instance
         "s3:DeleteObject",
         "s3:HeadObject"
       ],
-      "Resource": "arn:aws:s3:::getmymoment-photos-prod/*"
+      "Resource": "arn:aws:s3:::getmymoment-media-prod-347447669372-eunorth1/*"
     },
     {
       "Sid": "AllowBucketMetadataRead",
@@ -41,7 +41,7 @@ The EC2 instance hosting Get My Moment must authenticate using an **IAM Instance
         "s3:GetBucketLocation",
         "s3:ListBucket"
       ],
-      "Resource": "arn:aws:s3:::getmymoment-photos-prod"
+      "Resource": "arn:aws:s3:::getmymoment-media-prod-347447669372-eunorth1"
     }
   ]
 }
