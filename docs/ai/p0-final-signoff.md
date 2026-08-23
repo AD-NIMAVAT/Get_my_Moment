@@ -13,14 +13,15 @@
 ### **STATUS:** `P0_COMPLETE_WITH_ACCEPTED_RESIDUAL_RISK`
 
 **Rationale:**
-1. **Critical P0 Security Fixes Verified & Live:**
-   - **SEC-01 (Original Photo Download Authorization):** Fully resolved; server-side fail-closed token/JWT enforcement prevents unauthenticated/unauthorized photo access (12/12 negative & positive tests passed).
-   - **SEC-02 (Redis-Backed Atomic Rate Limiting):** Fully resolved; Lua sliding-window rate limiting protects login, admin, OTP, search, and download routes with fallback and privacy hashing (9/9 rate limit tests passed).
-   - **SEC-03 (PostgreSQL Backup & Restore Foundation):** Tooling built, validated, and verified via a live non-destructive isolated sandbox restore drill on the EC2 production server with 100% row-count parity across all 9 critical tables (5/5 backup tests passed).
-   - **SEC-04 (Biometric Data Map & Purge Design):** Architectural discovery completed; verified raw guest selfies and query vectors are transient in RAM (0 seconds at rest); purge engine and dry-run CLI fully designed.
-2. **Repository Integrity:** Full test suite (98 automated tests) passes at 100% with zero regressions.
+1. **Critical P0 Security & Operational Controls Verified & Live:**
+   - **SEC-01 (Original Photo Download Authorization):** `FIXED & PRODUCTION VERIFIED` (12/12 tests passed).
+   - **SEC-02 (Redis-Backed Atomic Rate Limiting):** `FIXED & PRODUCTION VERIFIED` (9/9 tests passed).
+   - **SEC-03 (PostgreSQL Backup & Restore Foundation):** `VERIFIED & PRODUCTION TESTED` (Isolated sandbox restore passed with 100% table and row-count parity).
+   - **SEC-04 (Biometric Data Map & Purge Design):** `DESIGN_COMPLETED` (Verified raw guest selfies and query vectors are transient in RAM, 0 seconds at rest).
+   - **P0-BATCH-1D (Backup Automation Activation):** `ACTIVATED & PRODUCTION VERIFIED` (Installed user crontab for `0 3 * * *` (03:00 UTC), rolling 7-backup retention rotation active, non-interactive execution verified, atomic status tracking in `backup_status.json`).
+2. **Repository Integrity:** Full test suite (100 automated tests) passes at 100% with zero regressions.
 3. **Accepted Residual Risk:** Plain FTP on camera ingest port 2121 lacks TLS transport encryption due to legacy camera hardware firmware constraints; sandboxed to incoming queue.
-4. **Follow-Up Batch:** Backup automation activation scheduled for `P0-BATCH-1D`.
+4. **Production Health:** Live API at `https://getmymoment.fun/api/v1/health` returns `HTTP 200 OK` (`database: ok`).
 
 ---
 
