@@ -39,6 +39,18 @@ class StorageService:
     def get_absolute_path(self, relative_path: str) -> str:
         raise NotImplementedError
 
+    def get_file_bytes(self, file_path: str) -> bytes:
+        raise NotImplementedError
+
+    def object_exists(self, file_path: str) -> bool:
+        raise NotImplementedError
+
+    def get_presigned_url(self, file_path: str, expires_in: Optional[int] = None) -> str:
+        raise NotImplementedError
+
+    def materialize_to_temp_file(self, file_path: str) -> str:
+        raise NotImplementedError
+
 
 class LocalStorageService(StorageService):
     """Local filesystem storage driver with multi-tenant path isolation and path traversal protections."""
@@ -239,6 +251,47 @@ class LocalStorageService(StorageService):
         except Exception:
             pass
         return False
+
+    def get_file_bytes(self, file_path: str) -> bytes:
+        abs_path = self._safe_resolve(file_path)
+        if not os.path.exists(abs_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="File not found in local storage."
+            )
+        with open(abs_path, "rb") as f:
+            return f.read()
+
+    def object_exists(self, file_path: str) -> bool:
+        try:
+            abs_path = self._safe_resolve(file_path)
+            return os.path.exists(abs_path)
+        except Exception:
+            return False
+
+    def get_presigned_url(self, file_path: str, expires_in: Optional[int] = None) -> str:
+        """For local storage driver, returns relative web asset path."""
+        norm_path = file_path.replace("\\", "/").lstrip("/")
+        return f"/api/v1/storage/{norm_path}"
+
+    def materialize_to_temp_file(self, file_path: str) -> str:
+        """For local storage, the file is already on local disk; returns absolute path."""
+        return self._safe_resolve(file_path)
+
+
+def get_storage_service() -> StorageService:
+    """
+    Factory function for storage service instantiation based on STORAGE_DRIVER.
+    Defaults to LocalStorageService.
+    """
+    driver = getattr(settings, "STORAGE_DRIVER", "local").lower()
+    if driver == "local":
+        return LocalStorageService()
+    elif driver == "s3":
+        from apps.api.services.s3_storage import S3StorageService
+        return S3StorageService()
+    else:
+        raise ValueError(f"Unsupported STORAGE_DRIVER: '{driver}'. Supported values: 'local', 's3'.")
 
 
 def get_or_create_uncategorized_folder(db: Session, studio_id: str, event_id: str):
