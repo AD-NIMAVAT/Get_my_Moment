@@ -97,7 +97,7 @@ def rate_limit_env():
         event_id=evt_a.id,
         name="Alice Guest",
         mobile="+919876543210",
-        is_verified=True,
+        otp_verified=True,
     )
     db.add(guest_a)
     db.commit()
