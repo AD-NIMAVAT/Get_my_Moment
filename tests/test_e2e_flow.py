@@ -123,8 +123,8 @@ def test_complete_end_to_end_lifecycle(client: TestClient, db_session):
     matched_photo = search_data["matched_photos"][0]
     assert matched_photo["id"] == photo1_id
 
-    # Step 8: Download Matched Photo
-    download_res = client.get(f"/api/v1/photos/{photo1_id}/download")
+    # Step 8: Download Matched Photo with Valid Guest Capability Token
+    download_res = client.get(f"/api/v1/photos/{photo1_id}/download?token={access_token}")
     assert download_res.status_code == 200
     assert len(download_res.content) == len(photo1_bytes)
 

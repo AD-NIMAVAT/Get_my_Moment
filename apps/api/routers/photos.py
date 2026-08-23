@@ -8,10 +8,12 @@ import io
 import uuid
 import zipfile
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response, Form, Query, Header
 from fastapi.responses import FileResponse
+from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from apps.api.database import get_db
+from apps.api.config import settings
 from apps.api.models import Event, Photo, Photographer, Folder, FolderType
 from apps.api.auth import get_current_photographer
 from apps.api.schemas.photo import PhotoResponse, PhotoBatchUploadResponse
@@ -255,7 +257,8 @@ def get_photo_thumbnail(
 @router.get("/photos/{photo_id}/download")
 def download_original_photo(
     photo_id: str,
-    token: Optional[str] = None,
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """Secure direct download endpoint for high-resolution original photos."""
@@ -263,12 +266,44 @@ def download_original_photo(
     if not photo:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found.")
 
+    event = db.query(Event).filter(Event.id == photo.event_id).first()
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+
+    is_authorized = False
+
+    # Path A: Valid Guest or Selection Capability Token
     if token:
-        event = db.query(Event).filter(Event.id == photo.event_id).first()
-        if not event or (event.access_token != token and event.selection_token != token):
+        if event.access_token == token or event.selection_token == token:
+            if not event.allow_downloads:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Photo downloads are disabled for this event.")
+            is_authorized = True
+        else:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid download token.")
-        if not event.allow_downloads:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Photo downloads are disabled for this event.")
+
+    # Path B: Authenticated Photographer or Admin JWT
+    elif authorization and authorization.startswith("Bearer "):
+        bearer_token = authorization.split(" ", 1)[1].strip()
+        try:
+            payload = jwt.decode(bearer_token, settings.SECRET_KEY, algorithms=["HS256"])
+            is_admin = payload.get("is_admin", False)
+            user_id = payload.get("sub")
+            if is_admin:
+                is_authorized = True
+            elif user_id and event.photographer_id == user_id:
+                is_authorized = True
+            else:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to download photos from this event.")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials.")
+
+    if not is_authorized:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please provide a valid download token or bearer credentials."
+        )
 
     abs_path = storage_service.get_absolute_path(photo.file_path) if not os.path.isabs(photo.file_path) else photo.file_path
     if not os.path.exists(abs_path):
@@ -287,6 +322,7 @@ def download_all_photos_as_zip(
     event_id: str,
     filter_type: Optional[str] = Query("all", enum=["all", "studio", "guest"]),
     token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -297,11 +333,40 @@ def download_all_photos_as_zip(
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
 
+    is_authorized = False
+
+    # Path A: Valid Guest or Selection Capability Token
     if token:
-        if event.access_token != token and event.selection_token != token:
+        if event.access_token == token or event.selection_token == token:
+            if not event.allow_downloads:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Downloads disabled for this event.")
+            is_authorized = True
+        else:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid access token.")
-        if not event.allow_downloads:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Downloads disabled for this event.")
+
+    # Path B: Authenticated Photographer or Admin JWT
+    elif authorization and authorization.startswith("Bearer "):
+        bearer_token = authorization.split(" ", 1)[1].strip()
+        try:
+            payload = jwt.decode(bearer_token, settings.SECRET_KEY, algorithms=["HS256"])
+            is_admin = payload.get("is_admin", False)
+            user_id = payload.get("sub")
+            if is_admin:
+                is_authorized = True
+            elif user_id and event.photographer_id == user_id:
+                is_authorized = True
+            else:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to download photos from this event.")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials.")
+
+    if not is_authorized:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please provide a valid download token or bearer credentials."
+        )
 
     query = db.query(Photo).filter(Photo.event_id == event.id, Photo.is_deleted == False)
     if filter_type == "studio":
