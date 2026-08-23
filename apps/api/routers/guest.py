@@ -25,6 +25,7 @@ from apps.api.schemas.matching import (
 )
 from apps.api.schemas.photo import PhotoResponse
 from apps.api.services.otp_service import otp_service
+from apps.api.services.rate_limiter import enforce_rate_limit, hash_identifier
 from apps.api.config import settings
 from packages.shared.constants import EventStatus, PhotoStatus
 
@@ -56,12 +57,20 @@ def generate_guest_session_token(guest_id: str, event_id: str) -> str:
 def register_guest(
     event_id: str,
     request: GuestRegisterRequest,
+    raw_req: Request,
     db: Session = Depends(get_db)
 ):
     """
-    Register an event guest before selfie capture.
+    Register an event guest before selfie capture with rate limiting protection.
     Supports both event ID and access token for seamless mobile QR resolution.
     """
+    enforce_rate_limit(
+        request=raw_req,
+        endpoint_tag="guest_register",
+        limit_expr=settings.RATE_LIMIT_GUEST_REGISTER,
+        custom_scope=f"evt_{hash_identifier(event_id)}",
+    )
+
     event = db.query(Event).filter(
         (Event.id == event_id) | (Event.access_token == event_id)
     ).first()
@@ -205,13 +214,21 @@ def record_guest_consent(
 def login_guest(
     event_id: str,
     request: GuestLoginRequest,
+    raw_req: Request,
     db: Session = Depends(get_db)
 ):
     """
-    Returning Guest Login by Mobile Number.
+    Returning Guest Login by Mobile Number with rate limiting.
     Validates event existence and looks up existing guest registration.
     Issues a signed guest session token and returns match status for instant restoration.
     """
+    enforce_rate_limit(
+        request=raw_req,
+        endpoint_tag="guest_login",
+        limit_expr=settings.RATE_LIMIT_GUEST_REGISTER,
+        custom_scope=f"evt_{hash_identifier(event_id)}",
+    )
+
     event = db.query(Event).filter(
         (Event.id == event_id) | (Event.access_token == event_id)
     ).first()

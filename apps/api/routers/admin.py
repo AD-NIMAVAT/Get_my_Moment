@@ -4,12 +4,14 @@ Get My Moment - Super Admin & Platform Owner Master Control Router
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel, EmailStr
 
 from apps.api.database import get_db
+from apps.api.config import settings
+from apps.api.services.rate_limiter import enforce_rate_limit, hash_identifier
 from apps.api.models import (
     AdminUser, Photographer, Event, Photo, Face, FaceEmbedding, 
     Guest, GuestSearch, Lead, PaymentMilestone, EventExpense, 
@@ -178,8 +180,16 @@ class AdminEventItem(BaseModel):
 # --- Routes ---
 
 @router.post("/auth/login", response_model=AdminLoginResponse)
-def admin_login(req: AdminLoginRequest, db: Session = Depends(get_db)):
-    """Super Admin Login with isolated JWT token."""
+def admin_login(req: AdminLoginRequest, raw_req: Request, db: Session = Depends(get_db)):
+    """Super Admin Login with isolated JWT token and strict rate limiting."""
+    enforce_rate_limit(
+        request=raw_req,
+        endpoint_tag="admin_login",
+        limit_expr=settings.RATE_LIMIT_ADMIN_LOGIN,
+        custom_scope=f"adm_{hash_identifier(req.email)}",
+        fail_closed=True,
+    )
+
     admin = db.query(AdminUser).filter(AdminUser.email == req.email.lower()).first()
     
     # Auto-seed initial root superadmin if no admin exists
@@ -708,11 +718,21 @@ class UpdateGatewaySettingsRequest(BaseModel):
 @router.post("/gateway-settings/unlock")
 def unlock_gateway_vault(
     req: UnlockVaultRequest,
+    raw_req: Request,
     current_admin: AdminUser = Depends(get_current_admin)
 ):
     """
     Verify SuperAdmin security password to unlock the Bank Account & Gateway configuration vault.
+    Strictly rate limited to prevent brute-force attacks.
     """
+    enforce_rate_limit(
+        request=raw_req,
+        endpoint_tag="admin_unlock",
+        limit_expr=settings.RATE_LIMIT_ADMIN_UNLOCK,
+        custom_scope=f"adm_{hash_identifier(current_admin.id)}",
+        fail_closed=True,
+    )
+
     if not verify_password(req.password, current_admin.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

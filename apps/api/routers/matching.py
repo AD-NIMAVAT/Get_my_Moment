@@ -4,7 +4,7 @@ AI Selfie Search and Event-Scoped Facial Vector Matching Router
 
 import time
 from typing import List, Dict
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from apps.api.database import get_db
@@ -13,6 +13,7 @@ from apps.api.schemas.matching import SelfieSearchResponse
 from apps.api.schemas.photo import PhotoResponse
 from apps.api.services.ai_service import ai_service
 from apps.api.services.storage import storage_service
+from apps.api.services.rate_limiter import enforce_rate_limit, hash_identifier
 from apps.api.config import settings
 from packages.shared.constants import PhotoStatus
 
@@ -23,19 +24,29 @@ router = APIRouter(tags=["AI Facial Search & Matching"])
 async def search_event_photos_by_selfie(
     event_id: str,
     guest_id: str,
+    raw_req: Request,
     selfie: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
     """
-    Event-Only AI Facial Matching:
-    1. Validates event existence and active status.
-    2. Validates guest registration and explicit face-search consent.
-    3. Validates selfie (single face presence; rejects multiple faces or no-face photos).
-    4. Computes 128-d selfie embedding.
-    5. Performs vector similarity search strictly scoped by event_id (WHERE event_id = :event_id).
-    6. Returns private matching gallery photos with similarity ranking.
-    7. Cleans up transient selfie data.
+    Event-Only AI Facial Matching with rate limiting protection:
+    1. Enforces rate limits to protect CPU/AI compute resources.
+    2. Validates event existence and active status.
+    3. Validates guest registration and explicit face-search consent.
+    4. Validates selfie (single face presence; rejects multiple faces or no-face photos).
+    5. Computes 128-d selfie embedding.
+    6. Performs vector similarity search strictly scoped by event_id (WHERE event_id = :event_id).
+    7. Returns private matching gallery photos with similarity ranking.
+    8. Cleans up transient selfie data.
     """
+    enforce_rate_limit(
+        request=raw_req,
+        endpoint_tag="face_search",
+        limit_expr=settings.RATE_LIMIT_FACE_SEARCH,
+        custom_scope=f"evt_{hash_identifier(event_id)}_gst_{hash_identifier(guest_id)}",
+        fail_closed=False,
+    )
+
     start_time = time.time()
 
     # 1. Event verification

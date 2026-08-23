@@ -5,10 +5,12 @@ Event Management and QR Router
 import re
 from datetime import datetime
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from apps.api.database import get_db
+from apps.api.config import settings
+from apps.api.services.rate_limiter import enforce_rate_limit, hash_identifier
 from apps.api.models import (
     Event, Photo, Guest, Photographer,
     PaymentMilestone, EventExpense, Ceremony, CrewMember, EventTask,
@@ -440,8 +442,15 @@ def get_event_qr_code(event_id: str, db: Session = Depends(get_db)):
 
 # Public guest lookup endpoint
 @router.get("/public/by-token/{access_token}", response_model=PublicEventResponse)
-def get_public_event_by_token(access_token: str, db: Session = Depends(get_db)):
-    """Public endpoint: resolves event details by public access token for guest landing page."""
+def get_public_event_by_token(access_token: str, raw_req: Request, db: Session = Depends(get_db)):
+    """Public endpoint: resolves event details by public access token for guest landing page with rate limiting."""
+    enforce_rate_limit(
+        request=raw_req,
+        endpoint_tag="public_token",
+        limit_expr=settings.RATE_LIMIT_PUBLIC_TOKEN,
+        custom_scope=f"tok_{hash_identifier(access_token)}",
+    )
+
     event = db.query(Event).filter(Event.access_token == access_token).first()
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid event QR code or link.")

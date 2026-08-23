@@ -3,12 +3,13 @@ import io
 from datetime import datetime, timedelta
 from typing import Optional
 from PIL import Image
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from apps.api.config import settings
 from apps.api.database import get_db
+from apps.api.services.rate_limiter import enforce_rate_limit, hash_identifier
 from apps.api.models.photographer import Photographer
 from apps.api.models.event import Event
 from apps.api.models.photo import Photo
@@ -89,8 +90,16 @@ def signup(request: PhotographerSignupRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(request: PhotographerLoginRequest, db: Session = Depends(get_db)):
-    """Log in an existing photographer and issue a JWT token."""
+def login(request: PhotographerLoginRequest, raw_req: Request, db: Session = Depends(get_db)):
+    """Log in an existing photographer and issue a JWT token with rate limiting protection."""
+    enforce_rate_limit(
+        request=raw_req,
+        endpoint_tag="auth_login",
+        limit_expr=settings.RATE_LIMIT_AUTH_LOGIN,
+        custom_scope=f"acc_{hash_identifier(request.email)}",
+        fail_closed=True,
+    )
+
     photographer = db.query(Photographer).filter(Photographer.email == request.email.lower()).first()
     if not photographer or not verify_password(request.password, photographer.password_hash):
         raise HTTPException(

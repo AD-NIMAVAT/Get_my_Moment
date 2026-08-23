@@ -8,12 +8,13 @@ import io
 import uuid
 import zipfile
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response, Form, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response, Form, Query, Header, Request
 from fastapi.responses import FileResponse
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from apps.api.database import get_db
 from apps.api.config import settings
+from apps.api.services.rate_limiter import enforce_rate_limit, hash_identifier
 from apps.api.models import Event, Photo, Photographer, Folder, FolderType
 from apps.api.auth import get_current_photographer
 from apps.api.schemas.photo import PhotoResponse, PhotoBatchUploadResponse
@@ -257,11 +258,19 @@ def get_photo_thumbnail(
 @router.get("/photos/{photo_id}/download")
 def download_original_photo(
     photo_id: str,
+    raw_req: Request,
     token: Optional[str] = Query(None),
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
-    """Secure direct download endpoint for high-resolution original photos."""
+    """Secure direct download endpoint for high-resolution original photos with abuse rate limiting."""
+    enforce_rate_limit(
+        request=raw_req,
+        endpoint_tag="photo_download",
+        limit_expr=settings.RATE_LIMIT_PHOTO_DOWNLOAD,
+        custom_scope=f"tok_{hash_identifier(token)}" if token else "bearer",
+    )
+
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found.")
@@ -320,6 +329,7 @@ def download_original_photo(
 @router.get("/events/{event_id}/download-all-zip")
 def download_all_photos_as_zip(
     event_id: str,
+    raw_req: Request,
     filter_type: Optional[str] = Query("all", enum=["all", "studio", "guest"]),
     token: Optional[str] = Query(None),
     authorization: Optional[str] = Header(None),
@@ -327,8 +337,15 @@ def download_all_photos_as_zip(
 ):
     """
     Downloads all event photos packaged as a structured nested ZIP archive.
-    Preserves folders (e.g. 01_Haldi/, 02_Mehendi/, Uncategorized/).
+    Preserves folders (e.g. 01_Haldi/, 02_Mehendi/, Uncategorized/) with rate limiting.
     """
+    enforce_rate_limit(
+        request=raw_req,
+        endpoint_tag="zip_download",
+        limit_expr=settings.RATE_LIMIT_ZIP_DOWNLOAD,
+        custom_scope=f"evt_{hash_identifier(event_id)}",
+    )
+
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")

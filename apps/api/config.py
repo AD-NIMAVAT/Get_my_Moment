@@ -90,6 +90,18 @@ class Settings(BaseSettings):
     NEXT_PUBLIC_API_URL: str = "http://localhost:8000/api/v1"
     NEXT_PUBLIC_APP_URL: str = "http://localhost:3000"
 
+    # Initial Tunable Endpoint Rate Limits (Configurable via Environment)
+    RATE_LIMIT_AUTH_LOGIN: str = "5/minute"
+    RATE_LIMIT_ADMIN_LOGIN: str = "3/5minute"
+    RATE_LIMIT_ADMIN_UNLOCK: str = "3/5minute"
+    RATE_LIMIT_GUEST_REGISTER: str = "10/minute"
+    RATE_LIMIT_OTP_SEND: str = "3/minute"
+    RATE_LIMIT_OTP_VERIFY: str = "5/minute"
+    RATE_LIMIT_PUBLIC_TOKEN: str = "30/minute"
+    RATE_LIMIT_FACE_SEARCH: str = "10/minute"
+    RATE_LIMIT_PHOTO_DOWNLOAD: str = "40/minute"
+    RATE_LIMIT_ZIP_DOWNLOAD: str = "5/minute"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
