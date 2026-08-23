@@ -2,13 +2,16 @@ import io
 import uuid
 import pytest
 from PIL import Image
-from fastapi.testclient import TestClient
-from apps.api.main import app
-from apps.api.database import SessionLocal
-from apps.api.models import Photographer, Event, Photo, Folder, AdminUser
-from apps.api.auth import hash_password, create_access_token
+from starlette.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-client = TestClient(app)
+from apps.api.database import Base, get_db
+from apps.api.main import app
+from apps.api.models import Photographer, Event, Folder, FolderType, Photo, AdminUser
+from apps.api.auth import hash_password, create_access_token
+from apps.api.services.storage import storage_service
 
 def create_dummy_jpeg():
     buf = io.BytesIO()
@@ -17,9 +20,26 @@ def create_dummy_jpeg():
     return buf.getvalue()
 
 @pytest.fixture(scope='module')
-def setup_tenants_and_photos():
-    db = SessionLocal()
-    
+def sec_download_env():
+    engine = create_engine(
+        'sqlite:///:memory:',
+        connect_args={'check_same_thread': False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    def override_get_db():
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+    db = TestingSessionLocal()
+
     # 1. Setup Studio A
     uid1 = uuid.uuid4().hex[:6]
     p1 = Photographer(
@@ -89,9 +109,6 @@ def setup_tenants_and_photos():
 
     # Upload Photo to Event A
     jpeg_data = create_dummy_jpeg()
-    import os
-    from apps.api.services.storage import storage_service
-    
     file_path_a = storage_service.save_file(
         file_bytes=jpeg_data,
         original_filename='photo_a.jpg',
@@ -156,6 +173,7 @@ def setup_tenants_and_photos():
     jwt_admin = create_access_token({'sub': admin.id, 'role': 'SUPER_ADMIN', 'is_admin': True})
 
     data = {
+        'client': client,
         'p1_jwt': jwt_p1,
         'p2_jwt': jwt_p2,
         'admin_jwt': jwt_admin,
@@ -167,69 +185,94 @@ def setup_tenants_and_photos():
         'photo_a_nodl': photo_a_nodl
     }
     yield data
+    app.dependency_overrides.clear()
     db.close()
 
-def test_1_no_token_unauthenticated_denied(setup_tenants_and_photos):
-    photo_a = setup_tenants_and_photos['photo_a']
+def test_1_no_token_unauthenticated_denied(sec_download_env):
+    client = sec_download_env['client']
+    photo_a = sec_download_env['photo_a']
     res = client.get('/api/v1/photos/' + photo_a.id + '/download')
     assert res.status_code == 401
     assert 'Authentication required' in res.json()['detail']
 
-def test_2_invalid_token_denied(setup_tenants_and_photos):
-    photo_a = setup_tenants_and_photos['photo_a']
+def test_2_invalid_token_denied(sec_download_env):
+    client = sec_download_env['client']
+    photo_a = sec_download_env['photo_a']
     res = client.get('/api/v1/photos/' + photo_a.id + '/download?token=totally_fake_token_12345')
     assert res.status_code == 403
     assert 'Invalid download token' in res.json()['detail']
 
-def test_3_event_a_token_on_event_b_photo_denied(setup_tenants_and_photos):
-    event_a = setup_tenants_and_photos['event_a']
-    photo_b = setup_tenants_and_photos['photo_b']
+def test_3_event_a_token_on_event_b_photo_denied(sec_download_env):
+    client = sec_download_env['client']
+    event_a = sec_download_env['event_a']
+    photo_b = sec_download_env['photo_b']
     res = client.get('/api/v1/photos/' + photo_b.id + '/download?token=' + event_a.access_token)
     assert res.status_code == 403
     assert 'Invalid download token' in res.json()['detail']
 
-def test_4_valid_event_a_token_allowed(setup_tenants_and_photos):
-    event_a = setup_tenants_and_photos['event_a']
-    photo_a = setup_tenants_and_photos['photo_a']
+def test_4_valid_event_a_token_allowed(sec_download_env):
+    client = sec_download_env['client']
+    event_a = sec_download_env['event_a']
+    photo_a = sec_download_env['photo_a']
     res = client.get('/api/v1/photos/' + photo_a.id + '/download?token=' + event_a.access_token)
     assert res.status_code == 200
     assert len(res.content) > 0
 
-def test_5_photographer_a_jwt_allowed_own_photo(setup_tenants_and_photos):
-    p1_jwt = setup_tenants_and_photos['p1_jwt']
-    photo_a = setup_tenants_and_photos['photo_a']
+def test_5_photographer_a_jwt_allowed_own_photo(sec_download_env):
+    client = sec_download_env['client']
+    p1_jwt = sec_download_env['p1_jwt']
+    photo_a = sec_download_env['photo_a']
     res = client.get('/api/v1/photos/' + photo_a.id + '/download', headers={'Authorization': 'Bearer ' + p1_jwt})
     assert res.status_code == 200
     assert len(res.content) > 0
 
-def test_6_photographer_a_jwt_denied_photographer_b_photo(setup_tenants_and_photos):
-    p1_jwt = setup_tenants_and_photos['p1_jwt']
-    photo_b = setup_tenants_and_photos['photo_b']
+def test_6_photographer_a_jwt_denied_photographer_b_photo(sec_download_env):
+    client = sec_download_env['client']
+    p1_jwt = sec_download_env['p1_jwt']
+    photo_b = sec_download_env['photo_b']
     res = client.get('/api/v1/photos/' + photo_b.id + '/download', headers={'Authorization': 'Bearer ' + p1_jwt})
     assert res.status_code == 403
 
-def test_7_downloads_disabled_on_event_denied(setup_tenants_and_photos):
-    event_a_nodl = setup_tenants_and_photos['event_a_nodl']
-    photo_a_nodl = setup_tenants_and_photos['photo_a_nodl']
+def test_7_downloads_disabled_on_event_denied(sec_download_env):
+    client = sec_download_env['client']
+    event_a_nodl = sec_download_env['event_a_nodl']
+    photo_a_nodl = sec_download_env['photo_a_nodl']
     res = client.get('/api/v1/photos/' + photo_a_nodl.id + '/download?token=' + event_a_nodl.access_token)
     assert res.status_code == 403
     assert 'disabled' in res.json()['detail'].lower()
 
-def test_8_selection_token_allowed_own_event_photo(setup_tenants_and_photos):
-    event_a = setup_tenants_and_photos['event_a']
-    photo_a = setup_tenants_and_photos['photo_a']
+def test_8_selection_token_allowed_own_event_photo(sec_download_env):
+    client = sec_download_env['client']
+    event_a = sec_download_env['event_a']
+    photo_a = sec_download_env['photo_a']
     res = client.get('/api/v1/photos/' + photo_a.id + '/download?token=' + event_a.selection_token)
     assert res.status_code == 200
     assert len(res.content) > 0
 
-def test_9_selection_token_denied_foreign_event_photo(setup_tenants_and_photos):
-    event_a = setup_tenants_and_photos['event_a']
-    photo_b = setup_tenants_and_photos['photo_b']
+def test_9_selection_token_denied_foreign_event_photo(sec_download_env):
+    client = sec_download_env['client']
+    event_a = sec_download_env['event_a']
+    photo_b = sec_download_env['photo_b']
     res = client.get('/api/v1/photos/' + photo_b.id + '/download?token=' + event_a.selection_token)
     assert res.status_code == 403
 
-def test_10_superadmin_jwt_allowed_any_photo(setup_tenants_and_photos):
-    admin_jwt = setup_tenants_and_photos['admin_jwt']
-    photo_b = setup_tenants_and_photos['photo_b']
+def test_10_superadmin_jwt_allowed_any_photo(sec_download_env):
+    client = sec_download_env['client']
+    admin_jwt = sec_download_env['admin_jwt']
+    photo_b = sec_download_env['photo_b']
     res = client.get('/api/v1/photos/' + photo_b.id + '/download', headers={'Authorization': 'Bearer ' + admin_jwt})
     assert res.status_code == 200
+
+def test_11_zip_download_unauthenticated_no_token_denied(sec_download_env):
+    client = sec_download_env['client']
+    event_a = sec_download_env['event_a']
+    res = client.get('/api/v1/events/' + event_a.id + '/download-all-zip')
+    assert res.status_code == 401
+
+def test_12_zip_download_photographer_jwt_allowed(sec_download_env):
+    client = sec_download_env['client']
+    p1_jwt = sec_download_env['p1_jwt']
+    event_a = sec_download_env['event_a']
+    res = client.get('/api/v1/events/' + event_a.id + '/download-all-zip', headers={'Authorization': 'Bearer ' + p1_jwt})
+    assert res.status_code == 200
+    assert res.headers['content-type'] == 'application/zip'
