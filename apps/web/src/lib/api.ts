@@ -138,7 +138,9 @@ export interface EventHealthData {
   photos_processing: number;
   photos_ready: number;
   photos_failed: number;
-  queue_depth: number;
+  queue_depth?: number | null;
+  queue_metrics_unavailable?: boolean;
+  oldest_queue_age_seconds?: number | null;
   avg_processing_duration_ms?: number;
   p95_processing_duration_ms?: number;
   avg_ai_inference_ms?: number;

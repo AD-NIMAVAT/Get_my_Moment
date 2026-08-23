@@ -27,28 +27,38 @@ class QueueTelemetryService:
             except Exception as e:
                 logger.debug(f"Redis client initialization failed: {e}")
                 self._redis_client = None
-        return self._redis_client
-
-    def get_queue_depth(self, queue_name: str = "celery") -> int:
-        """Get the current number of pending tasks in the Redis queue."""
+    def is_available(self) -> bool:
+        """Check if Redis broker is reachable."""
         r = self._get_redis()
         if not r:
-            return 0
+            return False
+        try:
+            return bool(r.ping())
+        except Exception:
+            return False
+
+    def get_queue_depth(self, queue_name: str = "celery") -> Optional[int]:
+        """Get the current number of pending tasks in the Redis queue, or None if Redis is unavailable."""
+        r = self._get_redis()
+        if not r:
+            return None
         try:
             length = r.llen(queue_name)
             return int(length) if length is not None else 0
         except Exception as e:
             logger.debug(f"Error fetching queue depth from Redis: {e}")
-            return 0
+            return None
 
     def get_pipeline_telemetry(self) -> Dict[str, Any]:
         """Aggregate safe operational queue metrics without exposing secrets."""
         depth = self.get_queue_depth()
+        unavailable = depth is None
         return {
             "queue_name": "celery",
             "queue_depth": depth,
+            "queue_metrics_unavailable": unavailable,
             "broker_type": "redis",
-            "is_backlogged": depth > 50,
+            "is_backlogged": depth is not None and depth > 50,
         }
 
 

@@ -566,15 +566,27 @@ def get_event_health_telemetry(
         if ai_times:
             avg_ai = int(sum(ai_times) / len(ai_times))
 
-    # 4. Queue depth from Redis
-    q_depth = queue_telemetry.get_queue_depth()
+    # 4. Oldest pending photo in queue age
+    oldest_queued = db.query(func.min(Photo.queued_at)).filter(
+        Photo.event_id == event_id,
+        Photo.status.in_([PhotoStatus.UPLOADED.value, PhotoStatus.PROCESSING.value]),
+        Photo.queued_at.isnot(None),
+        Photo.is_deleted == False
+    ).scalar()
+    oldest_queue_age = None
+    if oldest_queued:
+        oldest_queue_age = max(0, int((datetime.utcnow() - oldest_queued).total_seconds()))
 
-    # 5. Pipeline health assessment
+    # 5. Queue depth from Redis
+    q_depth = queue_telemetry.get_queue_depth()
+    q_unavailable = (q_depth is None)
+
+    # 6. Pipeline health assessment
     if photos_failed > 0:
         pipeline_health = "ATTENTION_REQUIRED"
-    elif q_depth > 50:
+    elif q_depth is not None and q_depth > 50:
         pipeline_health = "BACKLOG"
-    elif photos_processing > 0 or q_depth > 0:
+    elif photos_processing > 0 or (q_depth is not None and q_depth > 0):
         pipeline_health = "PROCESSING"
     else:
         pipeline_health = "HEALTHY"
@@ -590,6 +602,8 @@ def get_event_health_telemetry(
         photos_ready=photos_ready,
         photos_failed=photos_failed,
         queue_depth=q_depth,
+        queue_metrics_unavailable=q_unavailable,
+        oldest_queue_age_seconds=oldest_queue_age,
         avg_processing_duration_ms=avg_duration,
         p95_processing_duration_ms=p95_duration,
         avg_ai_inference_ms=avg_ai,

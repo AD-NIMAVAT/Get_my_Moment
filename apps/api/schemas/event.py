@@ -82,7 +82,9 @@ class EventHealthResponse(BaseModel):
     photos_processing: int
     photos_ready: int
     photos_failed: int
-    queue_depth: int
+    queue_depth: Optional[int] = None
+    queue_metrics_unavailable: bool = False
+    oldest_queue_age_seconds: Optional[int] = None
     avg_processing_duration_ms: Optional[int] = None
     p95_processing_duration_ms: Optional[int] = None
     avg_ai_inference_ms: Optional[int] = None

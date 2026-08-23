@@ -154,9 +154,60 @@ def test_event_health_endpoint_and_tenancy(client, db_session):
 def test_queue_telemetry_graceful_fallback():
     """Verify queue telemetry returns safe fallback depth when queue is empty or offline."""
     depth = queue_telemetry.get_queue_depth()
-    assert isinstance(depth, int)
-    assert depth >= 0
+    # In test environment, depth is either an int (if redis is online) or None
+    assert depth is None or isinstance(depth, int)
 
     stats = queue_telemetry.get_pipeline_telemetry()
     assert "queue_depth" in stats
     assert "is_backlogged" in stats
+    assert "queue_metrics_unavailable" in stats
+
+
+def test_queue_telemetry_unavailable_distinction(monkeypatch):
+    """Verify that when Redis throws an error, queue_depth is None and queue_metrics_unavailable is True."""
+    from apps.api.services.queue_telemetry import QueueTelemetryService
+    svc = QueueTelemetryService()
+    
+    # Mock _get_redis to return None (simulating down redis)
+    monkeypatch.setattr(svc, "_get_redis", lambda: None)
+    
+    assert svc.get_queue_depth() is None
+    assert svc.is_available() is False
+    telemetry = svc.get_pipeline_telemetry()
+    assert telemetry["queue_depth"] is None
+    assert telemetry["queue_metrics_unavailable"] is True
+
+
+def test_event_health_oldest_queue_age(client, db_session):
+    """Verify oldest_queue_age_seconds is computed from earliest queued_at timestamp."""
+    token = get_auth_token_for(client, "oldest_age@studio.com", "Oldest Age Studio")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    create_res = client.post(
+        "/api/v1/events",
+        headers=headers,
+        json={"name": "Queue Age Event"}
+    )
+    event_id = create_res.json()["id"]
+
+    # Add a photo in UPLOADED state queued 45 seconds ago
+    from datetime import timedelta
+    queued_time = datetime.utcnow() - timedelta(seconds=45)
+    p = Photo(
+        event_id=event_id,
+        file_path="storage/photos/queued_photo.jpg",
+        original_file_name="queued_photo.jpg",
+        sha256_hash="3333333333333333333333333333333333333333333333333333333333333333",
+        file_size=1024,
+        mime_type="image/jpeg",
+        status=PhotoStatus.UPLOADED.value,
+        queued_at=queued_time,
+    )
+    db_session.add(p)
+    db_session.commit()
+
+    health_res = client.get(f"/api/v1/events/{event_id}/health", headers=headers)
+    assert health_res.status_code == 200
+    data = health_res.json()
+    assert data["oldest_queue_age_seconds"] is not None
+    assert data["oldest_queue_age_seconds"] >= 40
