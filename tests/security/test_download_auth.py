@@ -25,7 +25,6 @@ def setup_tenants_and_photos():
     p1 = Photographer(
         email='studio_a_' + uid1 + '@test.com',
         password_hash=hash_password('Password123!'),
-        full_name='Studio A Owner',
         studio_name='Studio A',
         is_active=True
     )
@@ -34,7 +33,6 @@ def setup_tenants_and_photos():
     p2 = Photographer(
         email='studio_b_' + uid2 + '@test.com',
         password_hash=hash_password('Password123!'),
-        full_name='Studio B Owner',
         studio_name='Studio B',
         is_active=True
     )
