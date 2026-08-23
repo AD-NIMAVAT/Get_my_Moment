@@ -109,7 +109,7 @@ def sec_download_env():
 
     # Upload Photo to Event A
     jpeg_data = create_dummy_jpeg()
-    _, file_path_a, _, _ = storage_service.save_original(
+    _, file_path_a, fsize_a, sha256_a = storage_service.save_original(
         event_id=event_a.id,
         file_bytes=jpeg_data,
         original_filename='photo_a.jpg',
@@ -120,13 +120,14 @@ def sec_download_env():
         studio_id=p1.id,
         file_path=file_path_a,
         original_file_name='photo_a.jpg',
-        file_size=len(jpeg_data),
+        file_size=fsize_a,
+        sha256_hash=sha256_a,
         mime_type='image/jpeg',
         status='PROCESSED'
     )
     
     # Upload Photo to Event B
-    _, file_path_b, _, _ = storage_service.save_original(
+    _, file_path_b, fsize_b, sha256_b = storage_service.save_original(
         event_id=event_b.id,
         file_bytes=jpeg_data,
         original_filename='photo_b.jpg',
@@ -137,13 +138,14 @@ def sec_download_env():
         studio_id=p2.id,
         file_path=file_path_b,
         original_file_name='photo_b.jpg',
-        file_size=len(jpeg_data),
+        file_size=fsize_b,
+        sha256_hash=sha256_b,
         mime_type='image/jpeg',
         status='PROCESSED'
     )
 
     # Upload Photo to Event A Restricted
-    _, file_path_a_nodl, _, _ = storage_service.save_original(
+    _, file_path_a_nodl, fsize_a_nodl, sha256_a_nodl = storage_service.save_original(
         event_id=event_a_nodownload.id,
         file_bytes=jpeg_data,
         original_filename='photo_a_nodl.jpg',
@@ -154,7 +156,8 @@ def sec_download_env():
         studio_id=p1.id,
         file_path=file_path_a_nodl,
         original_file_name='photo_a_nodl.jpg',
-        file_size=len(jpeg_data),
+        file_size=fsize_a_nodl,
+        sha256_hash=sha256_a_nodl,
         mime_type='image/jpeg',
         status='PROCESSED'
     )
