@@ -53,8 +53,10 @@ def run_vault_test_suite():
             is_active=True
         )
         db.add(admin)
-        db.commit()
-        db.refresh(admin)
+    else:
+        admin.password_hash = hash_password("Admin@GetMyMoment2026!")
+    db.commit()
+    db.refresh(admin)
 
     admin_token = create_access_token({"sub": admin.id, "is_admin": True})
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
