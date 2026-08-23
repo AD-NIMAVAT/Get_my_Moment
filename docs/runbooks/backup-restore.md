@@ -12,12 +12,12 @@
 | :--- | :---: | :--- |
 | **Backup Tooling** | `VERIFIED` | Production-grade `pg_dump` custom format (`-F c`) with atomic validation. |
 | **Restore Sandbox** | `VERIFIED` | Isolated test restore script (`scripts/verify_restore.sh`) with schema, row count & `pgvector` validation. |
-| **Local Retention** | `NEEDS_DECISION` | *RECOMMENDATION — NOT YET APPROVED:* Keep 7 daily dumps locally. |
-| **Backup Frequency** | `NEEDS_DECISION` | *RECOMMENDATION — NOT YET APPROVED:* Daily at 03:00 UTC. |
-| **Target RPO** | `NEEDS_DECISION` | *RECOMMENDATION — NOT YET APPROVED:* 24 Hours. |
-| **Target RTO** | `NEEDS_DECISION` | *RECOMMENDATION — NOT YET APPROVED:* < 30 Minutes. |
-| **Cloud S3 Copy** | `NEEDS_DECISION` | AWS IAM / S3 bucket provisioning pending cloud infrastructure policy. |
-| **Automation** | `READY_NOT_ENABLED` | Cron/systemd templates prepared; awaiting approved schedule. |
+| **Local Retention** | `APPROVED` | Keep 7 most recent successful backup sets (`.dump`, `.sha256`, `.meta.json`). |
+| **Backup Frequency** | `APPROVED` | Daily at `03:00 UTC`. |
+| **Target RPO** | `APPROVED` | 24 Hours. |
+| **Target RTO** | `INITIAL_TARGET` | 60 Minutes (Requires full DR benchmark). |
+| **Cloud S3 Copy** | `REQUIRED` | Dedicated private AWS S3 bucket (pending IAM role provisioning). |
+| **Automation** | `ACTIVE_VERIFIED` | User crontab configured for `0 3 * * *` (03:00 UTC). |
 
 ---
 
@@ -118,12 +118,22 @@ To verify a backup without touching or altering production data:
 
 ---
 
-## 6. AUTOMATION TEMPLATE (CRON)
+## 6. ACTIVE CRON AUTOMATION & OBSERVABILITY
 
-*(Ready to be enabled once backup schedule is approved by product owner)*
-
+**Installed Schedule:** User crontab for `ubuntu` user (`crontab -l`):
 ```cron
-# /etc/cron.d/gmm-database-backup (PENDING APPROVAL)
-# 0 3 * * * ubuntu /home/ubuntu/Get_my_Moment/scripts/backup_database.sh >> /var/log/gmm_backup.log 2>&1
+# Get My Moment — Automated Daily PostgreSQL Backup (03:00 UTC)
+0 3 * * * /home/ubuntu/Get_my_Moment/scripts/backup_database.sh >> /home/ubuntu/backups/backup.log 2>&1
 ```
+
+**Observability & Status Files:**
+1. `/home/ubuntu/backups/backup_status.json`: Contains JSON metrics for external health checks:
+   - `last_attempt_at`: ISO timestamp of latest execution.
+   - `last_success_at`: ISO timestamp of latest verified backup.
+   - `last_backup_filename`: Name of latest `.dump` file.
+   - `last_backup_size_bytes`: Integer size.
+   - `last_validation_status`: `SUCCESS` or `FAILED_*`.
+   - `retained_backups_count`: Current count of local rolling archives.
+2. `/home/ubuntu/backups/backup.log`: Execution audit log with zero secrets.
+
 

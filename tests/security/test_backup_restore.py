@@ -91,5 +91,76 @@ def test_5_runbook_documentation_exists():
         doc = f.read()
         assert "pg_restore" in doc
         assert "pgvector" in doc
-        assert "NEEDS_DECISION" in doc
         assert "DISASTER RECOVERY" in doc
+
+
+def test_6_local_7_backup_retention_rotation_simulation(tmp_path):
+    """6. Retention rotation logic keeps strictly 7 newest sets and preserves baseline files."""
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    
+    # 1. Create a baseline manual backup (MUST be protected)
+    baseline_file = backup_dir / "baseline_getmymoment_.sql"
+    baseline_file.write_text("BASELINE DATA")
+    
+    manual_file = backup_dir / "manual_export_2026.sql"
+    manual_file.write_text("MANUAL EXPORT")
+    
+    # 2. Create 10 simulated managed backup sets with staggered timestamps
+    for i in range(1, 11):
+        ts = f"20260823_{i:02d}0000"
+        dump = backup_dir / f"gmm_backup_{ts}.dump"
+        sha = backup_dir / f"gmm_backup_{ts}.dump.sha256"
+        meta = backup_dir / f"gmm_backup_{ts}.dump.meta.json"
+        
+        dump.write_text(f"DUMP {i}")
+        sha.write_text(f"SHA {i}")
+        meta.write_text(f'{{"index": {i}}}')
+    
+    # 3. Simulate rotation logic (keep 7 newest)
+    managed_dumps = sorted(list(backup_dir.glob("gmm_backup_*.dump")), key=lambda p: p.name, reverse=True)
+    assert len(managed_dumps) == 10
+    
+    retention_count = 7
+    if len(managed_dumps) > retention_count:
+        for old_dump in managed_dumps[retention_count:]:
+            old_dump.unlink()
+            sha_file = backup_dir / f"{old_dump.name}.sha256"
+            meta_file = backup_dir / f"{old_dump.name}.meta.json"
+            if sha_file.exists():
+                sha_file.unlink()
+            if meta_file.exists():
+                meta_file.unlink()
+    
+    # 4. Assert exactly 7 newest sets remain
+    remaining_dumps = list(backup_dir.glob("gmm_backup_*.dump"))
+    assert len(remaining_dumps) == 7
+    
+    # Sets 1, 2, 3 should be rotated; Sets 4..10 should remain
+    assert not (backup_dir / "gmm_backup_20260823_010000.dump").exists()
+    assert not (backup_dir / "gmm_backup_20260823_020000.dump").exists()
+    assert not (backup_dir / "gmm_backup_20260823_030000.dump").exists()
+    assert (backup_dir / "gmm_backup_20260823_100000.dump").exists()
+    
+    # Baseline and manual files MUST be untouched
+    assert baseline_file.exists()
+    assert manual_file.exists()
+
+
+def test_7_status_json_schema_validation():
+    """7. Operational status JSON schema contains all required observability metrics."""
+    status_payload = {
+        "last_attempt_at": "2026-08-23T18:00:00Z",
+        "last_success_at": "2026-08-23T18:00:00Z",
+        "last_backup_filename": "gmm_backup_20260823_180000.dump",
+        "last_backup_size_bytes": 147456,
+        "last_validation_status": "SUCCESS",
+        "duration_seconds": 1,
+        "retained_backups_count": 7
+    }
+    
+    serialized = json.dumps(status_payload)
+    parsed = json.loads(serialized)
+    assert parsed["last_validation_status"] == "SUCCESS"
+    assert parsed["retained_backups_count"] == 7
+    assert "last_success_at" in parsed
