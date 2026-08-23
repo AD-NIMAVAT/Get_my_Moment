@@ -85,7 +85,7 @@ def run_subscription_master_suite():
     # Setup SuperAdmin
     admin = db.query(AdminUser).first()
     if not admin:
-        admin = AdminUser(username="superadmin", email="admin@getmymoment.com", password_hash=hash_password("AdminPass123!"), is_superadmin=True)
+        admin = AdminUser(full_name="Super Admin", email="admin@getmymoment.com", password_hash=hash_password("AdminPass123!"), role="SUPER_ADMIN", is_active=True)
         db.add(admin)
         db.commit()
         db.refresh(admin)
