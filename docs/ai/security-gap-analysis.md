@@ -11,7 +11,7 @@
 | :-: | :--- | :---: | :---: | :--- |
 | **SEC-01** | Original Photo Download Auth | **HIGH** | `FIXED` | Server-side fail-closed token/JWT authorization enforced on download endpoints. |
 | **SEC-02** | Endpoint-Specific Rate Limiting | **HIGH** | `FIXED` | Atomic Redis sliding-window rate limiting enforced on login, admin, OTP, search & downloads. |
-| **SEC-03** | Automated Cloud Backup & Cron | **MEDIUM** | PARTIALLY_IMPLEMENTED | Local SQL dump exists; automated daily encrypted cloud backup cron is not yet installed. |
+| **SEC-03** | Automated Backup & Restore Foundation | **MEDIUM** | `FIXED` | Production-grade pg_dump custom archive, SHA-256 checksums, and isolated sandbox restore verification verified. |
 | **SEC-04** | Biometric Retention & Purge Policy | **MEDIUM** | NEEDS_DECISION | Formal auto-purge lifecycle for guest selfies and embeddings requires approved retention decision. |
 | **SEC-05** | Shared Camera FTP Credentials | **LOW** | PARTIALLY_IMPLEMENTED | Camera Wi-Fi ingest uses shared credentials due to camera firmware constraints; sandboxed in wireless_incoming. |
 | **SEC-06** | Vector Similarity HNSW Indexing | **LOW** | PARTIALLY_IMPLEMENTED | Exact scan works for current scale; HNSW indexing should be benchmarked before large-scale migration. |
