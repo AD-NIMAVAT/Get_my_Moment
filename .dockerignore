@@ -1,0 +1,13 @@
+.git
+.github
+node_modules
+.next
+storage
+data
+backups
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+*.log
