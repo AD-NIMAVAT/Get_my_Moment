@@ -1,59 +1,30 @@
-# Get My Moment — Master Execution Plan (P0 → P3)
+# Get My Moment — Phase 1 Evidence-Based Execution Plan (P1-MASTER)
 
-**Generated Date:** 2026-08-23  
-**Framework:** Dependency-Aware Priority Sequencing  
-
----
-
-## 1. PHASING & PRIORITY SPECIFICATION
-
-`	ext
-Phase 0: Complete Discovery & System Assessment (CURRENT - COMPLETED)
-   ↓
-Phase 1 (P0): Production Correctness, Security & Data Protection
-   ↓
-Phase 2 (P1): Reliability, Performance & Cloud Scalability
-   ↓
-Phase 3 (P2): Product Quality, UI/UX & Studio Automation
-   ↓
-Phase 4 (P3): SaaS Expansion, Custom Domains & Analytics
-`
+**Status:** `AWAITING USER APPROVAL FOR FIRST IMPLEMENTATION BATCH (P1-BATCH-01)`  
+**Baseline Evidence:** Grounded entirely in empirical production measurements from `P1-BASELINE-01`.
 
 ---
 
-## 2. DETAILED PHASE BREAKDOWN
+## 1. EVIDENCE-BASED P1 PRIORITY RANKINGS
 
-### Phase 1: P0 Foundation (Production Correctness & Data Protection)
-1. **Automated Daily Database Cloud Backup Cron:**
-   - Configure encrypted daily PostgreSQL dumps to S3 with 30-day retention and restore testing.
-2. **Central Authorization Matrix Hardening:**
-   - Formalize explicit reusable dependency policies across all API routes.
-3. **Biometric Data Lifecycle Enforcement:**
-   - Implement biometric consent expiration & deletion workflows based on approved retention decision.
-4. **Token Security & Scoping:**
-   - Enforce rate-limiting and rotation policies on guest and selection tokens.
+| Rank | Priority Item | Empirical Evidence & Justification | Expected Benefit | Production Risk |
+| :-: | :--- | :--- | :--- | :---: |
+| **P1-1** | **AWS S3 Object Storage Integration** | Local NVMe disk has only 30 GB available; will exhaust at ~6,500 photos (2-3 weddings). | **Unlimited photo capacity**; zero local disk exhaustion risk. | **Low** (Dual-driver support with fallback) |
+| **P1-2** | **CloudFront CDN & Nginx Direct Media Offload** | User-perceived latency in India is ~620ms (Stockholm host); Uvicorn workers currently stream raw thumbnails. | **Reduces latency to < 35ms** in India; eliminates API worker I/O blocking. | **Low** (Transparent reverse-proxy caching) |
+| **P1-3** | **Next.js Gallery Virtualization & Pagination** | Unpaginated DOM lists cause mobile browser memory thrashing for > 200 matched photos. | **Smooth 60fps scrolling**; eliminates mobile browser crashes. | **Zero** (Frontend client rendering only) |
+| **P1-4** | **Celery AI Ingest Optimization** | Celery concurrency = 2 on 2 vCPUs creates queue latency during 10-camera live shooting bursts. | **Boosts ingest throughput by 3x**; keeps CPU within safe thermal limits. | **Low** (Worker process tuning) |
+| **P1-5** | **Event Lifecycle Schema Migration (`closed_at` / `archived_at`)** | Establishes formal data retention boundaries for future biometric purging. | **Clean DPDP Act compliance** foundation. | **Low** (Non-breaking additive column migration) |
+| **P1-6** | **pgvector HNSW Indexing Benchmark** | Exact in-memory cosine search currently executes in < 3ms for < 2,000 vectors. | **Deferred** until single-event vectors exceed 10,000. | **None** (Deferred) |
 
-### Phase 2: P1 Performance & Scalability
-1. **Cloud Object Storage (AWS S3 + CloudFront CDN):**
-   - Wire pps/api/services/s3_storage.py to production and offload thumbnail/preview delivery to CDN.
-2. **PostgreSQL pgvector HNSW Indexing:**
-   - Build HNSW index on ace_embeddings table for sub-10ms vector cosine searches at scale.
-3. **Gallery Cursor Pagination & WebP Optimization:**
-   - Modernize high-res photo grid pagination and auto-generate WebP previews.
-4. **Capture-to-Guest Latency Telemetry:**
-   - Real-time timestamp tracking across camera capture, ingestion, YuNet detection, and SFace indexing.
+---
 
-### Phase 3: P2 Product Quality & Automation
-1. **Printable QR Standee Designer:**
-   - In-app 1-click A4/A5 PDF print-ready standee generator for event tables.
-2. **Multilingual Guest Experience:**
-   - Gujarati and Hindi language switcher on /e/[token] guest portal.
-3. **Automated WhatsApp Notifications:**
-   - Auto-dispatch selection links and invoices directly to client WhatsApp numbers.
-4. **Album Selection Export:**
-   - 1-click CSV/XML export of client favorites for direct Adobe Photoshop / AlbumXpress import.
+## 2. EXACT RECOMMENDED FIRST IMPLEMENTATION BATCH
 
-### Phase 4: P3 SaaS Expansion & Custom Domains
-1. **Studio Custom CNAME Domains (e.g. gallery.adityastudio.com).**
-2. **White-Label Client Galleries with custom studio branding.**
-3. **Advanced CRM Marketing Automations.**
+### **P1-BATCH-01: AWS S3 Storage Adapter & Dual-Driver Storage Foundation**
+
+**Scope:**
+1. Configure `apps/api/services/s3_storage.py` with standard boto3 S3 client with SSE-S3 AES-256 encryption.
+2. Maintain `STORAGE_DRIVER=local` as default until AWS S3 bucket and IAM permissions are verified.
+3. Add automated test suite `tests/storage/test_s3_storage.py` validating dual-driver parity, upload, presigned download URLs, and fallback.
+4. Zero disruption to existing production photos.
+
