@@ -22,9 +22,11 @@ from apps.api.schemas.event import (
     EventUpdateRequest,
     EventResponse,
     PublicEventResponse,
+    EventHealthResponse,
 )
 from apps.api.services.qr_service import qr_service
-from packages.shared.constants import EventStatus
+from apps.api.services.queue_telemetry import queue_telemetry
+from packages.shared.constants import EventStatus, PhotoStatus
 
 router = APIRouter(prefix="/events", tags=["Event Management"])
 
@@ -491,4 +493,106 @@ def get_public_event_by_token(access_token: str, raw_req: Request, db: Session =
         studio_logo_url=photographer.logo_url if photographer else None,
         studio_phone=photographer.phone if photographer else None,
         photo_count=photo_count,
+    )
+
+
+@router.get("/{event_id}/health", response_model=EventHealthResponse)
+def get_event_health_telemetry(
+    event_id: str,
+    current_photographer: Photographer = Depends(get_current_photographer),
+    db: Session = Depends(get_db)
+):
+    """Authenticated endpoint: returns real-time pipeline telemetry, latency metrics, and queue health for the event."""
+    event = db.query(Event).filter(
+        Event.id == event_id,
+        Event.photographer_id == current_photographer.id,
+        Event.is_deleted == False
+    ).first()
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+
+    # 1. Query photo counts grouped by status
+    status_counts = db.query(
+        Photo.status,
+        func.count(Photo.id)
+    ).filter(
+        Photo.event_id == event_id,
+        Photo.is_deleted == False
+    ).group_by(Photo.status).all()
+
+    counts_map = {s: 0 for s in [PhotoStatus.UPLOADED.value, PhotoStatus.PROCESSING.value, PhotoStatus.PROCESSED.value, PhotoStatus.FAILED.value]}
+    for st, cnt in status_counts:
+        counts_map[st] = cnt
+
+    total_photos = sum(counts_map.values())
+    photos_uploaded = counts_map.get(PhotoStatus.UPLOADED.value, 0)
+    photos_processing = counts_map.get(PhotoStatus.PROCESSING.value, 0)
+    photos_ready = counts_map.get(PhotoStatus.PROCESSED.value, 0)
+    photos_failed = counts_map.get(PhotoStatus.FAILED.value, 0)
+
+    # 2. Timestamps: latest received & latest guest ready
+    last_photo_received = db.query(func.max(Photo.created_at)).filter(
+        Photo.event_id == event_id,
+        Photo.is_deleted == False
+    ).scalar()
+
+    last_guest_ready = db.query(func.max(Photo.guest_ready_at)).filter(
+        Photo.event_id == event_id,
+        Photo.is_deleted == False,
+        Photo.status == PhotoStatus.PROCESSED.value
+    ).scalar()
+
+    # 3. Latency calculations (average & p95 over latest 100 processed photos)
+    recent_latencies = db.query(
+        Photo.processing_duration_ms,
+        Photo.ai_inference_ms
+    ).filter(
+        Photo.event_id == event_id,
+        Photo.status == PhotoStatus.PROCESSED.value,
+        Photo.processing_duration_ms.isnot(None)
+    ).order_by(Photo.guest_ready_at.desc()).limit(100).all()
+
+    avg_duration = None
+    p95_duration = None
+    avg_ai = None
+
+    if recent_latencies:
+        durations = sorted([r[0] for r in recent_latencies if r[0] is not None])
+        ai_times = [r[1] for r in recent_latencies if r[1] is not None]
+        if durations:
+            avg_duration = int(sum(durations) / len(durations))
+            p95_idx = int(len(durations) * 0.95)
+            p95_duration = durations[min(p95_idx, len(durations) - 1)]
+        if ai_times:
+            avg_ai = int(sum(ai_times) / len(ai_times))
+
+    # 4. Queue depth from Redis
+    q_depth = queue_telemetry.get_queue_depth()
+
+    # 5. Pipeline health assessment
+    if photos_failed > 0:
+        pipeline_health = "ATTENTION_REQUIRED"
+    elif q_depth > 50:
+        pipeline_health = "BACKLOG"
+    elif photos_processing > 0 or q_depth > 0:
+        pipeline_health = "PROCESSING"
+    else:
+        pipeline_health = "HEALTHY"
+
+    return EventHealthResponse(
+        event_id=event.id,
+        event_name=event.name,
+        status=event.status,
+        pipeline_health=pipeline_health,
+        photos_total=total_photos,
+        photos_uploaded=photos_uploaded,
+        photos_processing=photos_processing,
+        photos_ready=photos_ready,
+        photos_failed=photos_failed,
+        queue_depth=q_depth,
+        avg_processing_duration_ms=avg_duration,
+        p95_processing_duration_ms=p95_duration,
+        avg_ai_inference_ms=avg_ai,
+        last_photo_received_at=last_photo_received,
+        last_guest_ready_at=last_guest_ready,
     )

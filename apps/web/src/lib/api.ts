@@ -128,6 +128,24 @@ export interface PublicEventItem {
   photo_count: number;
 }
 
+export interface EventHealthData {
+  event_id: string;
+  event_name: string;
+  status: string;
+  pipeline_health: 'HEALTHY' | 'PROCESSING' | 'BACKLOG' | 'ATTENTION_REQUIRED';
+  photos_total: number;
+  photos_uploaded: number;
+  photos_processing: number;
+  photos_ready: number;
+  photos_failed: number;
+  queue_depth: number;
+  avg_processing_duration_ms?: number;
+  p95_processing_duration_ms?: number;
+  avg_ai_inference_ms?: number;
+  last_photo_received_at?: string;
+  last_guest_ready_at?: string;
+}
+
 export interface FolderItem {
   id: string;
   studio_id: string;
@@ -826,6 +844,14 @@ class ApiClient {
       headers: this.getHeaders(),
     });
     if (!res.ok) throw new Error('Event not found');
+    return res.json();
+  }
+
+  async getEventHealth(id: string): Promise<EventHealthData> {
+    const res = await fetch(`${this.baseUrl}/events/${id}/health`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) throw new Error('Event health not available');
     return res.json();
   }
 

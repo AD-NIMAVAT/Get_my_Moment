@@ -43,10 +43,18 @@ except ImportError:
     celery_app = None
 
 
+import time
+from datetime import datetime
+
+
 def run_photo_pipeline(photo_id: str, event_id: str, db_override: Optional[Session] = None):
-    """Core image processing: thumbnail generation, face detection, and embedding indexing."""
+    """Core image processing with microsecond telemetry: thumbnail generation, face detection, and embedding indexing."""
+    t_start = time.perf_counter()
+    now_utc = datetime.utcnow()
     db: Session = db_override if db_override is not None else get_db_session()
     should_close = db_override is None
+    stage = "INITIALIZE"
+
     try:
         photo = db.query(Photo).filter(Photo.id == photo_id, Photo.event_id == event_id).first()
         if not photo:
@@ -54,13 +62,17 @@ def run_photo_pipeline(photo_id: str, event_id: str, db_override: Optional[Sessi
             return {"status": "error", "message": "Photo not found"}
 
         photo.status = PhotoStatus.PROCESSING.value
+        photo.processing_started_at = now_utc
         db.commit()
 
+        # 1. Read file bytes
+        stage = "DECODE"
         abs_file_path = storage_service.get_absolute_path(photo.file_path)
         with open(abs_file_path, "rb") as f:
             file_bytes = f.read()
 
-        # 1. Generate web thumbnails
+        # 2. Generate web thumbnails
+        stage = "THUMBNAILS"
         small_thumb_rel, med_thumb_rel = storage_service.generate_thumbnails(
             event_id=event_id,
             file_id=photo.id,
@@ -69,11 +81,14 @@ def run_photo_pipeline(photo_id: str, event_id: str, db_override: Optional[Sessi
         photo.thumbnail_path = small_thumb_rel
         photo.processed_path = med_thumb_rel
 
-        # 2. Face Detection
+        # 3. AI Face Detection & Embedding (Monotonic Timer)
+        stage = "AI_INFERENCE"
+        t_ai_start = time.perf_counter()
         faces = ai_service.detect_faces(file_bytes)
         photo.faces_detected_count = len(faces)
 
-        # 3. Embeddings & Persistence
+        # 4. Embeddings & Persistence
+        stage = "EMBEDDINGS"
         for detection in faces:
             crop_path = None
             if settings.FACE_DEBUG_CROPS_ENABLED:
@@ -104,20 +119,56 @@ def run_photo_pipeline(photo_id: str, event_id: str, db_override: Optional[Sessi
             )
             db.add(face_embedding_record)
 
+        ai_duration_ms = int((time.perf_counter() - t_ai_start) * 1000)
+        total_duration_ms = int((time.perf_counter() - t_start) * 1000)
+        completed_at = datetime.utcnow()
+
+        stage = "FINALIZE"
         db.query(Photo).filter(Photo.id == photo_id).update(
-            {"status": PhotoStatus.PROCESSED.value, "error_message": None},
+            {
+                "status": PhotoStatus.PROCESSED.value,
+                "error_message": None,
+                "failure_category": None,
+                "guest_ready_at": completed_at,
+                "processing_duration_ms": total_duration_ms,
+                "ai_inference_ms": ai_duration_ms,
+            },
             synchronize_session=False
         )
         db.commit()
-        logger.info(f"Successfully processed photo {photo_id}: {len(faces)} faces indexed.")
-        return {"status": "success", "photo_id": photo_id, "faces_count": len(faces)}
+        logger.info(f"⚡ [PIPELINE TELEMETRY] Photo {photo_id} GUEST_READY in {total_duration_ms}ms (AI: {ai_duration_ms}ms, Faces: {len(faces)})")
+        return {
+            "status": "success",
+            "photo_id": photo_id,
+            "faces_count": len(faces),
+            "duration_ms": total_duration_ms,
+            "ai_ms": ai_duration_ms
+        }
 
     except Exception as exc:
         db.rollback()
-        logger.error(f"Error processing photo {photo_id}: {exc}", exc_info=True)
+        fail_cat = "UNKNOWN_FAILURE"
+        if stage == "DECODE":
+            fail_cat = "DECODE_FAILED"
+        elif stage == "THUMBNAILS":
+            fail_cat = "THUMBNAIL_FAILED"
+        elif stage == "AI_INFERENCE":
+            fail_cat = "FACE_DETECTION_FAILED"
+        elif stage == "EMBEDDINGS":
+            fail_cat = "EMBEDDING_FAILED"
+        elif stage == "FINALIZE":
+            fail_cat = "DB_FAILED"
+
+        logger.error(f"❌ [PIPELINE ERROR] [{fail_cat}] photo {photo_id}: {exc}", exc_info=True)
         try:
+            total_duration_ms = int((time.perf_counter() - t_start) * 1000)
             db.query(Photo).filter(Photo.id == photo_id).update(
-                {"status": PhotoStatus.FAILED.value, "error_message": str(exc)},
+                {
+                    "status": PhotoStatus.FAILED.value,
+                    "error_message": str(exc),
+                    "failure_category": fail_cat,
+                    "processing_duration_ms": total_duration_ms,
+                },
                 synchronize_session=False
             )
             db.commit()
@@ -140,10 +191,25 @@ if celery_app is not None:
 def dispatch_photo_processing(photo_id: str, event_id: str, db: Optional[Session] = None):
     """
     Non-blocking async dispatch:
+    - Sets queued_at timestamp
     - In test mode: executes synchronously
     - In local dev: submits to background ThreadPoolExecutor instantly (0ms latency, non-blocking)
     - In production: dispatches to Celery/Redis queue
     """
+    now_utc = datetime.utcnow()
+    # Update queued_at timestamp
+    try:
+        active_db = db if db is not None else get_db_session()
+        active_db.query(Photo).filter(Photo.id == photo_id).update(
+            {"queued_at": now_utc},
+            synchronize_session=False
+        )
+        active_db.commit()
+        if db is None:
+            active_db.close()
+    except Exception as e:
+        logger.debug(f"Could not update queued_at for photo {photo_id}: {e}")
+
     import sys
     if "pytest" in sys.modules or settings.ENVIRONMENT == "test":
         run_photo_pipeline(photo_id, event_id, db_override=db)

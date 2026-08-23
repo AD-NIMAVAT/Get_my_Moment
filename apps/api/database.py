@@ -115,6 +115,13 @@ def init_db():
                     ("is_deleted", "BOOLEAN DEFAULT 0 NOT NULL"),
                     ("deleted_at", "DATETIME"),
                     ("storage_object_id", "VARCHAR(36)"),
+                    ("queued_at", "DATETIME"),
+                    ("processing_started_at", "DATETIME"),
+                    ("guest_ready_at", "DATETIME"),
+                    ("processing_duration_ms", "INTEGER"),
+                    ("ai_inference_ms", "INTEGER"),
+                    ("failure_category", "VARCHAR(64)"),
+                    ("camera_captured_at", "DATETIME"),
                 ]
                 for c_name, c_type in photo_soft_cols:
                     if c_name not in existing_photo_cols:

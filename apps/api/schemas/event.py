@@ -70,3 +70,23 @@ class PublicEventResponse(BaseModel):
     photo_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EventHealthResponse(BaseModel):
+    event_id: str
+    event_name: str
+    status: str
+    pipeline_health: str
+    photos_total: int
+    photos_uploaded: int
+    photos_processing: int
+    photos_ready: int
+    photos_failed: int
+    queue_depth: int
+    avg_processing_duration_ms: Optional[int] = None
+    p95_processing_duration_ms: Optional[int] = None
+    avg_ai_inference_ms: Optional[int] = None
+    last_photo_received_at: Optional[datetime] = None
+    last_guest_ready_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)

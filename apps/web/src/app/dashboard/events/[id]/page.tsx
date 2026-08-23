@@ -7,7 +7,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
   api, EventItem, PhotoItem, GuestLead, FinanceSummary, OperationsData,
-  GuestUploadsReportResponse, GuestContributor, FolderItem
+  GuestUploadsReportResponse, GuestContributor, FolderItem, EventHealthData
 } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -21,7 +21,7 @@ import {
   IndianRupee, DollarSign, Plus, MessageSquare, Send, CheckSquare, 
   Calendar, Layers, Heart, FileText, Trash2, ToggleLeft, ToggleRight, 
   AlertCircle, Phone, Wifi, Folder as FolderIcon, FolderPlus, MoveRight,
-  Lock, Eye, MoreVertical, X
+  Lock, Eye, MoreVertical, X, Activity, Clock, Zap
 } from 'lucide-react';
 
 type Tab = 'operations' | 'finance' | 'photos' | 'selection' | 'guest-uploads' | 'whatsapp' | 'qr' | 'leads';
@@ -43,6 +43,7 @@ export default function EventCommandCenterPage() {
   const [finance, setFinance] = useState<FinanceSummary | null>(null);
   const [operations, setOperations] = useState<OperationsData | null>(null);
   const [guestReport, setGuestReport] = useState<GuestUploadsReportResponse | null>(null);
+  const [health, setHealth] = useState<EventHealthData | null>(null);
   const [togglingGuestUploads, setTogglingGuestUploads] = useState(false);
   
   const [activeTab, setActiveTab] = useState<Tab>('operations');
@@ -101,7 +102,7 @@ export default function EventCommandCenterPage() {
   const loadAllEventData = async () => {
     try {
       setLoading(true);
-      const [eventData, photosData, leadsData, financeData, opsData, guestReportData, foldersData] = await Promise.all([
+      const [eventData, photosData, leadsData, financeData, opsData, guestReportData, foldersData, healthData] = await Promise.all([
         api.getEvent(eventId),
         api.getEventPhotos(eventId),
         api.getEventLeads(eventId),
@@ -109,6 +110,7 @@ export default function EventCommandCenterPage() {
         api.getEventOperations(eventId),
         api.getGuestUploadsReport(eventId).catch(() => null),
         api.getFolders(eventId).catch(() => []),
+        api.getEventHealth(eventId).catch(() => null),
       ]);
       setEvent(eventData);
       setPhotos(photosData);
@@ -117,6 +119,7 @@ export default function EventCommandCenterPage() {
       setOperations(opsData);
       setGuestReport(guestReportData);
       setFolders(foldersData);
+      setHealth(healthData);
       if (foldersData.length > 0 && !uploadTargetFolderId) {
         setUploadTargetFolderId(foldersData[0].id);
       }
@@ -520,6 +523,57 @@ export default function EventCommandCenterPage() {
 
       {/* Main Container */}
       <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1850px] mx-auto px-4 sm:px-6 py-6 space-y-6">
+        {/* Live Ingest & AI Pipeline Telemetry Panel */}
+        {health && (
+          <div className="p-4 sm:p-5 rounded-3xl neu-card bg-[#FAF9F7] border border-[#E8E5E2] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+                health.pipeline_health === 'HEALTHY' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' :
+                health.pipeline_health === 'PROCESSING' ? 'bg-amber-50 text-amber-600 border border-amber-200' :
+                health.pipeline_health === 'BACKLOG' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                'bg-rose-50 text-rose-600 border border-rose-200'
+              }`}>
+                <Activity className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-display font-extrabold text-[#1F1F1F]">
+                    Live AI Ingest &amp; Pipeline Telemetry
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                    health.pipeline_health === 'HEALTHY' ? 'bg-emerald-100 text-emerald-800' :
+                    health.pipeline_health === 'PROCESSING' ? 'bg-blue-100 text-blue-800' :
+                    health.pipeline_health === 'BACKLOG' ? 'bg-amber-100 text-amber-900' :
+                    'bg-rose-100 text-rose-800'
+                  }`}>
+                    {health.pipeline_health.replace('_', ' ')}
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#6B6B6B]">
+                  Queue: {health.queue_depth} pending • {health.photos_ready} of {health.photos_total} photos guest-ready
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-4 flex-wrap w-full md:w-auto text-xs">
+              <div className="neu-pill px-3 py-1.5 flex items-center gap-1.5 text-[11px] text-[#1F1F1F]">
+                <Clock className="w-3.5 h-3.5 text-[#E86A5B]" />
+                <span>Avg AI: <strong>{health.avg_processing_duration_ms !== null && health.avg_processing_duration_ms !== undefined ? `${health.avg_processing_duration_ms}ms` : 'N/A'}</strong></span>
+                {health.p95_processing_duration_ms !== null && health.p95_processing_duration_ms !== undefined && (
+                  <span className="text-[10px] text-[#6B6B6B]">(p95: {health.p95_processing_duration_ms}ms)</span>
+                )}
+              </div>
+
+              {health.photos_failed > 0 && (
+                <div className="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-[11px] flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>{health.photos_failed} Failed</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Navigation Tabs */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
           {[

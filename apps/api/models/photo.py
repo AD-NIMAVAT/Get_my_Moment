@@ -42,6 +42,13 @@ class Photo(Base):
     is_deleted = Column(Boolean, default=False, nullable=False, index=True)
     deleted_at = Column(DateTime, nullable=True)
     storage_object_id = Column(String(36), nullable=True)
+    queued_at = Column(DateTime, nullable=True)
+    processing_started_at = Column(DateTime, nullable=True)
+    guest_ready_at = Column(DateTime, nullable=True)
+    processing_duration_ms = Column(Integer, nullable=True)
+    ai_inference_ms = Column(Integer, nullable=True)
+    failure_category = Column(String(64), nullable=True)
+    camera_captured_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
