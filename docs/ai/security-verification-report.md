@@ -205,18 +205,15 @@ osniff, SAMEORIGIN, strict-transport-security.
 - **Rollback:** N/A.
 - **Dependencies:** FastAPI middleware.
 
----
-
-### N. Rate Limiting / Abuse Controls
-- **Current implementation:** Standard FastAPI router structure without explicit per-endpoint rate limiting middleware.
-- **Verification method:** Codebase grep and endpoint request loops.
-- **Result:** No rate limiting currently active on authentication, OTP, selfie search, or public token lookups.
-- **Classification:** MISSING (P0 Finding)
-- **Evidence:** Grep for limiter / slowapi yielded zero matches in pps/api/.
-- **Risk if failed:** Brute-force attacks against /auth/login, OTP exhaustion, or CPU denial-of-service via automated selfie searches.
-- **Remediation:** Integrate slowapi with Redis backend and apply endpoint-specific tier limits.
-- **Production impact:** High security improvement; protects server CPU and prevents brute-force.
-- **Required tests:** Rate limit violation test (verify HTTP 429 Too Many Requests).
-- **Rollback:** Remove limiter decorator.
-- **Dependencies:** slowapi, 
-edis.
+### N. Rate Limiting / Abuse Controls (SEC-02)
+- **Current implementation:** Redis-backed sliding-window rate limiting service (`apps/api/services/rate_limiter.py`) with atomic Lua scripting and thread-safe in-memory fallback. Enforces configurable limits on photographer login (`5/min`), admin login (`3/5min`), admin vault unlock (`3/5min`), guest registration/login (`10/min`), face search (`10/min`), public event token lookup (`30/min`), and photo/zip downloads.
+- **Verification method:** Comprehensive test suite `tests/security/test_rate_limiting.py` covering rate limit thresholds, HTTP 429 response structure, `Retry-After` header, key scoping isolation, and privacy hashing.
+- **Result:** Threshold exceedance triggers HTTP 429 with `Retry-After`; valid requests succeed; key privacy verified (zero plaintext secrets in Redis keys).
+- **Classification:** FIXED & PRODUCTION VERIFIED
+- **Evidence:** 9/9 tests in `tests/security/test_rate_limiting.py` PASSED; full repository suite (93 tests) PASSED 100%.
+- **Risk if failed:** Brute-force attacks against `/auth/login`, OTP exhaustion, or CPU denial-of-service via automated selfie searches.
+- **Remediation:** Integrated atomic Redis-backed sliding-window rate limiting across all target routers.
+- **Production impact:** High security improvement; protects server CPU/bandwidth and prevents brute-force.
+- **Required tests:** `pytest tests/security/test_rate_limiting.py`.
+- **Rollback:** Revert commit `2ab815e`.
+- **Dependencies:** `redis`, `apps.api.services.rate_limiter`.
