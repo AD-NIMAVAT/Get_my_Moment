@@ -74,6 +74,8 @@ def create_event(
         allow_guest_uploads=event.allow_guest_uploads,
         require_otp=event.require_otp,
         settings=event.settings or {},
+        closed_at=event.closed_at,
+        archived_at=event.archived_at,
         photo_count=0,
         guest_count=0,
         created_at=event.created_at,
@@ -111,6 +113,8 @@ def list_photographer_events(
                 allow_guest_uploads=event.allow_guest_uploads,
                 require_otp=event.require_otp,
                 settings=event.settings or {},
+                closed_at=event.closed_at,
+                archived_at=event.archived_at,
                 photo_count=photo_count,
                 guest_count=guest_count,
                 created_at=event.created_at,
@@ -152,6 +156,8 @@ def get_event_details(
         allow_guest_uploads=event.allow_guest_uploads,
         require_otp=event.require_otp,
         settings=event.settings or {},
+        closed_at=event.closed_at,
+        archived_at=event.archived_at,
         photo_count=photo_count,
         guest_count=guest_count,
         created_at=event.created_at,
@@ -166,7 +172,7 @@ def update_event(
     current_photographer: Photographer = Depends(get_current_photographer),
     db: Session = Depends(get_db)
 ):
-    """Update event settings, status, or configuration."""
+    """Update event settings, status, lifecycle timestamps, or configuration."""
     event = db.query(Event).filter(Event.id == event_id, Event.photographer_id == current_photographer.id).first()
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
@@ -186,6 +192,10 @@ def update_event(
         event.require_otp = request.require_otp
     if request.settings is not None:
         event.settings = request.settings
+    if request.closed_at is not None:
+        event.closed_at = request.closed_at
+    if request.archived_at is not None:
+        event.archived_at = request.archived_at
 
     db.commit()
     db.refresh(event)
@@ -207,6 +217,8 @@ def update_event(
         allow_guest_uploads=event.allow_guest_uploads,
         require_otp=event.require_otp,
         settings=event.settings or {},
+        closed_at=event.closed_at,
+        archived_at=event.archived_at,
         photo_count=photo_count,
         guest_count=guest_count,
         created_at=event.created_at,
@@ -349,6 +361,8 @@ def restore_event(
         allow_guest_uploads=event.allow_guest_uploads,
         require_otp=event.require_otp,
         settings=event.settings or {},
+        closed_at=event.closed_at,
+        archived_at=event.archived_at,
         photo_count=photo_count,
         guest_count=guest_count,
         created_at=event.created_at,
@@ -386,6 +400,8 @@ def list_trash_events(
                 allow_guest_uploads=event.allow_guest_uploads,
                 require_otp=event.require_otp,
                 settings=event.settings or {},
+                closed_at=event.closed_at,
+                archived_at=event.archived_at,
                 photo_count=photo_count,
                 guest_count=guest_count,
                 created_at=event.created_at,

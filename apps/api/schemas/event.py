@@ -25,6 +25,8 @@ class EventUpdateRequest(BaseModel):
     allow_guest_uploads: Optional[bool] = None
     require_otp: Optional[bool] = None
     settings: Optional[Dict[str, Any]] = None
+    closed_at: Optional[datetime] = None
+    archived_at: Optional[datetime] = None
 
 
 class EventResponse(BaseModel):
@@ -41,6 +43,8 @@ class EventResponse(BaseModel):
     allow_guest_uploads: bool = True
     require_otp: bool
     settings: Dict[str, Any]
+    closed_at: Optional[datetime] = None
+    archived_at: Optional[datetime] = None
     photo_count: int = 0
     guest_count: int = 0
     created_at: datetime

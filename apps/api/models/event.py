@@ -41,6 +41,8 @@ class Event(Base):
     city = Column(String(255), nullable=True)
     selection_token = Column(String(64), unique=True, index=True, default=generate_event_token, nullable=False)
     settings = Column(JSON, default=dict, nullable=False)
+    closed_at = Column(DateTime, nullable=True)
+    archived_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

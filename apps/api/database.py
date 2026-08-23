@@ -99,6 +99,8 @@ def init_db():
                 ev_cols_to_add = [
                     ("is_deleted", "BOOLEAN DEFAULT 0 NOT NULL"),
                     ("deleted_at", "DATETIME"),
+                    ("closed_at", "DATETIME"),
+                    ("archived_at", "DATETIME"),
                 ]
                 for c_name, c_type in ev_cols_to_add:
                     if c_name not in existing_ev_cols:
