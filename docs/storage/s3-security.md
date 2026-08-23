@@ -29,8 +29,7 @@ The EC2 instance hosting Get My Moment must authenticate using an **IAM Instance
       "Action": [
         "s3:PutObject",
         "s3:GetObject",
-        "s3:DeleteObject",
-        "s3:HeadObject"
+        "s3:DeleteObject"
       ],
       "Resource": "arn:aws:s3:::getmymoment-media-prod-347447669372-eunorth1/*"
     },

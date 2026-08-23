@@ -110,8 +110,7 @@ IAM_POLICY_JSON=$(cat <<EOF
       "Action": [
         "s3:PutObject",
         "s3:GetObject",
-        "s3:DeleteObject",
-        "s3:HeadObject"
+        "s3:DeleteObject"
       ],
       "Resource": "arn:aws:s3:::${BUCKET_NAME}/*"
     },
@@ -131,9 +130,18 @@ EOF
 
 POLICY_ARN="arn:aws:iam::${ACCOUNT_ID}:policy/${POLICY_NAME}"
 if aws iam get-policy --policy-arn "${POLICY_ARN}" 2>/dev/null; then
-    echo "IAM policy already exists. Updating policy..."
-    aws iam create-policy-version --policy-arn "${POLICY_ARN}" --policy-document "${IAM_POLICY_JSON}" --set-as-default || true
+    echo "IAM policy ${POLICY_NAME} already exists. Checking version limit..."
+    VERSIONS=$(aws iam list-policy-versions --policy-arn "${POLICY_ARN}" --query 'Versions[?!IsDefaultVersion].VersionId' --output text 2>/dev/null || echo "")
+    NUM_VERSIONS=$(echo "$VERSIONS" | wc -w)
+    if [ "$NUM_VERSIONS" -ge 4 ]; then
+        OLDEST_V=$(echo "$VERSIONS" | awk '{print $1}')
+        echo "Pruning oldest non-default policy version: ${OLDEST_V}"
+        aws iam delete-policy-version --policy-arn "${POLICY_ARN}" --version-id "${OLDEST_V}"
+    fi
+    echo "Creating new default policy version..."
+    aws iam create-policy-version --policy-arn "${POLICY_ARN}" --policy-document "${IAM_POLICY_JSON}" --set-as-default
 else
+    echo "Creating IAM policy ${POLICY_NAME}..."
     aws iam create-policy \
         --policy-name "${POLICY_NAME}" \
         --policy-document "${IAM_POLICY_JSON}" \
@@ -146,19 +154,53 @@ echo "=== 7. CREATING INSTANCE PROFILE & ATTACHING TO EC2: ${INSTANCE_ID} ==="
 if aws iam get-instance-profile --instance-profile-name "${PROFILE_NAME}" 2>/dev/null; then
     echo "Instance profile ${PROFILE_NAME} exists."
 else
+    echo "Creating instance profile ${PROFILE_NAME}..."
     aws iam create-instance-profile --instance-profile-name "${PROFILE_NAME}"
     aws iam add-role-to-instance-profile --instance-profile-name "${PROFILE_NAME}" --role-name "${ROLE_NAME}"
     echo "Instance profile created and linked to role."
 fi
 
-echo "Attaching instance profile to EC2 ${INSTANCE_ID}..."
-aws ec2 associate-iam-instance-profile \
-    --instance-id "${INSTANCE_ID}" \
-    --iam-instance-profile Name="${PROFILE_NAME}" \
-    --region "${REGION}" || echo "Instance profile may already be associated or being updated."
+echo "Checking existing instance profile associations on EC2 ${INSTANCE_ID}..."
+ASSOC_ID=$(aws ec2 describe-iam-instance-profile-associations \
+    --filters "Name=instance-id,Values=${INSTANCE_ID}" "Name=state,Values=associated,associating" \
+    --query 'IamInstanceProfileAssociations[0].AssociationId' \
+    --output text \
+    --region "${REGION}" 2>/dev/null || echo "")
+
+if [ -n "${ASSOC_ID}" ] && [ "${ASSOC_ID}" != "None" ]; then
+    CURRENT_PROFILE_ARN=$(aws ec2 describe-iam-instance-profile-associations \
+        --association-ids "${ASSOC_ID}" \
+        --query 'IamInstanceProfileAssociations[0].IamInstanceProfile.Arn' \
+        --output text \
+        --region "${REGION}")
+    if [[ "${CURRENT_PROFILE_ARN}" == *"${PROFILE_NAME}"* ]]; then
+        echo "Instance profile ${PROFILE_NAME} is already associated with EC2 ${INSTANCE_ID} (Association ID: ${ASSOC_ID})."
+    else
+        echo "Replacing existing instance profile (${CURRENT_PROFILE_ARN}) with ${PROFILE_NAME}..."
+        aws ec2 replace-iam-instance-profile-association \
+            --association-id "${ASSOC_ID}" \
+            --iam-instance-profile Name="${PROFILE_NAME}" \
+            --region "${REGION}"
+    fi
+else
+    echo "Associating instance profile ${PROFILE_NAME} with EC2 ${INSTANCE_ID}..."
+    aws ec2 associate-iam-instance-profile \
+        --instance-id "${INSTANCE_ID}" \
+        --iam-instance-profile Name="${PROFILE_NAME}" \
+        --region "${REGION}"
+fi
+
+echo "Verifying final association state..."
+FINAL_STATE=$(aws ec2 describe-iam-instance-profile-associations \
+    --filters "Name=instance-id,Values=${INSTANCE_ID}" \
+    --query 'IamInstanceProfileAssociations[0].State' \
+    --output text \
+    --region "${REGION}")
+echo "EC2 IAM Association State: ${FINAL_STATE}"
 
 echo "=== PROVISIONING COMPLETE ==="
 echo "Bucket: ${BUCKET_NAME}"
 echo "Role: ${ROLE_NAME}"
 echo "EC2: ${INSTANCE_ID}"
+
 
