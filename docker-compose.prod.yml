@@ -52,7 +52,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: docker/api.Dockerfile
+      dockerfile: apps/api/Dockerfile
     container_name: getmymoment_prod_api
     restart: always
     environment:
@@ -82,7 +82,7 @@ services:
   ai_worker:
     build:
       context: .
-      dockerfile: docker/worker.Dockerfile
+      dockerfile: workers/ai_worker/Dockerfile
     container_name: getmymoment_prod_worker
     restart: always
     environment:
