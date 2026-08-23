@@ -4,14 +4,19 @@
  */
 
 export function getApiBaseUrl(): string {
+  // If explicitly set to a relative path like '/api/v1', use it
+  if (process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.startsWith('/')) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  // In browser, always use same-origin relative path to prevent CORS preflight / redirect errors
+  if (typeof window !== 'undefined') {
+    return '/api/v1';
+  }
+  // In SSR / server execution, use env variable if available or localhost backend
   if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL;
   }
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    return `http://${host}:8000/api/v1`;
-  }
-  return 'http://localhost:8000/api/v1';
+  return 'http://127.0.0.1:8000/api/v1';
 }
 
 export interface PhotographerUser {

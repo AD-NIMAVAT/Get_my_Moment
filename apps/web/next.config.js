@@ -17,6 +17,10 @@ const nextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'www.getmymoment.fun',
+      },
+      {
+        protocol: 'https',
         hostname: 'api.getmymoment.fun',
       },
       {
