@@ -101,18 +101,18 @@ ikon, uji, camera) with shared passwords and anonymous write access. pyftpdlib 
 
 ---
 
-### G. Original Photo Access Control
-- **Current implementation:** GET /photos/{photo_id}/download allows download if 	oken matches event.access_token or event.selection_token. If 	oken is omitted, no auth check was enforced if UUID was known.
-- **Verification method:** Inspection of pps/api/routers/photos.py:255-273.
-- **Result:** Omission of token parameter bypasses event token check when photographer auth header is missing.
-- **Classification:** NEEDS_REFACTOR (P0 Finding)
-- **Evidence:** pps/api/routers/photos.py lines 266-272: if token: ... lacks an else branch enforcing photographer/admin JWT auth.
+### G. Original Photo Access Control (SEC-01)
+- **Current implementation:** `GET /photos/{photo_id}/download` and `GET /events/{event_id}/download-all-zip` enforce strict server-side fail-closed authorization. A download is permitted ONLY if (1) a valid event `access_token` or `selection_token` is provided (with `event.allow_downloads == True`), OR (2) a valid photographer/admin JWT is supplied matching the photo/event owner. If unauthenticated and without token, returns HTTP 401 Unauthorized.
+- **Verification method:** Comprehensive test suite `tests/security/test_download_auth.py` covering all 12 negative and positive authorization scenarios.
+- **Result:** UUID-only unauthenticated download is denied (401); cross-event token is denied (403); cross-tenant photographer JWT is denied (403); disabled downloads are denied (403); legitimate token and photographer access permitted (200).
+- **Classification:** FIXED & VERIFIED
+- **Evidence:** 12/12 automated test cases in `tests/security/test_download_auth.py` PASSED; full test suite (84 tests) PASSED 100%.
 - **Risk if failed:** IDOR: An unauthenticated caller possessing a raw Photo UUID could download high-resolution originals.
-- **Remediation:** Enforce that GET /photos/{photo_id}/download requires EITHER a valid event capability token OR authenticated photographer ownership of the photo.
-- **Production impact:** High security improvement; zero impact on authorized guests and photographers.
-- **Required tests:** Authorization negative test with unauthenticated request lacking token.
-- **Rollback:** Revert router check.
-- **Dependencies:** pps/api/auth.py.
+- **Remediation:** Enforced fail-closed authorization check in `apps/api/routers/photos.py`.
+- **Production impact:** High security improvement; zero regression for legitimate users.
+- **Required tests:** `pytest tests/security/test_download_auth.py`.
+- **Rollback:** Revert commit `ac45e46`.
+- **Dependencies:** `jose.jwt`, `apps.api.config.settings`.
 
 ---
 

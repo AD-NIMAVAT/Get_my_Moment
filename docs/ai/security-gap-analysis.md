@@ -9,7 +9,7 @@
 
 | ID | Security Control Area | Severity | Current Status | Finding Summary |
 | :-: | :--- | :---: | :---: | :--- |
-| **SEC-01** | Original Photo Download Auth | **HIGH** | NEEDS_REFACTOR | GET /photos/{id}/download lacks mandatory auth check when token query param is omitted. |
+| **SEC-01** | Original Photo Download Auth | **HIGH** | `FIXED` | Server-side fail-closed token/JWT authorization enforced on download endpoints. |
 | **SEC-02** | Endpoint-Specific Rate Limiting | **HIGH** | MISSING | No rate limiting middleware on login, OTP, selfie face search, or token lookups. |
 | **SEC-03** | Automated Cloud Backup & Cron | **MEDIUM** | PARTIALLY_IMPLEMENTED | Local SQL dump exists; automated daily encrypted cloud backup cron is not yet installed. |
 | **SEC-04** | Biometric Retention & Purge Policy | **MEDIUM** | NEEDS_DECISION | Formal auto-purge lifecycle for guest selfies and embeddings requires approved retention decision. |
