@@ -117,9 +117,11 @@ def test_lifecycle_non_destructive_invariants(client, db_session):
     # Add mock child records
     photo = Photo(
         event_id=event_id,
-        storage_path="storage/photos/test_invariant.jpg",
+        file_path="storage/photos/test_invariant.jpg",
         original_file_name="invariant.jpg",
+        sha256_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         file_size=1024,
+        mime_type="image/jpeg",
     )
     guest = Guest(
         event_id=event_id,
