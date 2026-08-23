@@ -57,8 +57,7 @@ class FolderResponse(BaseModel):
     updated_at: datetime
     subfolders: List["FolderResponse"] = []
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class CreateFolderRequest(BaseModel):
@@ -225,7 +224,7 @@ def create_folder(
     db.commit()
     db.refresh(folder)
 
-    return FolderResponse.from_orm(folder)
+    return FolderResponse.model_validate(folder)
 
 
 @router.put("/{folder_id}", response_model=FolderResponse)
@@ -267,7 +266,7 @@ def update_folder(
 
     db.commit()
     db.refresh(folder)
-    return FolderResponse.from_orm(folder)
+    return FolderResponse.model_validate(folder)
 
 
 @router.delete("/{folder_id}")
@@ -376,7 +375,7 @@ def generate_wedding_preset(
             Folder.deleted_at.is_(None)
         ).order_by(Folder.order_index.asc()).all()
 
-        return [FolderResponse.from_orm(f) for f in all_folders]
+        return [FolderResponse.model_validate(f) for f in all_folders]
 
 
 @router.post("/move-photos")
