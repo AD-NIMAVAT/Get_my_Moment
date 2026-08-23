@@ -109,12 +109,11 @@ def sec_download_env():
 
     # Upload Photo to Event A
     jpeg_data = create_dummy_jpeg()
-    file_path_a = storage_service.save_file(
+    _, file_path_a, _, _ = storage_service.save_original(
+        event_id=event_a.id,
         file_bytes=jpeg_data,
         original_filename='photo_a.jpg',
-        mime_type='image/jpeg',
-        studio_id=p1.id,
-        event_id=event_a.id
+        studio_id=p1.id
     )
     photo_a = Photo(
         event_id=event_a.id,
@@ -127,12 +126,11 @@ def sec_download_env():
     )
     
     # Upload Photo to Event B
-    file_path_b = storage_service.save_file(
+    _, file_path_b, _, _ = storage_service.save_original(
+        event_id=event_b.id,
         file_bytes=jpeg_data,
         original_filename='photo_b.jpg',
-        mime_type='image/jpeg',
-        studio_id=p2.id,
-        event_id=event_b.id
+        studio_id=p2.id
     )
     photo_b = Photo(
         event_id=event_b.id,
@@ -145,12 +143,11 @@ def sec_download_env():
     )
 
     # Upload Photo to Event A Restricted
-    file_path_a_nodl = storage_service.save_file(
+    _, file_path_a_nodl, _, _ = storage_service.save_original(
+        event_id=event_a_nodownload.id,
         file_bytes=jpeg_data,
         original_filename='photo_a_nodl.jpg',
-        mime_type='image/jpeg',
-        studio_id=p1.id,
-        event_id=event_a_nodownload.id
+        studio_id=p1.id
     )
     photo_a_nodl = Photo(
         event_id=event_a_nodownload.id,
