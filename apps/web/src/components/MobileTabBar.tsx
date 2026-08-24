@@ -59,7 +59,7 @@ export function MobileTabBar() {
   return (
     <nav 
       aria-label="Mobile Navigation"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#F3F1EC]/95 backdrop-blur-xl border-t border-[#E2DDD5] pb-safe shadow-[0_-8px_24px_#D4D0C7] touch-action-manipulation"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#F3F1EC]/95 backdrop-blur-xl border-t border-[#E2DDD5] pb-safe shadow-[0_-8px_24px_#D4D0C7] touch-action-manipulation no-print"
     >
       <div className="max-w-md mx-auto px-4 h-16 flex items-center justify-around">
         {tabs.map((tab) => {

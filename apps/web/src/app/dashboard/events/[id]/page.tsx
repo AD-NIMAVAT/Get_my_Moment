@@ -20,7 +20,7 @@ import {
   ExternalLink, Download, Sparkles, CheckCircle2, ShieldCheck, 
   IndianRupee, DollarSign, Plus, MessageSquare, Send, CheckSquare, 
   Calendar, Layers, Heart, FileText, Trash2, ToggleLeft, ToggleRight, 
-  AlertCircle, AlertTriangle, Phone, Wifi, Folder as FolderIcon, FolderPlus, MoveRight,
+  AlertCircle, AlertTriangle, Phone, MapPin, Mail, Wifi, Folder as FolderIcon, FolderPlus, MoveRight,
   Lock, Eye, MoreVertical, X, Activity, Clock, Zap
 } from 'lucide-react';
 
@@ -479,7 +479,7 @@ export default function EventCommandCenterPage() {
   return (
     <div className="min-h-screen bg-[#F3F1EC] pb-24">
       {/* Top Breadcrumb & Actions Bar */}
-      <div className="border-b border-[#E2DDD5] bg-[#F3F1EC]/80 backdrop-blur-md sticky top-0 z-30">
+      <div className="border-b border-[#E2DDD5] bg-[#F3F1EC]/80 backdrop-blur-md sticky top-0 z-30 no-print">
         <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1850px] mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link
@@ -544,7 +544,7 @@ export default function EventCommandCenterPage() {
       <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1850px] mx-auto px-4 sm:px-6 py-6 space-y-6">
         {/* Live Ingest & AI Pipeline Telemetry Panel */}
         {health && (
-          <div className="p-4 sm:p-5 rounded-3xl neu-card bg-[#FAF9F7] border border-[#E8E5E2] space-y-4">
+          <div className="p-4 sm:p-5 rounded-3xl neu-card bg-[#FAF9F7] border border-[#E8E5E2] space-y-4 no-print">
             {/* Top Status & Diagnostics Header */}
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-[#E8E5E2]/60 pb-3">
               <div className="flex items-center gap-3">
@@ -682,7 +682,7 @@ export default function EventCommandCenterPage() {
         )}
 
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none no-print">
           {[
             { id: 'operations', label: 'Operations & Crew', icon: <Users className="w-4 h-4" /> },
             { id: 'finance', label: 'Finance & Profit', icon: <IndianRupee className="w-4 h-4" /> },
@@ -1267,7 +1267,7 @@ export default function EventCommandCenterPage() {
         {activeTab === 'qr' && event && (
           <div className="space-y-6 max-w-4xl mx-auto">
             {/* Action Bar */}
-            <div className="neu-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
+            <div className="neu-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 no-print">
               <div>
                 <h3 className="text-sm font-bold text-[#1F1F1F] flex items-center gap-2">
                   <QrCode className="w-4 h-4 text-[#E86A5B]" />
@@ -1307,77 +1307,91 @@ export default function EventCommandCenterPage() {
             </div>
 
             {/* Printable Table Standee Card */}
-            <div className="neu-card p-6 sm:p-10 text-center bg-gradient-to-b from-[#FFFDF9] to-[#FAF7F2] border border-[#E8E5E2] shadow-md relative overflow-hidden">
-              {/* Decorative Accent */}
-              <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#E86A5B] via-[#F4A261] to-[#E86A5B]" />
+            <div 
+              id="printable-qr-standee"
+              className="neu-card p-6 sm:p-10 text-center bg-[#FAF9F7] border border-[#E8E5E2] shadow-lg rounded-3xl relative overflow-hidden max-w-md sm:max-w-lg mx-auto"
+            >
+              {/* Decorative Brand Accent Strip */}
+              <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-[#E86A5B] via-[#D9A441] to-[#E86A5B]" />
 
-              <div className="max-w-md mx-auto space-y-6">
-                {/* Header Branding */}
-                <div className="space-y-1">
-                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#E86A5B] bg-[#E86A5B]/10 px-3 py-1 rounded-full inline-block">
-                    ⚡ Instant AI Photo Delivery
-                  </span>
-                  <h2 className="text-2xl sm:text-3xl font-display font-extrabold text-[#1F1F1F] tracking-tight pt-2">
-                    {event.name}
+              <div className="space-y-6 pt-2">
+                {/* 1. TOP SIDE: STUDIO LOGO + STUDIO NAME + GET MY MOMENT */}
+                <div className="flex flex-col items-center justify-center space-y-1.5">
+                  {user?.logo_url ? (
+                    <img 
+                      src={user.logo_url} 
+                      alt={user.studio_name || 'Studio Logo'} 
+                      className="h-14 sm:h-16 max-w-[220px] object-contain mx-auto mb-1"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-[#EE7E6F] via-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-display font-black text-2xl shadow-[3px_3px_8px_#D4D0C7,-3px_-3px_8px_#FFFFFF] border border-white/80 mb-1">
+                      {(user?.studio_name || 'G').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+
+                  <h2 className="text-xl sm:text-2xl font-display font-extrabold text-[#1F1F1F] tracking-tight">
+                    {user?.studio_name || 'Studio Photography'}
                   </h2>
-                  <p className="text-xs font-semibold text-[#6B6B6B]">
-                    {user?.studio_name ? `Photography by ${user.studio_name}` : 'Get My Moment Live Event'}
-                  </p>
+
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E86A5B]/10 border border-[#E86A5B]/20 text-[#E86A5B] text-xs font-extrabold tracking-wider uppercase">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Get My Moment</span>
+                  </div>
+
+                  {event.name && (
+                    <p className="text-sm font-bold text-[#4A4A4A] tracking-tight pt-1">
+                      {event.name}
+                    </p>
+                  )}
                 </div>
 
-                {/* QR Code Container with Frame */}
-                <div className="relative inline-block p-4 sm:p-6 bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-[#EBE8E1]">
+                {/* 2. CENTER: KHALI QR CODE (Clean & Large High-Res Scannable) */}
+                <div className="p-4 sm:p-6 bg-white rounded-3xl shadow-[0_10px_30px_rgba(0,0,0,0.06)] border border-[#EBE8E1] inline-block mx-auto">
                   <img
                     src={`/api/v1/events/${event.id}/qr`}
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
                       const guestUrl = `${window.location.origin}/e/${event.access_token}`;
-                      target.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(guestUrl)}`;
+                      target.src = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(guestUrl)}`;
                     }}
                     alt={`Scan QR Code for ${event.name}`}
-                    className="w-56 h-56 sm:w-64 sm:h-64 object-contain mx-auto rounded-2xl"
+                    className="w-56 h-56 sm:w-64 sm:h-64 object-contain mx-auto rounded-xl"
                   />
-                  <div className="mt-3 flex items-center justify-center gap-1.5 text-[11px] font-bold text-[#1F1F1F]">
+                  <div className="mt-3 flex items-center justify-center gap-1.5 text-xs font-extrabold text-[#1F1F1F]">
                     <Sparkles className="w-3.5 h-3.5 text-[#E86A5B]" />
-                    <span>Scan with any Phone Camera</span>
+                    <span>Scan with Phone Camera to View Photos</span>
                   </div>
                 </div>
 
-                {/* 3 Step Instructions */}
-                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[#E8E5E2]/80">
-                  <div className="p-3 bg-white/70 rounded-2xl border border-[#EBE8E1]">
-                    <div className="w-7 h-7 rounded-full bg-[#E86A5B]/10 text-[#E86A5B] font-bold text-xs flex items-center justify-center mx-auto mb-1.5">
-                      1
-                    </div>
-                    <span className="text-[11px] font-bold text-[#1F1F1F] block">Scan QR</span>
-                    <span className="text-[10px] text-[#6B6B6B]">No app required</span>
+                {/* 3. BOTTOM: STUDIO CONTACT NUMBER & ADDRESS */}
+                <div className="pt-4 border-t border-[#E8E5E2] space-y-2">
+                  <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs font-bold text-[#1F1F1F]">
+                    {user?.phone && (
+                      <span className="flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-[#E86A5B]" />
+                        <span>{user.phone}</span>
+                      </span>
+                    )}
+                    {(user?.city || user?.state) && (
+                      <span className="flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-[#E86A5B]" />
+                        <span>{[user?.city, user?.state].filter(Boolean).join(', ')}</span>
+                      </span>
+                    )}
+                    {user?.email && !user?.phone && (
+                      <span className="flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-[#E86A5B]" />
+                        <span>{user.email}</span>
+                      </span>
+                    )}
                   </div>
 
-                  <div className="p-3 bg-white/70 rounded-2xl border border-[#EBE8E1]">
-                    <div className="w-7 h-7 rounded-full bg-[#E86A5B]/10 text-[#E86A5B] font-bold text-xs flex items-center justify-center mx-auto mb-1.5">
-                      2
-                    </div>
-                    <span className="text-[11px] font-bold text-[#1F1F1F] block">Take Selfie</span>
-                    <span className="text-[10px] text-[#6B6B6B]">Quick 1-sec scan</span>
+                  {/* 4. SOUTHEST FOOTER: GetMyMoment By Pro_Technologies */}
+                  <div className="pt-3 border-t border-[#EBE8E1]/80">
+                    <span className="text-[11px] font-extrabold tracking-wide text-[#6B6B6B] block">
+                      GetMyMoment By Pro_Technologies
+                    </span>
                   </div>
-
-                  <div className="p-3 bg-white/70 rounded-2xl border border-[#EBE8E1]">
-                    <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 font-bold text-xs flex items-center justify-center mx-auto mb-1.5">
-                      3
-                    </div>
-                    <span className="text-[11px] font-bold text-[#1F1F1F] block">Get Photos</span>
-                    <span className="text-[10px] text-[#6B6B6B]">Instantly via AI</span>
-                  </div>
-                </div>
-
-                {/* Direct Link Footnote */}
-                <div className="pt-2">
-                  <p className="text-[11px] text-[#6B6B6B]">
-                    Direct Link: <a href={`/e/${event.access_token}`} target="_blank" rel="noreferrer" className="text-[#E86A5B] font-mono hover:underline inline-flex items-center gap-1">
-                      <span>/e/{event.access_token}</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </p>
                 </div>
               </div>
             </div>

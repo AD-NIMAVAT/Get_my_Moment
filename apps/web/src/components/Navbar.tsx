@@ -165,7 +165,7 @@ export function Navbar() {
   return (
     <>
       <header 
-        className={`sticky top-0 z-50 w-full max-w-full box-border transition-all duration-300 ${
+        className={`sticky top-0 z-50 w-full max-w-full box-border transition-all duration-300 no-print ${
           isScrolled 
             ? 'py-2 bg-[#F3F1EC]/95 backdrop-blur-xl border-b border-[#E2DDD5] shadow-[0_10px_30px_rgba(0,0,0,0.06),0_4px_16px_#D4D0C7]' 
             : 'py-2.5 sm:py-3.5 bg-[#F3F1EC]/90 backdrop-blur-md border-b border-[#E2DDD5]/70'
