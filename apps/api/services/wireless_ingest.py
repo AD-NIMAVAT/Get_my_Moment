@@ -384,7 +384,7 @@ def process_incoming_camera_photo(
             db.commit()
             db.refresh(photo)
 
-            reconcile_folder_counters(db, target_folder.id)
+            reconcile_folder_counters(db, event_id=event.id, folder_id=target_folder.id)
             logger.info(f"📸 ✅ [WIRELESS CAMERA SYNCED] Photo '{filename}' ingested into Folder '{target_folder.name}' in Event '{event.name}'")
 
             # Dispatch AI face recognition worker

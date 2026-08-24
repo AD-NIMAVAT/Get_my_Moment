@@ -118,6 +118,9 @@ def list_folders(
     # Ensure system Uncategorized folder exists
     get_or_create_uncategorized_folder(db, studio_id=current_user.id, event_id=event.id)
 
+    # Live counter reconciliation to ensure 100% accurate photo counts
+    reconcile_folder_counters(db, event_id=event.id)
+
     # Fetch all folders in this event
     all_folders = db.query(Folder).filter(
         Folder.event_id == event.id,

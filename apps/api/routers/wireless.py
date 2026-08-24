@@ -19,7 +19,7 @@ from apps.api.models.photo import Photo
 from apps.api.models.photographer import Photographer
 from apps.api.models.camera import CameraDevice
 from apps.api.auth import get_current_photographer, hash_password
-from apps.api.services.storage import storage_service
+from apps.api.services.storage import storage_service, get_or_create_uncategorized_folder, reconcile_folder_counters
 from apps.api.services.wireless_ingest import wireless_server
 from workers.ai_worker.worker import dispatch_photo_processing
 from packages.shared.constants import PhotoStatus
@@ -453,6 +453,9 @@ async def wireless_http_ingest(
             uploaded_ids.append(photo.id)
         except Exception:
             continue
+
+    if target_folder:
+        reconcile_folder_counters(db, event_id=event_id, folder_id=target_folder.id)
 
     return {
         "event_id": event_id,
