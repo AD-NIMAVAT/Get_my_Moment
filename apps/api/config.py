@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     AI_QUEUE_AGE_WARNING_SECONDS: int = 30
     AI_QUEUE_AGE_CRITICAL_SECONDS: int = 120
 
+    # Durable Queue Recovery & Reconciliation (P1-BATCH-13)
+    RECONCILIATION_INTERVAL_SECONDS: int = 60
+    RECONCILIATION_GRACE_PERIOD_SECONDS: int = 60
+    RECONCILIATION_STALE_PROCESSING_SECONDS: int = 300
+    RECONCILIATION_BATCH_SIZE: int = 50
+
     # Storage
     STORAGE_DRIVER: str = "local"
     STORAGE_LOCAL_ROOT: str = "./storage"

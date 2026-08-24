@@ -53,8 +53,28 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Could not auto-start wireless camera server: {e}")
 
+    def background_reconciliation_loop():
+        """Periodically check for orphaned UPLOADED or stale PROCESSING photos and re-dispatch."""
+        import time
+        from workers.ai_worker.worker import reconcile_orphaned_photos
+        time.sleep(5.0)
+        while True:
+            try:
+                reconciled = reconcile_orphaned_photos(
+                    event_id=None,
+                    max_age_seconds=settings.RECONCILIATION_GRACE_PERIOD_SECONDS,
+                    stale_processing_seconds=settings.RECONCILIATION_STALE_PROCESSING_SECONDS,
+                    limit=settings.RECONCILIATION_BATCH_SIZE
+                )
+                if reconciled > 0:
+                    logger.info(f"🔄 [DURABLE RECONCILIATION] Re-dispatched {reconciled} orphaned/stale photo(s) to Celery.")
+            except Exception as e:
+                logger.debug(f"Periodic reconciliation loop notice: {e}")
+            time.sleep(settings.RECONCILIATION_INTERVAL_SECONDS)
+
     import threading
     threading.Thread(target=delayed_start_wireless, daemon=True).start()
+    threading.Thread(target=background_reconciliation_loop, daemon=True).start()
 
     logger.info("Get My Moment backend started successfully.")
     yield

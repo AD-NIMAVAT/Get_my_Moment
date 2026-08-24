@@ -1,5 +1,5 @@
 """
-Queue Failure Recovery, Concurrency Claims & Durable Reconciliation Tests (P1-BATCH-12)
+Queue Failure Recovery, Concurrency Claims & Durable Reconciliation Tests (P1-BATCH-12 & P1-BATCH-13)
 """
 
 import io
@@ -22,7 +22,6 @@ def generate_test_image() -> bytes:
 
 def test_atomic_processing_claim_and_duplicate_prevention(client, db_session):
     """Verify that atomic CAS claim prevents two workers from processing the same photo simultaneously."""
-    # 1. Setup Studio & Event
     signup_res = client.post(
         "/api/v1/auth/signup",
         json={"email": "claim_test@example.com", "password": "Password123!", "studio_name": "Claim Studio"}
@@ -32,23 +31,53 @@ def test_atomic_processing_claim_and_duplicate_prevention(client, db_session):
     event_res = client.post("/api/v1/events", headers=headers, json={"name": "Claim Event"})
     event_id = event_res.json()["id"]
 
-    # 2. Upload Photo
     img = generate_test_image()
     files = [("files", ("claim_photo.jpg", img, "image/jpeg"))]
     res = client.post(f"/api/v1/events/{event_id}/photos", headers=headers, files=files)
     assert res.status_code == 201
     photo_id = res.json()["photos"][0]["id"]
 
-    # 3. Simulate Photo already in PROCESSING state
+    # Simulate Photo already actively in PROCESSING state
     db_session.query(Photo).filter(Photo.id == photo_id).update({
         "status": PhotoStatus.PROCESSING.value,
         "processing_started_at": datetime.utcnow()
     })
     db_session.commit()
 
-    # 4. Attempt second run_photo_pipeline -> Must return already_in_progress without duplicate execution
-    result = run_photo_pipeline(photo_id, event_id, db_override=db_session)
+    # Attempt second run_photo_pipeline (normal non-redelivery) -> Must return already_in_progress
+    result = run_photo_pipeline(photo_id, event_id, db_override=db_session, is_redelivery=False)
     assert result["status"] == "already_in_progress"
+
+
+def test_immediate_worker_crash_redelivery_claim(client, db_session):
+    """Verify that Celery redelivery after worker loss (is_redelivery=True) allows immediate CAS reclaim."""
+    signup_res = client.post(
+        "/api/v1/auth/signup",
+        json={"email": "redeliv_test@example.com", "password": "Password123!", "studio_name": "Redeliv Studio"}
+    )
+    headers = {"Authorization": f"Bearer {signup_res.json()['access_token']}"}
+    event_res = client.post("/api/v1/events", headers=headers, json={"name": "Redeliv Event"})
+    event_id = event_res.json()["id"]
+
+    img = generate_test_image()
+    files = [("files", ("redeliv_photo.jpg", img, "image/jpeg"))]
+    res = client.post(f"/api/v1/events/{event_id}/photos", headers=headers, files=files)
+    photo_id = res.json()["photos"][0]["id"]
+
+    # Simulate worker crash mid-task: status=PROCESSING, started 3 seconds ago
+    db_session.query(Photo).filter(Photo.id == photo_id).update({
+        "status": PhotoStatus.PROCESSING.value,
+        "processing_started_at": datetime.utcnow() - timedelta(seconds=3)
+    })
+    db_session.commit()
+
+    # Immediate Celery redelivery (is_redelivery=True)
+    result = run_photo_pipeline(photo_id, event_id, db_override=db_session, is_redelivery=True)
+    assert result["status"] == "success"
+
+    # Verify photo reached PROCESSED status
+    photo = db_session.query(Photo).filter(Photo.id == photo_id).first()
+    assert photo.status == PhotoStatus.PROCESSED.value
 
 
 def test_reprocessing_idempotency_and_face_cleanup(client, db_session):
@@ -72,7 +101,6 @@ def test_reprocessing_idempotency_and_face_cleanup(client, db_session):
     res1 = run_photo_pipeline(photo_id, event_id, db_override=db_session)
     assert res1["status"] == "success"
 
-    # Verify Face and Embedding records created
     faces_1 = db_session.query(Face).filter(Face.photo_id == photo_id).count()
 
     # 2. Reset to FAILED and run second time (Retry simulation)
@@ -81,13 +109,43 @@ def test_reprocessing_idempotency_and_face_cleanup(client, db_session):
     res2 = run_photo_pipeline(photo_id, event_id, db_override=db_session)
     assert res2["status"] == "success"
 
-    # Verify Face count is identical (no duplicate leaked face rows)
     faces_2 = db_session.query(Face).filter(Face.photo_id == photo_id).count()
     assert faces_2 == faces_1
 
 
+def test_stale_processing_eventual_recovery(client, db_session):
+    """Verify that stale PROCESSING photos (> 300s) are automatically reclaimed."""
+    signup_res = client.post(
+        "/api/v1/auth/signup",
+        json={"email": "stale_test@example.com", "password": "Password123!", "studio_name": "Stale Studio"}
+    )
+    headers = {"Authorization": f"Bearer {signup_res.json()['access_token']}"}
+    event_res = client.post("/api/v1/events", headers=headers, json={"name": "Stale Event"})
+    event_id = event_res.json()["id"]
+
+    img = generate_test_image()
+    files = [("files", ("stale_photo.jpg", img, "image/jpeg"))]
+    res = client.post(f"/api/v1/events/{event_id}/photos", headers=headers, files=files)
+    photo_id = res.json()["photos"][0]["id"]
+
+    # Simulate stale processing started 10 minutes ago
+    ten_mins_ago = datetime.utcnow() - timedelta(minutes=10)
+    db_session.query(Photo).filter(Photo.id == photo_id).update({
+        "status": PhotoStatus.PROCESSING.value,
+        "processing_started_at": ten_mins_ago
+    })
+    db_session.commit()
+
+    # Normal worker run (is_redelivery=False) claims because it is past stale cutoff
+    result = run_photo_pipeline(photo_id, event_id, db_override=db_session, is_redelivery=False)
+    assert result["status"] == "success"
+
+    photo = db_session.query(Photo).filter(Photo.id == photo_id).first()
+    assert photo.status == PhotoStatus.PROCESSED.value
+
+
 def test_reconcile_orphaned_photos_helper(client, db_session):
-    """Verify that reconcile_orphaned_photos identifies stale UPLOADED records."""
+    """Verify that reconcile_orphaned_photos identifies stale UPLOADED and stale PROCESSING records."""
     signup_res = client.post(
         "/api/v1/auth/signup",
         json={"email": "reconcile@example.com", "password": "Password123!", "studio_name": "Reconcile Studio"}

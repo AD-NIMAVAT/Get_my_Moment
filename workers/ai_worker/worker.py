@@ -51,7 +51,12 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any
 
 
-def run_photo_pipeline(photo_id: str, event_id: str, db_override: Optional[Session] = None):
+def run_photo_pipeline(
+    photo_id: str,
+    event_id: str,
+    db_override: Optional[Session] = None,
+    is_redelivery: bool = False
+):
     """Core image processing with microsecond telemetry: thumbnail generation, face detection, and embedding indexing."""
     t_start = time.perf_counter()
     now_utc = datetime.utcnow()
@@ -61,23 +66,41 @@ def run_photo_pipeline(photo_id: str, event_id: str, db_override: Optional[Sessi
 
     try:
         # Atomic CAS Processing Claim (Prevents duplicate concurrent execution)
-        stale_cutoff = now_utc - timedelta(minutes=5)
-        claimed = db.query(Photo).filter(
-            Photo.id == photo_id,
-            Photo.event_id == event_id,
-            (
-                Photo.status.in_([PhotoStatus.UPLOADED.value, PhotoStatus.FAILED.value]) |
-                ((Photo.status == PhotoStatus.PROCESSING.value) & (Photo.processing_started_at < stale_cutoff))
+        stale_cutoff = now_utc - timedelta(seconds=settings.RECONCILIATION_STALE_PROCESSING_SECONDS)
+        
+        # If is_redelivery is True (Celery task retry or redelivered after worker loss),
+        # allow claiming status=PROCESSING without waiting for 5-minute timeout.
+        if is_redelivery:
+            claimed = db.query(Photo).filter(
+                Photo.id == photo_id,
+                Photo.event_id == event_id,
+                Photo.status.in_([PhotoStatus.UPLOADED.value, PhotoStatus.PROCESSING.value, PhotoStatus.FAILED.value])
+            ).update(
+                {
+                    "status": PhotoStatus.PROCESSING.value,
+                    "processing_started_at": now_utc,
+                    "error_message": None,
+                    "failure_category": None,
+                },
+                synchronize_session=False
             )
-        ).update(
-            {
-                "status": PhotoStatus.PROCESSING.value,
-                "processing_started_at": now_utc,
-                "error_message": None,
-                "failure_category": None,
-            },
-            synchronize_session=False
-        )
+        else:
+            claimed = db.query(Photo).filter(
+                Photo.id == photo_id,
+                Photo.event_id == event_id,
+                (
+                    Photo.status.in_([PhotoStatus.UPLOADED.value, PhotoStatus.FAILED.value]) |
+                    ((Photo.status == PhotoStatus.PROCESSING.value) & (Photo.processing_started_at < stale_cutoff))
+                )
+            ).update(
+                {
+                    "status": PhotoStatus.PROCESSING.value,
+                    "processing_started_at": now_utc,
+                    "error_message": None,
+                    "failure_category": None,
+                },
+                synchronize_session=False
+            )
         db.commit()
 
         if not claimed:
@@ -221,11 +244,20 @@ def run_photo_pipeline(photo_id: str, event_id: str, db_override: Optional[Sessi
 
 
 # Task wrapper
+def process_photo_task_fn(self, photo_id: str, event_id: str, db_override: Optional[Session] = None):
+    is_redelivery = False
+    if hasattr(self, "request") and self.request:
+        is_redelivery = bool(
+            getattr(self.request, "retries", 0) > 0 or
+            (getattr(self.request, "delivery_info", None) and self.request.delivery_info.get("redelivered", False))
+        )
+    return run_photo_pipeline(photo_id, event_id, db_override=db_override, is_redelivery=is_redelivery)
+
 def process_photo_task(photo_id: str, event_id: str, db_override: Optional[Session] = None):
-    return run_photo_pipeline(photo_id, event_id, db_override=db_override)
+    return run_photo_pipeline(photo_id, event_id, db_override=db_override, is_redelivery=False)
 
 if celery_app is not None:
-    process_photo_task = celery_app.task(bind=True, max_retries=3, default_retry_delay=10)(process_photo_task)
+    process_photo_task = celery_app.task(bind=True, max_retries=3, default_retry_delay=10)(process_photo_task_fn)
 
 
 def dispatch_photo_processing(photo_id: str, event_id: str, db: Optional[Session] = None):
@@ -273,22 +305,27 @@ def dispatch_photo_processing(photo_id: str, event_id: str, db: Optional[Session
 
 def reconcile_orphaned_photos(
     event_id: Optional[str] = None,
-    max_age_seconds: int = 60,
-    limit: int = 50,
+    max_age_seconds: Optional[int] = None,
+    stale_processing_seconds: Optional[int] = None,
+    limit: Optional[int] = None,
     db: Optional[Session] = None
 ) -> int:
     """
     Durable reconciliation helper:
-    Finds photos in UPLOADED status older than max_age_seconds (or stale PROCESSING > 5 mins)
+    Finds photos in UPLOADED status older than grace period (or stale PROCESSING > stale_processing_seconds)
     and safely re-dispatches them to Celery.
     """
+    grace_sec = max_age_seconds if max_age_seconds is not None else settings.RECONCILIATION_GRACE_PERIOD_SECONDS
+    stale_sec = stale_processing_seconds if stale_processing_seconds is not None else settings.RECONCILIATION_STALE_PROCESSING_SECONDS
+    batch_limit = limit if limit is not None else settings.RECONCILIATION_BATCH_SIZE
+
     active_db = db if db is not None else get_db_session()
     should_close = db is None
     reconciled_count = 0
 
     try:
-        cutoff = datetime.utcnow() - timedelta(seconds=max_age_seconds)
-        stale_proc_cutoff = datetime.utcnow() - timedelta(minutes=5)
+        cutoff = datetime.utcnow() - timedelta(seconds=grace_sec)
+        stale_proc_cutoff = datetime.utcnow() - timedelta(seconds=stale_sec)
 
         query = active_db.query(Photo.id, Photo.event_id).filter(
             Photo.is_deleted == False,
@@ -300,7 +337,7 @@ def reconcile_orphaned_photos(
         if event_id:
             query = query.filter(Photo.event_id == event_id)
 
-        orphaned = query.order_by(Photo.created_at.asc()).limit(limit).all()
+        orphaned = query.order_by(Photo.created_at.asc()).limit(batch_limit).all()
 
         for pid, eid in orphaned:
             dispatch_photo_processing(photo_id=pid, event_id=eid, db=active_db)
@@ -310,4 +347,28 @@ def reconcile_orphaned_photos(
     finally:
         if should_close:
             active_db.close()
+
+
+if celery_app is not None:
+    @celery_app.task(name="workers.ai_worker.worker.reconcile_orphaned_photos_task")
+    def reconcile_orphaned_photos_task():
+        """Periodic Celery task for automated durable queue reconciliation."""
+        return reconcile_orphaned_photos()
+
+    try:
+        from celery.signals import worker_ready
+
+        @worker_ready.connect
+        def on_worker_ready(sender=None, **kwargs):
+            """Automatically run reconciliation on worker startup to process any accumulated backlog."""
+            try:
+                logger.info("🚀 [WORKER STARTUP] Celery worker online. Initiating backlog reconciliation...")
+                reconciled = reconcile_orphaned_photos()
+                if reconciled > 0:
+                    logger.info(f"🔄 [WORKER STARTUP RECONCILIATION] Re-dispatched {reconciled} backlog photo(s).")
+            except Exception as e:
+                logger.warning(f"Worker startup reconciliation notice: {e}")
+    except Exception:
+        pass
+
 
