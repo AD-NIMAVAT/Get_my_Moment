@@ -67,12 +67,14 @@ async def upload_photos(
 
     for file in files:
         try:
-            # 1. Read file bytes and compute SHA-256
-            file_bytes = await file.read()
-            if not file_bytes:
-                continue
-
-            sha256_hash = storage_service.calculate_sha256(file_bytes)
+            # 1. Stream file directly to disk in chunks, calculate SHA-256 incrementally, and validate image (Memory-Safe)
+            file_id, rel_path, file_size, sha256_hash, width, height, img_format = await storage_service.save_original_stream(
+                event_id=event_id,
+                upload_file=file,
+                original_filename=file.filename or "photo.jpg",
+                studio_id=current_photographer.id,
+                folder_id=target_folder.id,
+            )
 
             # 2. Check for duplicate or idempotency match within the same event
             existing_photo = db.query(Photo).filter(
@@ -82,6 +84,8 @@ async def upload_photos(
             ).first()
 
             if existing_photo:
+                # Remove redundant newly written file since identical photo exists
+                storage_service.delete_file(rel_path)
                 duplicates_count += 1
                 uploaded_photos.append(
                     PhotoResponse(
@@ -107,18 +111,7 @@ async def upload_photos(
                 )
                 continue
 
-            # 3. Save original file to persistent storage with studio & folder hierarchy
-            file_id, rel_path, file_size, _ = storage_service.save_original(
-                event_id=event_id,
-                file_bytes=file_bytes,
-                original_filename=file.filename or "photo.jpg",
-                studio_id=current_photographer.id,
-                folder_id=target_folder.id,
-            )
-
-            # Validate image dimensions
-            img_format, width, height = storage_service.validate_image(file_bytes)
-
+            # 3. Create Photo record in database
             photo = Photo(
                 id=file_id,
                 studio_id=current_photographer.id,
@@ -472,25 +465,22 @@ async def guest_upload_photos(
     uploaded_count = 0
     for file in files:
         try:
-            file_bytes = await file.read()
-            if not file_bytes:
-                continue
-
-            sha256_hash = storage_service.calculate_sha256(file_bytes)
-            existing = db.query(Photo).filter(Photo.event_id == event.id, Photo.sha256_hash == sha256_hash).first()
-            if existing:
-                continue
-
-            file_id, rel_path, file_size, _ = storage_service.save_original(
+            # 1. Stream file directly to disk in chunks, calculate SHA-256 incrementally, and validate image (Memory-Safe)
+            file_id, rel_path, file_size, sha256_hash, width, height, img_format = await storage_service.save_original_stream(
                 event_id=event.id,
-                file_bytes=file_bytes,
+                upload_file=file,
                 original_filename=file.filename or "guest_photo.jpg",
                 studio_id=event.photographer_id,
                 folder_id=guest_folder.id,
             )
 
-            img_format, width, height = storage_service.validate_image(file_bytes)
+            # 2. Check duplicate
+            existing = db.query(Photo).filter(Photo.event_id == event.id, Photo.sha256_hash == sha256_hash).first()
+            if existing:
+                storage_service.delete_file(rel_path)
+                continue
 
+            # 3. Create Photo record
             photo = Photo(
                 id=file_id,
                 studio_id=event.photographer_id,

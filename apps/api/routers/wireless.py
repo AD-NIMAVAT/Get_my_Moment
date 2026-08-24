@@ -162,46 +162,49 @@ async def wireless_http_ingest(
 
     uploaded_ids = []
     for file in files:
-        file_bytes = await file.read()
-        if not file_bytes:
+        try:
+            # 1. Stream file directly to disk in chunks, calculate SHA-256 incrementally, and validate image (Memory-Safe)
+            file_id, rel_path, file_size, sha256_hash, width, height, img_format = await storage_service.save_original_stream(
+                event_id=event_id,
+                upload_file=file,
+                original_filename=file.filename or "wireless_click.jpg",
+                studio_id=event.photographer_id,
+            )
+
+            # Check duplicate
+            existing = db.query(Photo).filter(
+                Photo.event_id == event_id,
+                Photo.sha256_hash == sha256_hash
+            ).first()
+
+            if existing:
+                storage_service.delete_file(rel_path)
+                continue
+
+            photo = Photo(
+                id=file_id,
+                studio_id=event.photographer_id,
+                event_id=event_id,
+                original_file_name=file.filename or "wireless_click.jpg",
+                file_path=rel_path,
+                file_size=file_size,
+                width=width,
+                height=height,
+                mime_type=f"image/{img_format}",
+                sha256_hash=sha256_hash,
+                status=PhotoStatus.UPLOADED.value,
+                is_guest_uploaded=False,
+                uploaded_by_guest_name=f"[WIRELESS] {camera_model}",
+            )
+            db.add(photo)
+            db.commit()
+            db.refresh(photo)
+
+            # Trigger AI face matching worker
+            dispatch_photo_processing(photo_id=photo.id, event_id=event_id, db=db)
+            uploaded_ids.append(photo.id)
+        except Exception:
             continue
-
-        sha256_hash = storage_service.calculate_sha256(file_bytes)
-
-        # Check duplicate
-        existing = db.query(Photo).filter(
-            Photo.event_id == event_id,
-            Photo.sha256_hash == sha256_hash
-        ).first()
-
-        if existing:
-            continue
-
-        file_id, rel_path, file_size, _ = storage_service.save_original(
-            file_bytes=file_bytes,
-            original_filename=file.filename or "wireless_click.jpg",
-            event_id=event_id,
-        )
-
-        photo = Photo(
-            id=file_id,
-            event_id=event_id,
-            original_file_name=file.filename or "wireless_click.jpg",
-            file_path=rel_path,
-            file_size=file_size,
-            mime_type=file.content_type or "image/jpeg",
-            sha256_hash=sha256_hash,
-            status=PhotoStatus.UPLOADED.value,
-            is_guest_uploaded=False,
-            uploaded_by_guest_name=f"[WIRELESS] {camera_model}",
-        )
-        db.add(photo)
-        db.commit()
-        db.refresh(photo)
-
-        # Trigger AI face matching worker
-        dispatch_photo_processing(photo_id=photo.id, event_id=event_id)
-        uploaded_ids.append(photo.id)
 
     return {
         "event_id": event_id,

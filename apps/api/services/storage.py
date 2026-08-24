@@ -95,6 +95,36 @@ class LocalStorageService(StorageService):
         return hasher.hexdigest()
 
     @staticmethod
+    def validate_image_file(file_path: str) -> Tuple[str, int, int]:
+        """Validate magic bytes, dimensions, and file format directly from file path without loading whole file into memory."""
+        Image.MAX_IMAGE_PIXELS = 80_000_000
+
+        try:
+            with Image.open(file_path) as img:
+                img.verify()
+
+            with Image.open(file_path) as img:
+                img_format = (img.format or "JPEG").lower()
+                width, height = img.size
+
+                if width > 12000 or height > 12000:
+                    raise ValueError(f"Image dimensions ({width}x{height}) exceed maximum allowed dimensions of 12000x12000px.")
+
+                if img_format in ["mpo", "jpg"]:
+                    img_format = "jpeg"
+                if img_format not in ["jpeg", "png", "webp", "heic", "tiff"]:
+                    raise ValueError(f"Unsupported image format: {img_format}")
+
+                return img_format, width, height
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid, incomplete, or corrupted image file: {str(e)}"
+            )
+
+    @staticmethod
     def validate_image(file_bytes: bytes) -> Tuple[str, int, int]:
         """Validate magic bytes, dimensions, and file size with anti-decompression bomb protection."""
         max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
@@ -132,6 +162,96 @@ class LocalStorageService(StorageService):
                 detail=f"Invalid, incomplete, or corrupted image file: {str(e)}"
             )
 
+    async def save_original_stream(
+        self,
+        event_id: str,
+        upload_file,
+        original_filename: str,
+        studio_id: Optional[str] = None,
+        folder_id: Optional[str] = None,
+        chunk_size: Optional[int] = None,
+    ) -> Tuple[str, str, int, str, int, int, str]:
+        """
+        Streams UploadFile directly to an isolated temporary file in chunks, calculates SHA-256 incrementally,
+        enforces max upload size, verifies image integrity, and atomically moves to final immutable path.
+        Returns: (file_id, relative_path, file_size, sha256_hash, width, height, img_format)
+        """
+        self._ensure_directories(studio_id, event_id, folder_id)
+        if chunk_size is None:
+            chunk_size = settings.UPLOAD_STREAM_CHUNK_SIZE_KB * 1024
+
+        max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+        file_id = str(uuid.uuid4())
+
+        if studio_id:
+            base_dir = os.path.join(self.root_dir, "studios", studio_id, "events", event_id)
+        else:
+            base_dir = os.path.join(self.root_dir, "events", event_id)
+
+        temp_dir = os.path.join(base_dir, "temp")
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_abs_path = os.path.join(temp_dir, f"{file_id}.tmp")
+
+        hasher = hashlib.sha256()
+        bytes_written = 0
+
+        try:
+            with open(temp_abs_path, "wb") as out_f:
+                while True:
+                    chunk = await upload_file.read(chunk_size)
+                    if not chunk:
+                        break
+                    bytes_written += len(chunk)
+                    if bytes_written > max_bytes:
+                        raise HTTPException(
+                            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                            detail=f"Uploaded file exceeds maximum allowed size of {settings.MAX_UPLOAD_SIZE_MB}MB."
+                        )
+                    hasher.update(chunk)
+                    out_f.write(chunk)
+                out_f.flush()
+                try:
+                    os.fsync(out_f.fileno())
+                except (OSError, AttributeError):
+                    pass
+
+            if bytes_written == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Uploaded file is empty (0 bytes)."
+                )
+
+            # Validate image from temporary file on disk (Memory-Safe)
+            img_format, width, height = self.validate_image_file(temp_abs_path)
+            sha256_hash = hasher.hexdigest()
+
+            ext = "jpg" if img_format in ["jpeg", "jpg"] else img_format
+            safe_name = f"{file_id}.{ext}"
+
+            if studio_id:
+                if folder_id:
+                    rel_path = os.path.join("studios", studio_id, "events", event_id, "originals", folder_id, safe_name)
+                else:
+                    rel_path = os.path.join("studios", studio_id, "events", event_id, "originals", safe_name)
+            else:
+                rel_path = os.path.join("events", event_id, "originals", safe_name)
+
+            rel_path = rel_path.replace("\\", "/")
+            final_abs_path = self._safe_resolve(rel_path)
+
+            # Atomic rename (same filesystem guarantee)
+            os.replace(temp_abs_path, final_abs_path)
+
+            return file_id, rel_path, bytes_written, sha256_hash, width, height, img_format
+
+        except Exception:
+            if os.path.exists(temp_abs_path):
+                try:
+                    os.remove(temp_abs_path)
+                except Exception:
+                    pass
+            raise
+
     def save_original(
         self,
         event_id: str,
@@ -141,7 +261,7 @@ class LocalStorageService(StorageService):
         folder_id: Optional[str] = None
     ) -> Tuple[str, str, int, str]:
         """
-        Saves original immutable file with safe UUID internal name.
+        Saves original immutable file with safe UUID internal name and atomic rename.
         Returns: (file_id, relative_path, file_size, sha256_hash)
         """
         self._ensure_directories(studio_id, event_id, folder_id)
@@ -163,8 +283,24 @@ class LocalStorageService(StorageService):
         rel_path = rel_path.replace("\\", "/")
         abs_path = self._safe_resolve(rel_path)
 
-        with open(abs_path, "wb") as f:
-            f.write(file_bytes)
+        # Write to temporary file first, then atomic rename
+        temp_path = abs_path + f".tmp.{uuid.uuid4().hex}"
+        try:
+            with open(temp_path, "wb") as f:
+                f.write(file_bytes)
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except (OSError, AttributeError):
+                    pass
+            os.replace(temp_path, abs_path)
+        except Exception:
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+            raise
 
         return file_id, rel_path, len(file_bytes), sha256_hash
 

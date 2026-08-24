@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     STORAGE_DRIVER: str = "local"
     STORAGE_LOCAL_ROOT: str = "./storage"
     MAX_UPLOAD_SIZE_MB: int = 50
+    UPLOAD_STREAM_CHUNK_SIZE_KB: int = 64
     ALLOWED_EXTENSIONS: List[str] = ["jpg", "jpeg", "png", "webp"]
 
     # Face Debug Crops (Privacy Protection: disabled by default)
