@@ -52,19 +52,9 @@ def process_incoming_camera_photo(
         if filename.startswith(".") or filename.endswith(".tmp") or filename.endswith(".part"):
             return
 
-        # Check if file is still being written by camera Wi-Fi socket
+        # Check file minimum size
         try:
-            initial_size = os.path.getsize(file_path)
-            if initial_size < 1024:
-                return
-            time.sleep(0.4)
-            if not os.path.exists(file_path):
-                return
-            if os.path.getsize(file_path) != initial_size:
-                return  # Still streaming from camera
-
-            # Ensure file hasn't been modified in the last 0.5 seconds
-            if time.time() - os.path.getmtime(file_path) < 0.5:
+            if not os.path.exists(file_path) or os.path.getsize(file_path) < 1024:
                 return
         except Exception:
             return

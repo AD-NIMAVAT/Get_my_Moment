@@ -207,6 +207,7 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     with open(img_a, "wb") as f:
         f.write(generate_test_image(400, 400, "green"))
     process_incoming_camera_photo(img_a)
+    db_session.expire_all()
 
     photo_a = db_session.query(Photo).filter(Photo.event_id == e1_id, Photo.original_file_name == "DSC_001.JPG").first()
     assert photo_a is not None
@@ -219,6 +220,7 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     with open(img_b, "wb") as f:
         f.write(generate_test_image(400, 400, "blue"))
     process_incoming_camera_photo(img_b)
+    db_session.expire_all()
 
     photo_b = db_session.query(Photo).filter(Photo.event_id == e1_id, Photo.original_file_name == "DSC_002.JPG").first()
     assert photo_b is not None
@@ -231,6 +233,7 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     with open(img_c, "wb") as f:
         f.write(generate_test_image(400, 400, "yellow"))
     process_incoming_camera_photo(img_c)
+    db_session.expire_all()
 
     photo_c = db_session.query(Photo).filter(Photo.event_id == e1_id, Photo.original_file_name == "DSC_003.JPG").first()
     assert photo_c is not None
@@ -243,6 +246,7 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     with open(img_d, "wb") as f:
         f.write(generate_test_image(400, 400, "orange"))
     process_incoming_camera_photo(img_d)
+    db_session.expire_all()
 
     photo_d = db_session.query(Photo).filter(Photo.original_file_name == "DSC_004.JPG").first()
     assert photo_d is None  # Strict fail-closed, no photo created
@@ -254,6 +258,7 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     with open(img_e, "wb") as f:
         f.write(generate_test_image(400, 400, "red"))
     process_incoming_camera_photo(img_e)
+    db_session.expire_all()
 
     photo_e = db_session.query(Photo).filter(Photo.original_file_name == "DSC_005.JPG").first()
     assert photo_e is None
@@ -265,6 +270,7 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     with open(img_f, "wb") as f:
         f.write(generate_test_image(400, 400, "purple"))
     process_incoming_camera_photo(img_f)
+    db_session.expire_all()
 
     photo_f = db_session.query(Photo).filter(Photo.event_id == e1_id, Photo.original_file_name == "DSC_006.JPG").first()
     assert photo_f is not None
@@ -276,6 +282,7 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     with open(img_g, "wb") as f:
         f.write(generate_test_image(400, 400, "black"))
     process_incoming_camera_photo(img_g)
+    db_session.expire_all()
 
     photo_g = db_session.query(Photo).filter(Photo.original_file_name == "DSC_007.JPG").first()
     assert photo_g is None  # Event.name is rejected for routing
