@@ -13,6 +13,7 @@ from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import FTPHandler
 from pyftpdlib.servers import FTPServer
 
+from sqlalchemy.orm import Session
 from apps.api.database import SessionLocal
 from apps.api.models.event import Event
 from apps.api.models.photo import Photo
@@ -40,7 +41,8 @@ def is_valid_uuid(val: str) -> bool:
 def process_incoming_camera_photo(
     file_path: str,
     target_event_id: Optional[str] = None,
-    target_folder_id: Optional[str] = None
+    target_folder_id: Optional[str] = None,
+    db: Optional[Session] = None,
 ):
     """Core function to ingest any wireless photo from camera into the database and AI pipeline."""
     if not os.path.exists(file_path):
@@ -77,7 +79,10 @@ def process_incoming_camera_photo(
             logger.debug(f"Camera photo '{filename}' is incomplete ({img_err}). Waiting...")
             return
 
-        db = SessionLocal()
+        close_db_on_exit = False
+        if db is None:
+            db = SessionLocal()
+            close_db_on_exit = True
         try:
             event = None
             camera_name = "[CAMERA] Wi-Fi Direct Shoot"
@@ -248,7 +253,8 @@ def process_incoming_camera_photo(
                 pass
 
         finally:
-            db.close()
+            if close_db_on_exit and db is not None:
+                db.close()
 
     except Exception as e:
         logger.error(f"Error processing wireless photo {file_path}: {e}", exc_info=True)

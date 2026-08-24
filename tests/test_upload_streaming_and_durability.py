@@ -206,7 +206,7 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     img_a = os.path.join(slug_dir, "DSC_001.JPG")
     with open(img_a, "wb") as f:
         f.write(generate_test_image(400, 400, "green"))
-    process_incoming_camera_photo(img_a)
+    process_incoming_camera_photo(img_a, db=db_session)
     db_session.expire_all()
 
     photo_a = db_session.query(Photo).filter(Photo.event_id == e1_id, Photo.original_file_name == "DSC_001.JPG").first()
@@ -219,7 +219,7 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     img_b = os.path.join(token_dir, "DSC_002.JPG")
     with open(img_b, "wb") as f:
         f.write(generate_test_image(400, 400, "blue"))
-    process_incoming_camera_photo(img_b)
+    process_incoming_camera_photo(img_b, db=db_session)
     db_session.expire_all()
 
     photo_b = db_session.query(Photo).filter(Photo.event_id == e1_id, Photo.original_file_name == "DSC_002.JPG").first()
@@ -232,7 +232,7 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     img_c = os.path.join(sub_dir, "DSC_003.JPG")
     with open(img_c, "wb") as f:
         f.write(generate_test_image(400, 400, "yellow"))
-    process_incoming_camera_photo(img_c)
+    process_incoming_camera_photo(img_c, db=db_session)
     db_session.expire_all()
 
     photo_c = db_session.query(Photo).filter(Photo.event_id == e1_id, Photo.original_file_name == "DSC_003.JPG").first()
@@ -245,7 +245,7 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     img_d = os.path.join(unk_dir, "DSC_004.JPG")
     with open(img_d, "wb") as f:
         f.write(generate_test_image(400, 400, "orange"))
-    process_incoming_camera_photo(img_d)
+    process_incoming_camera_photo(img_d, db=db_session)
     db_session.expire_all()
 
     photo_d = db_session.query(Photo).filter(Photo.original_file_name == "DSC_004.JPG").first()
@@ -257,7 +257,7 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     img_e = os.path.join(trav_dir, "DSC_005.JPG")
     with open(img_e, "wb") as f:
         f.write(generate_test_image(400, 400, "red"))
-    process_incoming_camera_photo(img_e)
+    process_incoming_camera_photo(img_e, db=db_session)
     db_session.expire_all()
 
     photo_e = db_session.query(Photo).filter(Photo.original_file_name == "DSC_005.JPG").first()
@@ -269,7 +269,7 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     img_f = os.path.join(uuid_dir, "DSC_006.JPG")
     with open(img_f, "wb") as f:
         f.write(generate_test_image(400, 400, "purple"))
-    process_incoming_camera_photo(img_f)
+    process_incoming_camera_photo(img_f, db=db_session)
     db_session.expire_all()
 
     photo_f = db_session.query(Photo).filter(Photo.event_id == e1_id, Photo.original_file_name == "DSC_006.JPG").first()
@@ -281,7 +281,7 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     img_g = os.path.join(name_dir, "DSC_007.JPG")
     with open(img_g, "wb") as f:
         f.write(generate_test_image(400, 400, "black"))
-    process_incoming_camera_photo(img_g)
+    process_incoming_camera_photo(img_g, db=db_session)
     db_session.expire_all()
 
     photo_g = db_session.query(Photo).filter(Photo.original_file_name == "DSC_007.JPG").first()
