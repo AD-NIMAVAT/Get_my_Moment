@@ -2135,9 +2135,10 @@ class ApiClient {
 
   // --- Wireless Camera Access Control & Approval APIs ---
 
-  async listEventCameras(eventId: string, token: string): Promise<any[]> {
+  async listEventCameras(eventId: string, token?: string): Promise<any[]> {
+    const authToken = token || this.getToken();
     const res = await fetch(`${this.baseUrl}/wireless/events/${eventId}/cameras`, {
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: { 'Authorization': `Bearer ${authToken}` },
     });
     if (!res.ok) throw new Error('Failed to list event cameras');
     return res.json();
@@ -2146,13 +2147,14 @@ class ApiClient {
   async createEventCamera(
     eventId: string,
     data: { display_name: string; manufacturer?: string; model?: string },
-    token: string
+    token?: string
   ): Promise<any> {
+    const authToken = token || this.getToken();
     const res = await fetch(`${this.baseUrl}/wireless/events/${eventId}/cameras`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${authToken}`,
       },
       body: JSON.stringify(data),
     });
@@ -2167,13 +2169,14 @@ class ApiClient {
     eventId: string,
     cameraId: string,
     data: { display_name?: string; manufacturer?: string; model?: string },
-    token: string
+    token?: string
   ): Promise<any> {
+    const authToken = token || this.getToken();
     const res = await fetch(`${this.baseUrl}/wireless/events/${eventId}/cameras/${cameraId}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${authToken}`,
       },
       body: JSON.stringify(data),
     });
@@ -2181,37 +2184,41 @@ class ApiClient {
     return res.json();
   }
 
-  async approveEventCamera(eventId: string, cameraId: string, token: string): Promise<any> {
+  async approveEventCamera(eventId: string, cameraId: string, token?: string): Promise<any> {
+    const authToken = token || this.getToken();
     const res = await fetch(`${this.baseUrl}/wireless/events/${eventId}/cameras/${cameraId}/approve`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: { 'Authorization': `Bearer ${authToken}` },
     });
     if (!res.ok) throw new Error('Failed to approve camera');
     return res.json();
   }
 
-  async rejectEventCamera(eventId: string, cameraId: string, token: string): Promise<any> {
+  async rejectEventCamera(eventId: string, cameraId: string, token?: string): Promise<any> {
+    const authToken = token || this.getToken();
     const res = await fetch(`${this.baseUrl}/wireless/events/${eventId}/cameras/${cameraId}/reject`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: { 'Authorization': `Bearer ${authToken}` },
     });
     if (!res.ok) throw new Error('Failed to reject camera');
     return res.json();
   }
 
-  async revokeEventCamera(eventId: string, cameraId: string, token: string): Promise<any> {
+  async revokeEventCamera(eventId: string, cameraId: string, token?: string): Promise<any> {
+    const authToken = token || this.getToken();
     const res = await fetch(`${this.baseUrl}/wireless/events/${eventId}/cameras/${cameraId}/revoke`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: { 'Authorization': `Bearer ${authToken}` },
     });
     if (!res.ok) throw new Error('Failed to revoke camera');
     return res.json();
   }
 
-  async resetCameraFtpPassword(eventId: string, cameraId: string, token: string): Promise<any> {
+  async resetCameraFtpPassword(eventId: string, cameraId: string, token?: string): Promise<any> {
+    const authToken = token || this.getToken();
     const res = await fetch(`${this.baseUrl}/wireless/events/${eventId}/cameras/${cameraId}/reset-ftp-password`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: { 'Authorization': `Bearer ${authToken}` },
     });
     if (!res.ok) throw new Error('Failed to reset camera password');
     return res.json();

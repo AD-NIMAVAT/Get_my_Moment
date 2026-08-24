@@ -65,7 +65,7 @@ export function WirelessCameraModal({
 
   const getAuthToken = () => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("gmm_auth_token") || "";
+      return localStorage.getItem("gmm_token") || localStorage.getItem("gmm_auth_token") || "";
     }
     return "";
   };
@@ -98,7 +98,6 @@ export function WirelessCameraModal({
 
   const loadCameras = async () => {
     const token = getAuthToken();
-    if (!token) return;
     try {
       setCamerasLoading(true);
       const data = await api.listEventCameras(eventId, token);
@@ -120,7 +119,6 @@ export function WirelessCameraModal({
     e.preventDefault();
     if (!cameraName.trim()) return;
     const token = getAuthToken();
-    if (!token) return;
 
     try {
       setAddCameraLoading(true);
@@ -147,7 +145,6 @@ export function WirelessCameraModal({
 
   const handleApprove = async (cameraId: string) => {
     const token = getAuthToken();
-    if (!token) return;
     try {
       await api.approveEventCamera(eventId, cameraId, token);
       await loadCameras();
@@ -158,7 +155,6 @@ export function WirelessCameraModal({
 
   const handleReject = async (cameraId: string) => {
     const token = getAuthToken();
-    if (!token) return;
     try {
       await api.rejectEventCamera(eventId, cameraId, token);
       await loadCameras();
@@ -170,7 +166,6 @@ export function WirelessCameraModal({
   const handleRevoke = async (cameraId: string) => {
     if (!confirm("Are you sure you want to revoke upload access for this camera?")) return;
     const token = getAuthToken();
-    if (!token) return;
     try {
       await api.revokeEventCamera(eventId, cameraId, token);
       await loadCameras();
@@ -190,7 +185,6 @@ export function WirelessCameraModal({
     e.preventDefault();
     if (!editingCamera) return;
     const token = getAuthToken();
-    if (!token) return;
 
     try {
       setEditLoading(true);
@@ -216,7 +210,6 @@ export function WirelessCameraModal({
   const handleResetPassword = async (cameraId: string) => {
     if (!confirm("Reset FTP password for this camera? The camera operator must enter the new password.")) return;
     const token = getAuthToken();
-    if (!token) return;
 
     try {
       const res = await api.resetCameraFtpPassword(eventId, cameraId, token);
