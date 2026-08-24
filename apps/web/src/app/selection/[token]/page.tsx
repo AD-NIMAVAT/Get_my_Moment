@@ -327,6 +327,10 @@ export default function ClientSelectionPage() {
                   Save Note
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
         {/* Sticky Floating Selection Action Bar for Mobile & Desktop */}
         {selectedCount > 0 && (
           <div className="fixed bottom-4 inset-x-4 max-w-xl mx-auto z-40 bg-[#F3F1EC]/95 backdrop-blur-xl border border-white/80 p-3 sm:p-4 rounded-3xl shadow-[0_12px_30px_rgba(0,0,0,0.12),4px_4px_10px_#D4D0C7,-4px_-4px_10px_#FFFFFF] flex items-center justify-between gap-3 animate-in slide-in-from-bottom-5 duration-300">
