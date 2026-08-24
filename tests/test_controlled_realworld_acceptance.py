@@ -38,7 +38,7 @@ def test_full_controlled_realworld_acceptance_flow(client, db_session):
     2. Streaming Photo Upload & Pipeline Execution
     3. Photographer Gallery Fetch
     4. Guest Public Lookup & Face Matching
-    5. Selection Portal Token Creation & Photo Selection
+    5. Selection Portal Token Access & Photo Selection Toggle
     6. Wireless FTP Camera Ingest Status Check
     """
     # 1. Photographer Signup
@@ -84,6 +84,7 @@ def test_full_controlled_realworld_acceptance_flow(client, db_session):
     assert upload_res.status_code == 201
     photos = upload_res.json()["photos"]
     assert len(photos) == 2
+    photo1_id = photos[0]["id"]
 
     # Verify photos are processed and guest ready
     db_photos = db_session.query(Photo).filter(Photo.event_id == event_id).all()
@@ -133,17 +134,23 @@ def test_full_controlled_realworld_acceptance_flow(client, db_session):
     assert health_data["photos_ready"] == 2
     assert health_data["pipeline_health"] in ["READY", "PROCESSING", "TELEMETRY_UNAVAILABLE"]
 
-    # 9. Selection Portal Creation
-    sel_res = client.post(
-        f"/api/v1/selection/events/{event_id}/sessions",
-        headers=headers,
-        json={
-            "client_name": "Acceptance Couple",
-            "client_email": "couple@example.com",
-            "max_selections": 10
-        }
+    # 9. Selection Portal Flow
+    event_record = db_session.query(Event).filter(Event.id == event_id).first()
+    selection_token = event_record.selection_token
+
+    # Fetch client selection gallery
+    sel_gallery_res = client.get(f"/api/v1/selection/{selection_token}")
+    assert sel_gallery_res.status_code == 200
+    sel_data = sel_gallery_res.json()
+    assert sel_data["total_photos"] >= 2
+
+    # Toggle selection on photo1
+    toggle_res = client.post(
+        f"/api/v1/selection/{selection_token}/photos/{photo1_id}/toggle",
+        json={"is_selected": True, "comment": "Cover photo candidate"}
     )
-    assert sel_res.status_code in [200, 201]
+    assert toggle_res.status_code == 200
+    assert toggle_res.json()["is_selected"] is True
 
     # 10. Wireless FTP Ingest Status Check
     wireless_res = client.get("/api/v1/wireless/status")
