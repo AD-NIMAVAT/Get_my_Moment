@@ -14,7 +14,8 @@ COPY workers/ai_worker/requirements.txt /app/workers/ai_worker/requirements.txt
 RUN pip install --no-cache-dir -r /app/workers/ai_worker/requirements.txt
 
 COPY packages /app/packages
-COPY workers/ai_worker /app/workers/ai_worker
+COPY apps /app/apps
+COPY workers /app/workers
 
 ENV PYTHONPATH=/app
 
