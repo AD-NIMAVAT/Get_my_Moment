@@ -92,10 +92,10 @@ def test_full_controlled_realworld_acceptance_flow(client, db_session):
         assert p.status == PhotoStatus.PROCESSED.value
         assert p.guest_ready_at is not None
 
-    # 4. Photographer Event Photos Query
+    # 4. Photographer Event Photos Query (returns List[PhotoResponse])
     event_photos_res = client.get(f"/api/v1/events/{event_id}/photos", headers=headers)
     assert event_photos_res.status_code == 200
-    assert event_photos_res.json()["total"] >= 2
+    assert len(event_photos_res.json()) >= 2
 
     # 5. Guest Public Lookup Flow
     public_res = client.get(f"/api/v1/events/public/by-token/{access_token}")
