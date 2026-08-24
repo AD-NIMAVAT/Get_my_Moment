@@ -447,7 +447,7 @@ def permanent_delete_event(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/{event_id}/qr")
+@router.api_route("/{event_id}/qr", methods=["GET", "HEAD"])
 def get_event_qr_code(event_id: str, db: Session = Depends(get_db)):
     """Generate high-resolution downloadable QR code PNG for the event."""
     event = db.query(Event).filter(Event.id == event_id).first()
