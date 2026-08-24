@@ -35,11 +35,13 @@ from apps.api.models.subscription import (
     SubscriptionLedgerEntry,
     SubscriptionSettlement,
 )
+from apps.api.models.camera import CameraDevice
 from apps.api.models.platform_settings import PlatformPaymentConfig
 
 __all__ = [
     "Photographer",
     "Event",
+    "CameraDevice",
     "Folder",
     "FolderType",
     "Photo",

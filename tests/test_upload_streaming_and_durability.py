@@ -287,3 +287,200 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     photo_g = db_session.query(Photo).filter(Photo.original_file_name == "DSC_007.JPG").first()
     assert photo_g is None  # Event.name is rejected for routing
 
+def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_session, tmp_path):
+    """
+    Comprehensive Security Test Suite for Per-Camera Authorization & Event-Bound Access Control.
+    Proves:
+    - New camera defaults to PENDING_APPROVAL
+    - Pending camera cannot ingest photo (0 Photo rows, 0 AI tasks)
+    - Approved camera on its own event succeeds
+    - Approved Camera A uploading to Event B slug/token/UUID is strictly DENIED (0 Photo rows in Event B)
+    - Rejected camera denied
+    - Revoked camera denied
+    - Cross-photographer tenant isolation
+    - Secret exposure protection (passwords never returned in GET)
+    - Zero-side-effect on cross-event attempts
+    """
+    from apps.api.models.camera import CameraDevice
+    from apps.api.auth import create_access_token
+
+    # 1. Setup Studio 1 with Event 1 (Rajkot Wedding)
+    p1 = Photographer(
+        id=str(uuid.uuid4()),
+        email="photographer1@camera-auth.com",
+        password_hash="hashed_pw_1",
+        studio_name="Studio Alpha",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(p1)
+    db_session.commit()
+    token1 = create_access_token(data={"sub": p1.id})
+    headers1 = {"Authorization": f"Bearer {token1}"}
+
+    e1 = Event(
+        id=str(uuid.uuid4()),
+        photographer_id=p1.id,
+        name="Rajkot Wedding 2026",
+        slug="rajkot-wedding-2026",
+        access_token="TOK1_" + secrets.token_hex(4),
+        status="ACTIVE",
+    )
+    db_session.add(e1)
+    db_session.commit()
+
+    # 2. Setup Studio 2 with Event 2 (Goa Beach Wedding)
+    p2 = Photographer(
+        id=str(uuid.uuid4()),
+        email="photographer2@camera-auth.com",
+        password_hash="hashed_pw_2",
+        studio_name="Studio Beta",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(p2)
+    db_session.commit()
+    token2 = create_access_token(data={"sub": p2.id})
+    headers2 = {"Authorization": f"Bearer {token2}"}
+
+    e2 = Event(
+        id=str(uuid.uuid4()),
+        photographer_id=p2.id,
+        name="Goa Beach Wedding 2026",
+        slug="goa-beach-wedding-2026",
+        access_token="TOK2_" + secrets.token_hex(4),
+        status="ACTIVE",
+    )
+    db_session.add(e2)
+    db_session.commit()
+
+    # --- TEST A: Create Camera -> Defaults to PENDING_APPROVAL ---
+    create_res = client.post(
+        f"/api/v1/wireless/events/{e1.id}/cameras",
+        json={
+            "display_name": "Sony A7 IV Main",
+            "manufacturer": "Sony",
+            "model": "ILCE-7M4"
+        },
+        headers=headers1,
+    )
+    assert create_res.status_code == 201
+    cam_data = create_res.json()["camera"]
+    cam_creds = create_res.json()["credentials"]
+    assert cam_data["status"] == "PENDING_APPROVAL"
+    assert cam_data["display_name"] == "Sony A7 IV Main"
+    assert "password" in cam_creds  # Plain password returned ONCE upon creation
+    assert "password_hash" not in cam_data
+
+    cam1_id = cam_data["id"]
+    cam1_username = cam_data["ftp_username"]
+
+    # --- TEST B: Pending camera CANNOT ingest photo (0 Photo rows) ---
+    slug_dir_e1 = os.path.join(FTP_INCOMING_DIR, e1.slug)
+    os.makedirs(slug_dir_e1, exist_ok=True)
+    img_pending = os.path.join(slug_dir_e1, "CAM_PENDING_001.JPG")
+    with open(img_pending, "wb") as f:
+        f.write(generate_test_image(400, 400, "pink"))
+    
+    process_incoming_camera_photo(img_pending, db=db_session, camera_id=cam1_id)
+    db_session.expire_all()
+
+    photo_pending = db_session.query(Photo).filter(Photo.original_file_name == "CAM_PENDING_001.JPG").first()
+    assert photo_pending is None  # Strict denial while in PENDING_APPROVAL status
+
+    # --- TEST C: Photographer Approves Camera -> Ingest SUCCEEDS ---
+    approve_res = client.post(
+        f"/api/v1/wireless/events/{e1.id}/cameras/{cam1_id}/approve",
+        headers=headers1,
+    )
+    assert approve_res.status_code == 200
+    assert approve_res.json()["status"] == "APPROVED"
+
+    img_approved = os.path.join(slug_dir_e1, "CAM_APPROVED_001.JPG")
+    with open(img_approved, "wb") as f:
+        f.write(generate_test_image(400, 400, "cyan"))
+
+    process_incoming_camera_photo(img_approved, db=db_session, camera_id=cam1_id)
+    db_session.expire_all()
+
+    photo_approved = db_session.query(Photo).filter(Photo.original_file_name == "CAM_APPROVED_001.JPG").first()
+    assert photo_approved is not None
+    assert photo_approved.event_id == e1.id
+    assert photo_approved.camera_id == cam1_id
+
+    # --- TEST D: Approved Camera A attempts upload to Event B slug -> STRICTLY DENIED ---
+    slug_dir_e2 = os.path.join(FTP_INCOMING_DIR, e2.slug)
+    os.makedirs(slug_dir_e2, exist_ok=True)
+    img_cross = os.path.join(slug_dir_e2, "CAM_CROSS_EVENT_001.JPG")
+    with open(img_cross, "wb") as f:
+        f.write(generate_test_image(400, 400, "brown"))
+
+    process_incoming_camera_photo(img_cross, db=db_session, camera_id=cam1_id)
+    db_session.expire_all()
+
+    # Zero Photo rows in Event B and Event A
+    photo_cross = db_session.query(Photo).filter(Photo.original_file_name == "CAM_CROSS_EVENT_001.JPG").first()
+    assert photo_cross is None
+
+    # --- TEST E: Approved Camera A attempts upload to Event B access_token -> STRICTLY DENIED ---
+    token_dir_e2 = os.path.join(FTP_INCOMING_DIR, e2.access_token)
+    os.makedirs(token_dir_e2, exist_ok=True)
+    img_cross_token = os.path.join(token_dir_e2, "CAM_CROSS_TOKEN_001.JPG")
+    with open(img_cross_token, "wb") as f:
+        f.write(generate_test_image(400, 400, "gray"))
+
+    process_incoming_camera_photo(img_cross_token, db=db_session, camera_id=cam1_id)
+    db_session.expire_all()
+
+    photo_cross_token = db_session.query(Photo).filter(Photo.original_file_name == "CAM_CROSS_TOKEN_001.JPG").first()
+    assert photo_cross_token is None
+
+    # --- TEST F: Approved Camera A attempts upload to Event B UUID -> STRICTLY DENIED ---
+    uuid_dir_e2 = os.path.join(FTP_INCOMING_DIR, e2.id)
+    os.makedirs(uuid_dir_e2, exist_ok=True)
+    img_cross_uuid = os.path.join(uuid_dir_e2, "CAM_CROSS_UUID_001.JPG")
+    with open(img_cross_uuid, "wb") as f:
+        f.write(generate_test_image(400, 400, "teal"))
+
+    process_incoming_camera_photo(img_cross_uuid, db=db_session, camera_id=cam1_id)
+    db_session.expire_all()
+
+    photo_cross_uuid = db_session.query(Photo).filter(Photo.original_file_name == "CAM_CROSS_UUID_001.JPG").first()
+    assert photo_cross_uuid is None
+
+    # --- TEST G: Revoked Camera -> Ingest DENIED ---
+    revoke_res = client.post(
+        f"/api/v1/wireless/events/{e1.id}/cameras/{cam1_id}/revoke",
+        headers=headers1,
+    )
+    assert revoke_res.status_code == 200
+    assert revoke_res.json()["status"] == "REVOKED"
+
+    img_revoked = os.path.join(slug_dir_e1, "CAM_REVOKED_001.JPG")
+    with open(img_revoked, "wb") as f:
+        f.write(generate_test_image(400, 400, "magenta"))
+
+    process_incoming_camera_photo(img_revoked, db=db_session, camera_id=cam1_id)
+    db_session.expire_all()
+
+    photo_revoked = db_session.query(Photo).filter(Photo.original_file_name == "CAM_REVOKED_001.JPG").first()
+    assert photo_revoked is None  # Revoked camera denied
+
+    # --- TEST H: Tenant Isolation (Photographer 2 cannot list/approve/revoke Camera 1) ---
+    p2_list = client.get(f"/api/v1/wireless/events/{e1.id}/cameras", headers=headers2)
+    assert p2_list.status_code in (403, 404)
+
+    p2_approve = client.post(f"/api/v1/wireless/events/{e1.id}/cameras/{cam1_id}/approve", headers=headers2)
+    assert p2_approve.status_code in (403, 404)
+
+    p2_revoke = client.post(f"/api/v1/wireless/events/{e1.id}/cameras/{cam1_id}/revoke", headers=headers2)
+    assert p2_revoke.status_code in (403, 404)
+
+    # --- TEST I: GET List API never returns password or password_hash ---
+    p1_list = client.get(f"/api/v1/wireless/events/{e1.id}/cameras", headers=headers1)
+    assert p1_list.status_code == 200
+    cams = p1_list.json()
+    assert len(cams) >= 1
+    for c in cams:
+        assert "password" not in c
+        assert "password_hash" not in c

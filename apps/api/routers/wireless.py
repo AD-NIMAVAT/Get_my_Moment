@@ -1,10 +1,13 @@
 """
 Wireless Camera Management & Wi-Fi Ingest Router
-Provides camera pairing credentials, step-by-step camera guides, and direct HTTP/FTP ingest status.
+Provides camera pairing credentials, step-by-step camera guides, direct HTTP/FTP ingest status,
+and per-camera authorization lifecycle (Add Camera, Approve, Reject, Revoke, Metadata Edit).
 """
 
 import os
 import socket
+import secrets
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
@@ -14,7 +17,8 @@ from apps.api.database import get_db
 from apps.api.models.event import Event
 from apps.api.models.photo import Photo
 from apps.api.models.photographer import Photographer
-from apps.api.auth import get_current_photographer
+from apps.api.models.camera import CameraDevice
+from apps.api.auth import get_current_photographer, hash_password
 from apps.api.services.storage import storage_service
 from apps.api.services.wireless_ingest import wireless_server
 from workers.ai_worker.worker import dispatch_photo_processing
@@ -25,11 +29,9 @@ router = APIRouter(prefix="/wireless", tags=["Wireless Camera Ingestion"])
 
 def get_public_ip() -> str:
     """Return public FTP host IP. Uses FTP_PUBLIC_HOST env var (set on AWS/cloud), falls back to local LAN IP."""
-    # Cloud/AWS deployment: use explicitly configured public host
     public_host = os.environ.get("FTP_PUBLIC_HOST")
     if public_host:
         return public_host
-    # Local venue Wi-Fi: detect LAN IP automatically
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
@@ -39,6 +41,266 @@ def get_public_ip() -> str:
     except Exception:
         return "127.0.0.1"
 
+
+# --- Pydantic Schemas ---
+
+class CreateCameraRequest(BaseModel):
+    display_name: str
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+
+
+class UpdateCameraRequest(BaseModel):
+    display_name: Optional[str] = None
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+
+
+class CameraResponse(BaseModel):
+    id: str
+    event_id: str
+    photographer_id: str
+    display_name: str
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+    ftp_username: str
+    status: str
+    first_seen_at: Optional[datetime] = None
+    last_seen_at: Optional[datetime] = None
+    last_upload_at: Optional[datetime] = None
+    last_source_ip: Optional[str] = None
+    created_at: datetime
+    approved_at: Optional[datetime] = None
+    rejected_at: Optional[datetime] = None
+    revoked_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CameraCreatedResponse(BaseModel):
+    camera: CameraResponse
+    credentials: dict
+
+
+# --- Camera Management Endpoints ---
+
+@router.get("/events/{event_id}/cameras", response_model=List[CameraResponse])
+def list_event_cameras(
+    event_id: str,
+    db: Session = Depends(get_db),
+    current_photographer: Photographer = Depends(get_current_photographer),
+):
+    """List all registered cameras for an event owned by the authenticated photographer."""
+    event = db.query(Event).filter(
+        Event.id == event_id,
+        Event.photographer_id == current_photographer.id,
+        Event.is_deleted == False
+    ).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found or access denied")
+
+    cameras = db.query(CameraDevice).filter(
+        CameraDevice.event_id == event_id,
+        CameraDevice.photographer_id == current_photographer.id
+    ).order_by(CameraDevice.created_at.desc()).all()
+
+    return cameras
+
+
+@router.post("/events/{event_id}/cameras", response_model=CameraCreatedResponse, status_code=status.HTTP_201_CREATED)
+def create_event_camera(
+    event_id: str,
+    payload: CreateCameraRequest,
+    db: Session = Depends(get_db),
+    current_photographer: Photographer = Depends(get_current_photographer),
+):
+    """Register a new camera device in PENDING_APPROVAL status and generate unique FTP credentials."""
+    event = db.query(Event).filter(
+        Event.id == event_id,
+        Event.photographer_id == current_photographer.id,
+        Event.is_deleted == False
+    ).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found or access denied")
+
+    # Generate unique FTP username
+    for _ in range(10):
+        suffix = secrets.token_hex(4)
+        m_prefix = payload.manufacturer.lower()[:4] if payload.manufacturer else "cam"
+        m_prefix = "".join(c for c in m_prefix if c.isalnum()) or "cam"
+        cand_username = f"{m_prefix}_{suffix}"
+        existing = db.query(CameraDevice).filter(CameraDevice.ftp_username == cand_username).first()
+        if not existing:
+            break
+    else:
+        cand_username = f"cam_{secrets.token_hex(6)}"
+
+    # Generate cryptographically secure one-time password
+    plain_password = secrets.token_urlsafe(8) + "Aa1!"
+    pwd_hash = hash_password(plain_password)
+
+    # Initial status MUST be PENDING_APPROVAL
+    camera = CameraDevice(
+        photographer_id=current_photographer.id,
+        event_id=event.id,
+        display_name=payload.display_name.strip(),
+        manufacturer=payload.manufacturer.strip() if payload.manufacturer else None,
+        model=payload.model.strip() if payload.model else None,
+        ftp_username=cand_username,
+        password_hash=pwd_hash,
+        status="PENDING_APPROVAL",
+    )
+    db.add(camera)
+    db.commit()
+    db.refresh(camera)
+
+    server_ip = get_public_ip()
+    server_port = int(os.environ.get("FTP_PUBLIC_PORT", wireless_server.port))
+    dest_folder = f"/{event.slug}" if (event.slug and event.slug.strip()) else f"/{event.access_token}"
+
+    credentials_payload = {
+        "host": server_ip,
+        "port": server_port,
+        "username": cand_username,
+        "password": plain_password,
+        "destination_folder": dest_folder,
+        "warning": "Save these credentials now. The FTP password will not be shown again."
+    }
+
+    return {
+        "camera": camera,
+        "credentials": credentials_payload,
+    }
+
+
+@router.patch("/events/{event_id}/cameras/{camera_id}", response_model=CameraResponse)
+def update_event_camera(
+    event_id: str,
+    camera_id: str,
+    payload: UpdateCameraRequest,
+    db: Session = Depends(get_db),
+    current_photographer: Photographer = Depends(get_current_photographer),
+):
+    """Update camera display name, manufacturer, or model."""
+    camera = db.query(CameraDevice).filter(
+        CameraDevice.id == camera_id,
+        CameraDevice.event_id == event_id,
+        CameraDevice.photographer_id == current_photographer.id
+    ).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found or access denied")
+
+    if payload.display_name is not None:
+        camera.display_name = payload.display_name.strip()
+    if payload.manufacturer is not None:
+        camera.manufacturer = payload.manufacturer.strip() if payload.manufacturer else None
+    if payload.model is not None:
+        camera.model = payload.model.strip() if payload.model else None
+
+    db.commit()
+    db.refresh(camera)
+    return camera
+
+
+@router.post("/events/{event_id}/cameras/{camera_id}/approve", response_model=CameraResponse)
+def approve_event_camera(
+    event_id: str,
+    camera_id: str,
+    db: Session = Depends(get_db),
+    current_photographer: Photographer = Depends(get_current_photographer),
+):
+    """Approve a camera device to allow uploads to this event."""
+    camera = db.query(CameraDevice).filter(
+        CameraDevice.id == camera_id,
+        CameraDevice.event_id == event_id,
+        CameraDevice.photographer_id == current_photographer.id
+    ).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found or access denied")
+
+    camera.status = "APPROVED"
+    camera.approved_at = datetime.utcnow()
+    db.commit()
+    db.refresh(camera)
+    return camera
+
+
+@router.post("/events/{event_id}/cameras/{camera_id}/reject", response_model=CameraResponse)
+def reject_event_camera(
+    event_id: str,
+    camera_id: str,
+    db: Session = Depends(get_db),
+    current_photographer: Photographer = Depends(get_current_photographer),
+):
+    """Reject a camera device request."""
+    camera = db.query(CameraDevice).filter(
+        CameraDevice.id == camera_id,
+        CameraDevice.event_id == event_id,
+        CameraDevice.photographer_id == current_photographer.id
+    ).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found or access denied")
+
+    camera.status = "REJECTED"
+    camera.rejected_at = datetime.utcnow()
+    db.commit()
+    db.refresh(camera)
+    return camera
+
+
+@router.post("/events/{event_id}/cameras/{camera_id}/revoke", response_model=CameraResponse)
+def revoke_event_camera(
+    event_id: str,
+    camera_id: str,
+    db: Session = Depends(get_db),
+    current_photographer: Photographer = Depends(get_current_photographer),
+):
+    """Revoke upload access for an already-approved camera."""
+    camera = db.query(CameraDevice).filter(
+        CameraDevice.id == camera_id,
+        CameraDevice.event_id == event_id,
+        CameraDevice.photographer_id == current_photographer.id
+    ).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found or access denied")
+
+    camera.status = "REVOKED"
+    camera.revoked_at = datetime.utcnow()
+    db.commit()
+    db.refresh(camera)
+    return camera
+
+
+@router.post("/events/{event_id}/cameras/{camera_id}/reset-ftp-password")
+def reset_camera_ftp_password(
+    event_id: str,
+    camera_id: str,
+    db: Session = Depends(get_db),
+    current_photographer: Photographer = Depends(get_current_photographer),
+):
+    """Generate a new secure FTP password for a camera. Returns plaintext password ONCE."""
+    camera = db.query(CameraDevice).filter(
+        CameraDevice.id == camera_id,
+        CameraDevice.event_id == event_id,
+        CameraDevice.photographer_id == current_photographer.id
+    ).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found or access denied")
+
+    plain_password = secrets.token_urlsafe(8) + "Aa1!"
+    camera.password_hash = hash_password(plain_password)
+    db.commit()
+
+    return {
+        "camera_id": camera.id,
+        "ftp_username": camera.ftp_username,
+        "new_password": plain_password,
+        "warning": "Save this password now. It will not be shown again."
+    }
+
+
+# --- Existing Wireless Endpoints ---
 
 @router.get("/status")
 def get_wireless_status():
@@ -68,24 +330,11 @@ def get_camera_credentials(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    # Dynamic Public Host Detection (Railway TCP Proxy / Custom Domain / Local LAN)
-    tcp_domain = os.environ.get("RAILWAY_TCP_PROXY_DOMAIN")
-    tcp_port = os.environ.get("RAILWAY_TCP_PROXY_PORT")
-    
-    if tcp_domain and tcp_port:
-        server_ip = tcp_domain
-        server_port = int(tcp_port)
-    elif os.environ.get("FTP_PUBLIC_HOST"):
-        server_ip = os.environ.get("FTP_PUBLIC_HOST")
-        server_port = int(os.environ.get("FTP_PUBLIC_PORT", 2121))
-    else:
-        server_ip = get_local_ip()
-        server_port = wireless_server.port
+    server_ip = get_public_ip()
+    server_port = int(os.environ.get("FTP_PUBLIC_PORT", wireless_server.port))
 
-    # Automatically bind incoming camera shoots to this event
     wireless_server.set_active_event_id(event.id)
 
-    # Ensure wireless server is running
     if not wireless_server.is_running:
         try:
             wireless_server.start()
@@ -116,7 +365,7 @@ def get_camera_credentials(
                     "1. Connect Sony camera to same Wi-Fi as laptop (Menu -> Network -> Wi-Fi).",
                     "2. Go to: Menu -> Network -> [FTP Transfer] -> [FTP Transfer Func.] -> ON.",
                     "3. Select [Server Setting 1] -> Set Host: " + server_ip + " | Port: " + str(server_port) + " | Directory: " + dest_folder + ".",
-                    "4. Set User: 'camera' | Password: 'shoot123' | Passive Mode: ON.",
+                    "4. Set User: (Camera Specific or 'camera') | Password: (Your Password) | Passive Mode: ON.",
                     "5. Set [Auto FTP Transfer] to ON. Every shutter press will now wirelessly transmit!",
                 ],
             },
@@ -126,7 +375,7 @@ def get_camera_credentials(
                     "1. Connect Canon camera to Wi-Fi (Menu -> Communication settings -> Wi-Fi).",
                     "2. Go to: [FTP transfer settings] -> [Create New Connection].",
                     "3. Select [FTP] -> Target Host: " + server_ip + " | Port: " + str(server_port) + " | Directory: " + dest_folder + ".",
-                    "4. Enter Login: 'camera' | Password: 'shoot123'.",
+                    "4. Enter Login: (Camera Specific or 'camera') | Password: (Your Password).",
                     "5. Enable [Automatic transfer]. New clicks will stream instantly to the gallery!",
                 ],
             },
@@ -135,7 +384,7 @@ def get_camera_credentials(
                 "steps": [
                     "1. Connect camera to Wi-Fi (Network menu -> Connect to PC / FTP).",
                     "2. Select [FTP server] -> [Add profile] -> Host: " + server_ip + " (Port " + str(server_port) + ") | Directory: " + dest_folder + ".",
-                    "3. Enter User: 'camera' | Pass: 'shoot123'.",
+                    "3. Enter User: (Camera Specific or 'camera') | Pass: (Your Password).",
                     "4. Turn ON [Auto send]. Photos will transmit seamlessly in real-time.",
                 ],
             },
@@ -166,7 +415,6 @@ async def wireless_http_ingest(
     uploaded_ids = []
     for file in files:
         try:
-            # 1. Stream file directly to disk in chunks, calculate SHA-256 incrementally, and validate image (Memory-Safe)
             file_id, rel_path, file_size, sha256_hash, width, height, img_format = await storage_service.save_original_stream(
                 event_id=event_id,
                 upload_file=file,
@@ -174,7 +422,6 @@ async def wireless_http_ingest(
                 studio_id=event.photographer_id,
             )
 
-            # Check duplicate
             existing = db.query(Photo).filter(
                 Photo.event_id == event_id,
                 Photo.sha256_hash == sha256_hash
@@ -203,7 +450,6 @@ async def wireless_http_ingest(
             db.commit()
             db.refresh(photo)
 
-            # Trigger AI face matching worker
             dispatch_photo_processing(photo_id=photo.id, event_id=event_id, db=db)
             uploaded_ids.append(photo.id)
         except Exception:
