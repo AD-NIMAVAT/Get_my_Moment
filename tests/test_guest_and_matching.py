@@ -252,8 +252,11 @@ def test_cached_match_persistence_and_isolation(client, db_session):
     assert cache_res2.json()["guest_id"] == guest_id
 
 
-def test_face_matching_joined_query_and_cross_event_isolation(client, db_session):
+def test_face_matching_joined_query_and_cross_event_isolation(client, db_session, monkeypatch):
     """Verify that joined face search executes correctly and never returns photos from other events."""
+    from apps.api.services.ai_service import ai_service
+    monkeypatch.setattr(ai_service, "compute_cosine_similarity", lambda v1, v2: 0.95)
+
     # 1. Studio setup
     signup_res = client.post(
         "/api/v1/auth/signup",
