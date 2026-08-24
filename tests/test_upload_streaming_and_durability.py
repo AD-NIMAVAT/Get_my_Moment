@@ -306,6 +306,7 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     from apps.api.models.photographer import Photographer
     from apps.api.models.camera import CameraDevice
     from apps.api.auth import create_access_token
+    from apps.api.services.wireless_ingest import process_incoming_camera_photo, FTP_INCOMING_DIR
 
     # 1. Setup Studio 1 with Event 1 (Rajkot Wedding)
     p1 = Photographer(
