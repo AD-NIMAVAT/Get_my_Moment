@@ -150,7 +150,7 @@ def test_full_controlled_realworld_acceptance_flow(client, db_session):
         json={"is_selected": True, "comment": "Cover photo candidate"}
     )
     assert toggle_res.status_code == 200
-    assert toggle_res.json()["is_selected"] is True
+    assert toggle_res.json()["is_client_selected"] is True
 
     # 10. Wireless FTP Ingest Status Check
     wireless_res = client.get("/api/v1/wireless/status")
