@@ -92,6 +92,13 @@ function SuperAdminDashboardContent() {
   const [eventToDelete, setEventToDelete] = useState<AdminEventItem | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Super Admin Password Reset Modal
+  const [resetPwdTarget, setResetPwdTarget] = useState<AdminPhotographerItem | AdminPhotographerProfileResponse | null>(null);
+  const [customPasswordInput, setCustomPasswordInput] = useState('');
+  const [resetSuccessData, setResetSuccessData] = useState<{ email: string; studio_name?: string; temporary_password?: string } | null>(null);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [copiedTempPassword, setCopiedTempPassword] = useState(false);
+
   // Filters
   const [photographerSearch, setPhotographerSearch] = useState('');
   const [eventSearch, setEventSearch] = useState('');
@@ -262,6 +269,31 @@ function SuperAdminDashboardContent() {
       toast.error(err.message || 'Failed to delete photographer');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleAdminResetPassword = async (generateRandom: boolean) => {
+    if (!resetPwdTarget) return;
+    if (!generateRandom && customPasswordInput.length < 8) {
+      toast.error('Password must be at least 8 characters long');
+      return;
+    }
+
+    setResettingPassword(true);
+    try {
+      const payload = generateRandom ? {} : { new_password: customPasswordInput };
+      const res = await api.adminResetPhotographerPassword(resetPwdTarget.id, payload);
+      setResetSuccessData({
+        email: res.email,
+        studio_name: (resetPwdTarget as any).studio_name,
+        temporary_password: res.temporary_password,
+      });
+      setCustomPasswordInput('');
+      toast.success('Password successfully reset');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to reset password');
+    } finally {
+      setResettingPassword(false);
     }
   };
 
@@ -802,6 +834,18 @@ function SuperAdminDashboardContent() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
+                              setResetPwdTarget(p);
+                              setResetSuccessData(null);
+                              setCustomPasswordInput('');
+                            }}
+                            className="p-1.5 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-700 transition-all cursor-pointer"
+                            title="Reset Photographer Password"
+                          >
+                            <KeyRound className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setPhotographerToDelete(p);
                             }}
                             className="p-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all cursor-pointer"
@@ -996,6 +1040,17 @@ function SuperAdminDashboardContent() {
                   className="px-3 py-1.5 rounded-xl text-xs font-bold border border-[#D9A441]/40 bg-[#D9A441]/15 hover:bg-[#D9A441]/25 text-[#8F6420] transition-all cursor-pointer"
                 >
                   {profileData.is_verified ? 'Remove Verification' : 'Verify Studio ✨'}
+                </button>
+                <button
+                  onClick={() => {
+                    setResetPwdTarget(profileData);
+                    setResetSuccessData(null);
+                    setCustomPasswordInput('');
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Reset Password</span>
                 </button>
               </div>
             </div>
@@ -1835,6 +1890,103 @@ function SuperAdminDashboardContent() {
         isDanger={true}
         loading={actionLoading}
       />
+
+      {/* SUPER ADMIN SAFE PHOTOGRAPHER PASSWORD RESET MODAL */}
+      <Modal
+        isOpen={!!resetPwdTarget}
+        onClose={() => {
+          setResetPwdTarget(null);
+          setResetSuccessData(null);
+          setCustomPasswordInput('');
+        }}
+        title={`🔐 Safe Password Reset — ${resetPwdTarget?.studio_name || 'Photographer'}`}
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4">
+          <div className="p-3.5 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] text-xs text-[#6B6B6B]">
+            <p>
+              Account Email: <strong className="text-[#1F1F1F] font-mono">{resetPwdTarget?.email}</strong>
+            </p>
+            <p className="mt-1 text-[11px] text-[#8E8E8E]">
+              Note: Existing passwords are cryptographically one-way hashed with bcrypt. Passwords cannot be decrypted or viewed. You can assign a new password or generate a temporary one.
+            </p>
+          </div>
+
+          {resetSuccessData ? (
+            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-3 animate-tab-fade">
+              <div className="flex items-center gap-2 font-bold text-emerald-800">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Password Reset Successfully!</span>
+              </div>
+              <p className="text-[11px] text-emerald-700">
+                Share this new temporary password with the studio owner. They can log in and change it anytime.
+              </p>
+              <div className="p-3 rounded-xl bg-white border border-emerald-300 flex items-center justify-between gap-2">
+                <span className="font-mono font-bold text-sm text-[#1F1F1F] tracking-wide select-all">
+                  {resetSuccessData.temporary_password}
+                </span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(resetSuccessData.temporary_password || '');
+                    setCopiedTempPassword(true);
+                    toast.success('Temporary password copied to clipboard');
+                    setTimeout(() => setCopiedTempPassword(false), 2500);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold text-[11px] hover:bg-emerald-700 transition-colors"
+                >
+                  {copiedTempPassword ? 'Copied! ✓' : 'Copy'}
+                </button>
+              </div>
+              <div className="pt-1 flex justify-end">
+                <button
+                  onClick={() => {
+                    setResetPwdTarget(null);
+                    setResetSuccessData(null);
+                  }}
+                  className="btn-primary text-xs py-2 px-4"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">
+                  Set Custom Password (Min 8 Characters)
+                </label>
+                <input
+                  type="text"
+                  value={customPasswordInput}
+                  onChange={(e) => setCustomPasswordInput(e.target.value)}
+                  placeholder="Enter new password (optional)"
+                  className="gmm-input w-full text-xs font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={() => handleAdminResetPassword(true)}
+                  disabled={resettingPassword}
+                  className="w-full py-2.5 px-3 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  <span>{resettingPassword ? 'Generating...' : 'Auto-Generate Temp'}</span>
+                </button>
+
+                <button
+                  onClick={() => handleAdminResetPassword(false)}
+                  disabled={resettingPassword || !customPasswordInput}
+                  className="btn-primary text-xs py-2.5 px-3 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>{resettingPassword ? 'Updating...' : 'Set Custom Password'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

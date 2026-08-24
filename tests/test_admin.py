@@ -114,3 +114,68 @@ def test_super_admin_full_flow(db_session, client):
     # 9. Admin delete event
     del_res = client.delete(f"/api/v1/admin/events/{event.id}", headers=admin_headers)
     assert del_res.status_code == 204
+
+
+def test_super_admin_reset_photographer_password(db_session, client):
+    # 1. Create photographer
+    p = Photographer(
+        email="reset_target_studio@getmymoment.test",
+        password_hash=hash_password("OriginalPassword123!"),
+        studio_name="Target Studio Reset",
+    )
+    db_session.add(p)
+    db_session.commit()
+
+    # 2. Login Super Admin
+    login_res = client.post(
+        "/api/v1/admin/auth/login",
+        json={"email": "admin@getmymoment.com", "password": "Admin@GetMyMoment2026!"}
+    )
+    assert login_res.status_code == 200
+    admin_token = login_res.json()["access_token"]
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # 3. Super Admin Auto-Generate Temporary Password
+    reset_auto = client.post(
+        f"/api/v1/admin/photographers/{p.id}/reset-password",
+        json={},
+        headers=admin_headers
+    )
+    assert reset_auto.status_code == 200
+    auto_data = reset_auto.json()
+    assert auto_data["photographer_id"] == p.id
+    temp_pwd = auto_data["temporary_password"]
+    assert temp_pwd is not None
+    assert len(temp_pwd) >= 8
+
+    # 4. Verify photographer can log in with generated temporary password
+    temp_login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "reset_target_studio@getmymoment.test", "password": temp_pwd}
+    )
+    assert temp_login.status_code == 200
+    assert "access_token" in temp_login.json()
+
+    # 5. Super Admin Set Explicit Custom Password
+    reset_custom = client.post(
+        f"/api/v1/admin/photographers/{p.id}/reset-password",
+        json={"new_password": "CustomAdminAssignedPassword123!"},
+        headers=admin_headers
+    )
+    assert reset_custom.status_code == 200
+    assert reset_custom.json()["temporary_password"] == "CustomAdminAssignedPassword123!"
+
+    # 6. Verify photographer logs in with explicit custom password
+    custom_login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "reset_target_studio@getmymoment.test", "password": "CustomAdminAssignedPassword123!"}
+    )
+    assert custom_login.status_code == 200
+
+    # 7. Non-admin request rejected with 401/403
+    unauth_res = client.post(
+        f"/api/v1/admin/photographers/{p.id}/reset-password",
+        json={"new_password": "HackerPassword123!"}
+    )
+    assert unauth_res.status_code in [401, 403]
+

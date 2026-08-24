@@ -93,3 +93,87 @@ def test_login_invalid_credentials_fails(client):
         }
     )
     assert response.status_code == 401
+
+
+def test_photographer_self_service_change_password(client):
+    # 1. Signup
+    signup_res = client.post(
+        "/api/v1/auth/signup",
+        json={
+            "email": "pwd_change@studio.com",
+            "password": "OldPassword123!",
+            "studio_name": "Change Pwd Studio",
+        }
+    )
+    assert signup_res.status_code == 201
+    token = signup_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 2. Incorrect current password fails
+    bad_res = client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "current_password": "WrongOldPassword!",
+            "new_password": "NewSecretPassword123!"
+        },
+        headers=headers
+    )
+    assert bad_res.status_code == 400
+    assert "Incorrect current password" in bad_res.json()["detail"]
+
+    # 3. Identical password fails
+    same_res = client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "current_password": "OldPassword123!",
+            "new_password": "OldPassword123!"
+        },
+        headers=headers
+    )
+    assert same_res.status_code == 400
+    assert "different from current password" in same_res.json()["detail"]
+
+    # 4. Short password fails
+    short_res = client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "current_password": "OldPassword123!",
+            "new_password": "short"
+        },
+        headers=headers
+    )
+    assert short_res.status_code == 422 or short_res.status_code == 400
+
+    # 5. Successful password change
+    good_res = client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "current_password": "OldPassword123!",
+            "new_password": "BrandNewPassword123!"
+        },
+        headers=headers
+    )
+    assert good_res.status_code == 200
+    assert "successfully" in good_res.json()["message"]
+
+    # 6. Verify old password no longer works
+    old_login = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "pwd_change@studio.com",
+            "password": "OldPassword123!"
+        }
+    )
+    assert old_login.status_code == 401
+
+    # 7. Verify new password logs in successfully
+    new_login = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "pwd_change@studio.com",
+            "password": "BrandNewPassword123!"
+        }
+    )
+    assert new_login.status_code == 200
+    assert "access_token" in new_login.json()
+

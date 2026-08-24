@@ -20,6 +20,7 @@ from apps.api.schemas.auth import (
     PhotographerProfileUpdateRequest,
     PhotographerBrandingUpdateRequest,
     PlanUpgradeRequest,
+    ChangePasswordRequest,
     TokenResponse,
     PhotographerResponse,
     PhotographerProfileDetailResponse,
@@ -269,6 +270,37 @@ def upgrade_photographer_plan(
     db.commit()
     db.refresh(current_user)
     return get_detailed_studio_profile(current_user, db)
+
+
+@router.post("/change-password")
+def change_password(
+    req: ChangePasswordRequest,
+    current_user: Photographer = Depends(get_current_photographer),
+    db: Session = Depends(get_db)
+):
+    """Photographer self-service password change."""
+    if not verify_password(req.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect current password."
+        )
+
+    if req.new_password == req.current_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from current password."
+        )
+
+    if len(req.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 8 characters long."
+        )
+
+    current_user.password_hash = hash_password(req.new_password)
+    db.commit()
+
+    return {"message": "Password updated successfully."}
 
 
 # =============================================================================

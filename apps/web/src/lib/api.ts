@@ -753,6 +753,16 @@ class ApiClient {
       const err = await res.json();
       throw new Error(err.detail || 'Failed to upgrade plan');
     }
+  async changePassword(data: { current_password: string; new_password: string }): Promise<{ message: string }> {
+    const res = await fetch(`${this.baseUrl}/auth/change-password`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to change password');
+    }
     return res.json();
   }
 
@@ -1578,6 +1588,19 @@ class ApiClient {
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error('Failed to update profile');
+    return res.json();
+  }
+
+  async adminResetPhotographerPassword(photographerId: string, data?: { new_password?: string }): Promise<{ message: string; photographer_id: string; email: string; temporary_password?: string }> {
+    const res = await fetch(`${this.baseUrl}/admin/photographers/${photographerId}/reset-password`, {
+      method: 'POST',
+      headers: this.getAdminHeaders(),
+      body: JSON.stringify(data || {}),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to reset photographer password');
+    }
     return res.json();
   }
 

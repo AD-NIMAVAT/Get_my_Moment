@@ -138,3 +138,19 @@ class PhotographerBrandingUpdateRequest(BaseModel):
     signature_url: Optional[str] = None
     digital_stamp_url: Optional[str] = None
 
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, description="Current photographer password")
+    new_password: str = Field(..., min_length=8, description="New password with minimum 8 characters")
+
+
+class AdminResetPasswordRequest(BaseModel):
+    new_password: Optional[str] = Field(None, min_length=8, description="Optional explicit new password. If omitted, a secure temporary password will be generated.")
+
+
+class AdminResetPasswordResponse(BaseModel):
+    message: str
+    photographer_id: str
+    email: str
+    temporary_password: Optional[str] = None
+

@@ -16,7 +16,7 @@ import {
   Mail, Edit3, Save, AlertCircle, RefreshCw, Zap, ArrowUpRight, 
   Award, CheckCircle2, FileText, Download, CreditCard, Lock, QrCode,
   UploadCloud, Trash2, Stamp, Image as ImageIcon, HelpCircle, Send,
-  MessageSquare, ExternalLink, LifeBuoy
+  MessageSquare, ExternalLink, LifeBuoy, KeyRound, Eye, EyeOff
 } from 'lucide-react';
 
 interface PlanDef {
@@ -176,8 +176,16 @@ export default function ProfileAndPricingPage() {
   const [profile, setProfile] = useState<PhotographerProfileDetail | null>(null);
   const [invoices, setInvoices] = useState<InvoiceItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'plan' | 'invoices' | 'profile' | 'branding' | 'support'>('plan');
+  const [activeTab, setActiveTab] = useState<'plan' | 'invoices' | 'profile' | 'branding' | 'security' | 'support'>('plan');
   const [billingCycle, setBillingCycle] = useState<'MONTHLY' | 'ANNUAL'>('MONTHLY');
+
+  // Security & Password Change States
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   // Studio Branding States
   const [logoUploading, setLogoUploading] = useState(false);
@@ -433,6 +441,38 @@ export default function ProfileAndPricingPage() {
     }
   };
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters long');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+    if (newPassword === currentPassword) {
+      toast.error('New password must be different from current password');
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      await api.changePassword({
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      toast.success('Password updated successfully');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to change password');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   if (authLoading || (loading && !profile)) {
     return (
       <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -581,6 +621,18 @@ export default function ProfileAndPricingPage() {
           >
             <Sparkles className="w-4 h-4" />
             <span>Studio Branding & Signature</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('security')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'security'
+                ? 'bg-[#F3F1EC] text-[#E86A5B] shadow-[3px_3px_6px_#D4D0C7,-3px_-3px_6px_#FFFFFF]'
+                : 'text-[#6B6B6B] hover:text-[#1F1F1F]'
+            }`}
+          >
+            <KeyRound className="w-4 h-4" />
+            <span>Security & Password</span>
           </button>
 
           <button
@@ -1136,6 +1188,108 @@ export default function ProfileAndPricingPage() {
                 >
                   <Save className="w-4 h-4" />
                   <span>{savingBranding ? 'Saving...' : 'Save Watermark Preferences'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: SECURITY & PASSWORD CHANGE */}
+      {activeTab === 'security' && (
+        <div className="max-w-2xl mx-auto animate-tab-fade">
+          <div className="neu-card p-6 sm:p-8 space-y-6">
+            <div className="border-b border-[#E2DDD5] pb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-extrabold text-[#1F1F1F]">Change Account Password</h3>
+                <p className="text-xs text-[#6B6B6B]">Update your studio login credentials securely</p>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold text-lg shadow-sm">
+                <KeyRound className="w-5 h-5 text-amber-600" />
+              </div>
+            </div>
+
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">
+                  Current Password *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showCurrentPassword ? "text" : "password"}
+                    required
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Enter your current password"
+                    className="neu-input w-full text-xs pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8E8E8E] hover:text-[#1F1F1F] cursor-pointer"
+                  >
+                    {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">
+                  New Password (Min 8 Characters) *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? "text" : "password"}
+                    required
+                    minLength={8}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new strong password"
+                    className="neu-input w-full text-xs pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8E8E8E] hover:text-[#1F1F1F] cursor-pointer"
+                  >
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#1F1F1F] mb-1.5">
+                  Confirm New Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter your new password"
+                  className="neu-input w-full text-xs"
+                />
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] text-[11px] text-[#6B6B6B] space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-[#1F1F1F]">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>One-Way Cryptographic Hashing Protection</span>
+                </div>
+                <p>
+                  Your password is protected with industry-standard bcrypt hashing. It is never stored or transmitted in plaintext.
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end">
+                <button
+                  type="submit"
+                  disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
+                  className="btn-primary py-2.5 px-6 text-xs font-bold flex items-center gap-2"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>{changingPassword ? 'Updating Password...' : 'Update Password'}</span>
                 </button>
               </div>
             </form>

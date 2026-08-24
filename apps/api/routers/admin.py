@@ -2,6 +2,7 @@
 Get My Moment - Super Admin & Platform Owner Master Control Router
 """
 
+import secrets
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
@@ -18,6 +19,7 @@ from apps.api.models import (
     Ceremony, CrewMember, EventTask, AuditLog, PlatformPaymentConfig
 )
 from apps.api.auth import hash_password, verify_password, create_access_token, get_current_admin
+from apps.api.schemas.auth import AdminResetPasswordRequest, AdminResetPasswordResponse
 
 router = APIRouter(prefix="/admin", tags=["Super Admin & Platform Control"])
 
@@ -504,6 +506,36 @@ def update_photographer_status(
 
     db.commit()
     return {"message": "Photographer status updated successfully", "is_active": p.is_active, "is_verified": p.is_verified, "verification_status": p.verification_status}
+
+
+@router.post("/photographers/{photographer_id}/reset-password", response_model=AdminResetPasswordResponse)
+def admin_reset_photographer_password(
+    photographer_id: str,
+    req: Optional[AdminResetPasswordRequest] = None,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Super Admin safe password reset for a photographer account.
+    Generates a secure temporary password if not explicitly supplied, hashes with bcrypt,
+    and returns the temporary password once in the response.
+    Never exposes or logs existing password hashes."""
+    p = db.query(Photographer).filter(Photographer.id == photographer_id).first()
+    if not p:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photographer not found.")
+
+    new_pwd = req.new_password if (req and req.new_password) else (secrets.token_urlsafe(8) + "Aa1!")
+    if len(new_pwd) < 8:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 8 characters long.")
+
+    p.password_hash = hash_password(new_pwd)
+    db.commit()
+
+    return AdminResetPasswordResponse(
+        message=f"Password for studio '{p.studio_name}' ({p.email}) has been successfully reset.",
+        photographer_id=p.id,
+        email=p.email,
+        temporary_password=new_pwd,
+    )
 
 
 @router.patch("/photographers/{photographer_id}/verify-decision")
