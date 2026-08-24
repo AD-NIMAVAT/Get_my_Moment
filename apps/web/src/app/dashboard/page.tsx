@@ -13,7 +13,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { 
   Plus, Camera, Users, Sparkles, Copy, Check, ExternalLink, 
   Calendar, ShieldCheck, ArrowUpRight, Trash2, Crown, Image as ImageIcon,
-  Layers, HardDrive, CheckCircle2
+  Layers, HardDrive, CheckCircle2, QrCode, Download
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const [eventToDelete, setEventToDelete] = useState<EventItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [qrModalEvent, setQrModalEvent] = useState<EventItem | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -296,6 +297,15 @@ export default function DashboardPage() {
                   </Link>
 
                   <button
+                    onClick={() => setQrModalEvent(event)}
+                    className="neu-btn-secondary py-2.5 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
+                    title="View & Download Event QR Code"
+                  >
+                    <QrCode className="w-3.5 h-3.5 text-[#E86A5B]" />
+                    <span>View QR</span>
+                  </button>
+
+                  <button
                     onClick={() => copyGuestLink(event.access_token, event.name)}
                     className="neu-btn-secondary py-2.5 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
                     title="Copy guest QR link"
@@ -308,7 +318,7 @@ export default function DashboardPage() {
                     ) : (
                       <>
                         <Copy className="w-3.5 h-3.5 text-[#6B6B6B]" />
-                        <span>QR Link</span>
+                        <span>Link</span>
                       </>
                     )}
                   </button>
@@ -396,6 +406,66 @@ export default function DashboardPage() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* QUICK EVENT QR MODAL */}
+      <Modal
+        isOpen={!!qrModalEvent}
+        onClose={() => setQrModalEvent(null)}
+        title={qrModalEvent ? `${qrModalEvent.name} — Guest QR` : 'Event QR Code'}
+        subtitle="Guests scan this QR code on table standees to find their photos with AI."
+        icon={<QrCode className="w-5 h-5 text-[#E86A5B]" />}
+        size="md"
+      >
+        {qrModalEvent && (
+          <div className="space-y-5 text-center">
+            {/* QR Card */}
+            <div className="p-6 bg-gradient-to-b from-[#FFFDF9] to-[#FAF7F2] rounded-3xl border border-[#E8E5E2] shadow-inner inline-block mx-auto">
+              <img
+                src={`/api/v1/events/${qrModalEvent.id}/qr`}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  const guestUrl = `${window.location.origin}/e/${qrModalEvent.access_token}`;
+                  target.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(guestUrl)}`;
+                }}
+                alt={`QR code for ${qrModalEvent.name}`}
+                className="w-56 h-56 object-contain mx-auto rounded-2xl bg-white p-3 border border-[#EBE8E1] shadow-sm"
+              />
+              <div className="mt-3 flex items-center justify-center gap-1.5 text-xs font-bold text-[#1F1F1F]">
+                <Sparkles className="w-3.5 h-3.5 text-[#E86A5B]" />
+                <span>Scan to Find All Photos with AI</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+              <button
+                onClick={() => copyGuestLink(qrModalEvent.access_token, qrModalEvent.name)}
+                className="neu-btn-secondary py-2.5 px-4 text-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5 text-[#E86A5B]" />
+                <span>{copiedToken === qrModalEvent.access_token ? 'Copied Link!' : 'Copy Guest Link'}</span>
+              </button>
+
+              <a
+                href={`/api/v1/events/${qrModalEvent.id}/qr`}
+                download={`${qrModalEvent.slug || 'event'}-qr-code.png`}
+                className="btn-primary py-2.5 px-4 text-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download QR PNG</span>
+              </a>
+
+              <Link
+                href={`/dashboard/events/${qrModalEvent.id}?tab=qr`}
+                className="neu-btn-secondary py-2.5 px-4 text-xs flex items-center gap-1.5 cursor-pointer text-[#1F1F1F]"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Full Standee Flyer</span>
+              </Link>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* CONFIRM DELETE EVENT DIALOG */}
