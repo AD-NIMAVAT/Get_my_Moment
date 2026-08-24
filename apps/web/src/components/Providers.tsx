@@ -7,8 +7,11 @@ import { ToastProvider } from '@/context/ToastContext';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { MobileTabBar } from '@/components/MobileTabBar';
+import { useStandalone } from '@/hooks/useStandalone';
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  useStandalone();
+
   return (
     <ToastProvider>
       <AuthProvider>
@@ -22,3 +25,4 @@ export function Providers({ children }: { children: React.ReactNode }) {
     </ToastProvider>
   );
 }
+

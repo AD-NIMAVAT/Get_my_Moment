@@ -69,7 +69,7 @@ export function MobileTabBar() {
             <Link
               key={tab.href}
               href={tab.href}
-              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all duration-200 group relative ${
+              className={`flex flex-col items-center justify-center flex-1 py-1 min-h-[48px] min-w-[48px] transition-all duration-200 group relative active:scale-95 ${
                 isActive ? 'text-[#E86A5B]' : 'text-[#8C8C8C] hover:text-[#1F1F1F]'
               }`}
             >

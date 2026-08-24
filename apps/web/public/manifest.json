@@ -3,6 +3,7 @@
   "short_name": "GetMyMoment",
   "description": "AI-Powered Wedding Photography & Studio Management Platform",
   "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#FAF9F7",
   "theme_color": "#E86A5B",

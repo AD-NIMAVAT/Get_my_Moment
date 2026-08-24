@@ -460,6 +460,40 @@ select option {
 }
 
 /* ========================================================================= */
+/* Installed PWA / Standalone Display Mode App-Shell Overrides              */
+/* ========================================================================= */
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  html, body {
+    overscroll-behavior-y: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  input, textarea, [contenteditable="true"] {
+    -webkit-user-select: auto;
+    user-select: auto;
+  }
+
+  header.sticky {
+    padding-top: calc(0.25rem + env(safe-area-inset-top, 0px));
+  }
+
+  .mobile-app-container {
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 16px));
+  }
+}
+
+.is-standalone header.sticky {
+  padding-top: calc(0.25rem + env(safe-area-inset-top, 0px));
+}
+
+.is-standalone .mobile-app-container {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 16px));
+}
+
+
+/* ========================================================================= */
 /* Fluid Responsive Layout & Auto-Adjusting Viewport Utilities               */
 /* ========================================================================= */
 
