@@ -251,3 +251,94 @@ def test_cached_match_persistence_and_isolation(client, db_session):
     assert cache_res2.json()["status"] == "READY"
     assert cache_res2.json()["guest_id"] == guest_id
 
+
+def test_face_matching_joined_query_and_cross_event_isolation(client, db_session):
+    """Verify that joined face search executes correctly and never returns photos from other events."""
+    # 1. Studio setup
+    signup_res = client.post(
+        "/api/v1/auth/signup",
+        json={"email": "join_iso@example.com", "password": "Password123!", "studio_name": "Join Studio"}
+    )
+    headers = {"Authorization": f"Bearer {signup_res.json()['access_token']}"}
+
+    # 2. Create Event A and Event B
+    res_a = client.post("/api/v1/events", headers=headers, json={"name": "Event A"})
+    event_a_id = res_a.json()["id"]
+
+    res_b = client.post("/api/v1/events", headers=headers, json={"name": "Event B"})
+    event_b_id = res_b.json()["id"]
+
+    # 3. Add Photo & FaceEmbedding in Event A
+    photo_a = Photo(
+        event_id=event_a_id,
+        original_file_name="event_a_photo.jpg",
+        file_path="storage/events/mock/a.jpg",
+        sha256_hash="hash_a_12345",
+        file_size=1024,
+        mime_type="image/jpeg",
+        status=PhotoStatus.PROCESSED.value,
+        faces_detected_count=1,
+    )
+    db_session.add(photo_a)
+    db_session.flush()
+
+    face_a = Face(
+        photo_id=photo_a.id,
+        event_id=event_a_id,
+        bounding_box={"x": 10, "y": 10, "w": 50, "h": 50},
+        detection_confidence=0.99,
+    )
+    db_session.add(face_a)
+    db_session.flush()
+
+    dummy_vec = [1.0 / (128 ** 0.5)] * 128
+    face_emb_a = FaceEmbedding(face_id=face_a.id, event_id=event_a_id, embedding=dummy_vec)
+    db_session.add(face_emb_a)
+
+    # 4. Add Photo & FaceEmbedding in Event B with identical embedding
+    photo_b = Photo(
+        event_id=event_b_id,
+        original_file_name="event_b_photo.jpg",
+        file_path="storage/events/mock/b.jpg",
+        sha256_hash="hash_b_67890",
+        file_size=1024,
+        mime_type="image/jpeg",
+        status=PhotoStatus.PROCESSED.value,
+        faces_detected_count=1,
+    )
+    db_session.add(photo_b)
+    db_session.flush()
+
+    face_b = Face(
+        photo_id=photo_b.id,
+        event_id=event_b_id,
+        bounding_box={"x": 10, "y": 10, "w": 50, "h": 50},
+        detection_confidence=0.99,
+    )
+    db_session.add(face_b)
+    db_session.flush()
+
+    face_emb_b = FaceEmbedding(face_id=face_b.id, event_id=event_b_id, embedding=dummy_vec)
+    db_session.add(face_emb_b)
+    db_session.commit()
+
+    # 5. Register guest in Event A
+    reg_res = client.post(
+        f"/api/v1/events/{event_a_id}/guests/register",
+        json={"name": "Guest In A", "mobile": "+919876543299"}
+    )
+    guest_a_id = reg_res.json()["guest_id"]
+    client.post(f"/api/v1/guests/{guest_a_id}/consent", json={"guest_id": guest_a_id, "face_search_consent": True})
+
+    # 6. Guest searches in Event A -> Must receive Photo A ONLY, NEVER Photo B
+    selfie_bytes = create_dummy_face_image()
+    search_res = client.post(
+        f"/api/v1/events/{event_a_id}/guests/{guest_a_id}/search",
+        files=[("selfie", ("selfie.jpg", selfie_bytes, "image/jpeg"))]
+    )
+    assert search_res.status_code == 200
+    matched_ids = [p["id"] for p in search_res.json()["matched_photos"]]
+    assert photo_a.id in matched_ids
+    assert photo_b.id not in matched_ids
+
+

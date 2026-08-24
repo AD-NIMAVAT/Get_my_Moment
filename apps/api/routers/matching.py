@@ -81,22 +81,24 @@ async def search_event_photos_by_selfie(
     selfie_hash = storage_service.calculate_sha256(selfie_bytes)
 
     # 4. Strict Event-Scoped Vector Search (WHERE event_id = :event_id)
-    # Fetch all face embeddings for this event
-    face_embeddings = db.query(FaceEmbedding).filter(FaceEmbedding.event_id == event.id).all()
+    # Fetch all face embeddings with associated photo_id in a SINGLE joined query (Zero N+1)
+    face_records = (
+        db.query(FaceEmbedding.embedding, Face.photo_id)
+        .join(Face, FaceEmbedding.face_id == Face.id)
+        .filter(FaceEmbedding.event_id == event.id)
+        .all()
+    )
 
     matched_photo_scores: Dict[str, float] = {}
     threshold = 0.55  # Optimal SFace biometric matching threshold (canonical same-person range: 0.70-0.95)
 
-    for face_emb in face_embeddings:
-        sim = ai_service.compute_cosine_similarity(selfie_embedding, face_emb.embedding)
+    for emb, photo_id in face_records:
+        sim = ai_service.compute_cosine_similarity(selfie_embedding, emb)
         if sim >= threshold:
-            # Map face back to photo
-            face = db.query(Face).filter(Face.id == face_emb.face_id).first()
-            if face:
-                # Scale raw similarity [0.60..1.00] to [88%..99%] accuracy percentage
-                scaled_score = round(min(0.99, max(0.88, 0.88 + ((sim - 0.60) / 0.35) * 0.11)), 2)
-                if face.photo_id not in matched_photo_scores or scaled_score > matched_photo_scores[face.photo_id]:
-                    matched_photo_scores[face.photo_id] = scaled_score
+            # Scale raw similarity [0.60..1.00] to [88%..99%] accuracy percentage
+            scaled_score = round(min(0.99, max(0.88, 0.88 + ((sim - 0.60) / 0.35) * 0.11)), 2)
+            if photo_id not in matched_photo_scores or scaled_score > matched_photo_scores[photo_id]:
+                matched_photo_scores[photo_id] = scaled_score
 
     # Sort photos by highest similarity
     sorted_photo_ids = sorted(matched_photo_scores.keys(), key=lambda pid: matched_photo_scores[pid], reverse=True)
