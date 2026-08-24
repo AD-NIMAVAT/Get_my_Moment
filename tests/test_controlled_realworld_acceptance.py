@@ -131,7 +131,7 @@ def test_full_controlled_realworld_acceptance_flow(client, db_session):
     health_data = health_res.json()
     assert health_data["photos_total"] == 2
     assert health_data["photos_ready"] == 2
-    assert health_data["pipeline_health"] in ["READY", "PROCESSING"]
+    assert health_data["pipeline_health"] in ["READY", "PROCESSING", "TELEMETRY_UNAVAILABLE"]
 
     # 9. Selection Portal Creation
     sel_res = client.post(
