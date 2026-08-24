@@ -437,6 +437,177 @@ export default function EventCommandCenterPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handlePrintStandee = () => {
+    if (!event) return;
+    const printWindow = window.open('', '_blank', 'width=720,height=900');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+
+    const guestUrl = `${window.location.origin}/e/${event.access_token}`;
+    const qrUrl = `/api/v1/events/${event.id}/qr`;
+    const studioName = user?.studio_name || 'Studio Photography';
+    const logoHtml = user?.logo_url 
+      ? `<img src="${user.logo_url}" alt="${studioName}" style="max-height: 70px; max-width: 220px; object-fit: contain; margin: 0 auto 8px;" />`
+      : `<div style="width: 60px; height: 60px; border-radius: 18px; background: linear-gradient(135deg, #EE7E6F, #E86A5B, #C94F43); color: #fff; font-size: 28px; font-weight: 900; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-family: sans-serif; box-shadow: 0 4px 12px rgba(232,106,91,0.3); border: 2px solid #ffffff;">${studioName.charAt(0).toUpperCase()}</div>`;
+
+    const phoneHtml = user?.phone ? `<span style="display:inline-flex; align-items:center; gap: 4px;">📞 ${user.phone}</span>` : '';
+    const cityState = [user?.city, user?.state].filter(Boolean).join(', ');
+    const addressHtml = cityState ? `<span style="display:inline-flex; align-items:center; gap: 4px;">📍 ${cityState}</span>` : '';
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Print QR Standee - ${event.name}</title>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <style>
+            @page { size: A4 portrait; margin: 15mm; }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              background: #FFFFFF;
+              color: #1F1F1F;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              min-height: 98vh;
+              padding: 10px;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .standee-card {
+              width: 100%;
+              max-width: 440px;
+              background: #FAF9F7;
+              border: 2.5px solid #E86A5B;
+              border-radius: 28px;
+              padding: 36px 28px 24px;
+              text-align: center;
+              box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+              position: relative;
+              overflow: hidden;
+              margin: auto;
+            }
+            .accent-strip {
+              position: absolute;
+              top: 0; left: 0; right: 0;
+              height: 8px;
+              background: linear-gradient(90deg, #E86A5B, #D9A441, #E86A5B);
+            }
+            .badge {
+              display: inline-block;
+              background: rgba(232, 106, 91, 0.12);
+              color: #E86A5B;
+              border: 1px solid rgba(232, 106, 91, 0.25);
+              font-size: 11px;
+              font-weight: 800;
+              text-transform: uppercase;
+              letter-spacing: 1.5px;
+              padding: 4px 12px;
+              border-radius: 20px;
+              margin-top: 6px;
+            }
+            .studio-title {
+              font-size: 22px;
+              font-weight: 800;
+              color: #1F1F1F;
+              margin-top: 6px;
+            }
+            .event-subtitle {
+              font-size: 13px;
+              font-weight: 700;
+              color: #4A4A4A;
+              margin-top: 6px;
+            }
+            .qr-box {
+              background: #FFFFFF;
+              border: 1.5px solid #EBE8E1;
+              border-radius: 22px;
+              padding: 16px;
+              display: inline-block;
+              margin: 20px auto;
+              box-shadow: 0 6px 20px rgba(0,0,0,0.04);
+            }
+            .qr-img {
+              width: 240px;
+              height: 240px;
+              object-fit: contain;
+              display: block;
+              margin: 0 auto;
+            }
+            .qr-scan-text {
+              font-size: 12px;
+              font-weight: 800;
+              color: #1F1F1F;
+              margin-top: 10px;
+            }
+            .contact-section {
+              border-top: 1px solid #E8E5E2;
+              padding-top: 14px;
+              font-size: 12px;
+              font-weight: 700;
+              color: #1F1F1F;
+              display: flex;
+              flex-wrap: wrap;
+              justify-content: center;
+              gap: 16px;
+            }
+            .footer-brand {
+              border-top: 1px solid #EBE8E1;
+              padding-top: 12px;
+              margin-top: 12px;
+              font-size: 11px;
+              font-weight: 800;
+              color: #6B6B6B;
+              letter-spacing: 0.5px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="standee-card">
+            <div class="accent-strip"></div>
+            <div style="display:flex; flex-direction:column; align-items:center;">
+              ${logoHtml}
+              <div class="studio-title">${studioName}</div>
+              <div class="badge">✨ Get My Moment</div>
+              <div class="event-subtitle">${event.name}</div>
+            </div>
+
+            <div class="qr-box">
+              <img 
+                src="${qrUrl}" 
+                onerror="this.src='https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(guestUrl)}'" 
+                class="qr-img" 
+                alt="Scan QR" 
+              />
+              <div class="qr-scan-text">✨ Scan with Phone Camera to View Photos</div>
+            </div>
+
+            <div class="contact-section">
+              ${phoneHtml}
+              ${addressHtml}
+            </div>
+
+            <div class="footer-brand">
+              GetMyMoment By Pro_Technologies
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+              }, 400);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const handleCopySelectionLink = () => {
     if (!event) return;
     const url = `${window.location.origin}/selection/${event.selection_token}`;
@@ -1297,7 +1468,7 @@ export default function EventCommandCenterPage() {
                 </a>
 
                 <button
-                  onClick={() => window.print()}
+                  onClick={handlePrintStandee}
                   className="px-4 py-2 rounded-xl bg-[#E86A5B] text-white text-xs font-bold hover:bg-[#D35748] transition-all flex items-center gap-1.5 shadow-md"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
