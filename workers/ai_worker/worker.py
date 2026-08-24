@@ -47,7 +47,8 @@ except ImportError:
 
 
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import List, Dict, Any
 
 
 def run_photo_pipeline(photo_id: str, event_id: str, db_override: Optional[Session] = None):
@@ -59,14 +60,43 @@ def run_photo_pipeline(photo_id: str, event_id: str, db_override: Optional[Sessi
     stage = "INITIALIZE"
 
     try:
+        # Atomic CAS Processing Claim (Prevents duplicate concurrent execution)
+        stale_cutoff = now_utc - timedelta(minutes=5)
+        claimed = db.query(Photo).filter(
+            Photo.id == photo_id,
+            Photo.event_id == event_id,
+            (
+                Photo.status.in_([PhotoStatus.UPLOADED.value, PhotoStatus.FAILED.value]) |
+                ((Photo.status == PhotoStatus.PROCESSING.value) & (Photo.processing_started_at < stale_cutoff))
+            )
+        ).update(
+            {
+                "status": PhotoStatus.PROCESSING.value,
+                "processing_started_at": now_utc,
+                "error_message": None,
+                "failure_category": None,
+            },
+            synchronize_session=False
+        )
+        db.commit()
+
+        if not claimed:
+            # Check current status
+            photo_rec = db.query(Photo).filter(Photo.id == photo_id, Photo.event_id == event_id).first()
+            if not photo_rec:
+                logger.error(f"Photo not found: photo_id={photo_id}, event_id={event_id}")
+                return {"status": "error", "message": "Photo not found"}
+            if photo_rec.status == PhotoStatus.PROCESSED.value:
+                logger.info(f"Photo {photo_id} already PROCESSED. Skipping duplicate task.")
+                return {"status": "already_processed", "photo_id": photo_id}
+            if photo_rec.status == PhotoStatus.PROCESSING.value:
+                logger.info(f"Photo {photo_id} actively PROCESSING by another worker. Skipping concurrent execution.")
+                return {"status": "already_in_progress", "photo_id": photo_id}
+
         photo = db.query(Photo).filter(Photo.id == photo_id, Photo.event_id == event_id).first()
         if not photo:
             logger.error(f"Photo not found: photo_id={photo_id}, event_id={event_id}")
             return {"status": "error", "message": "Photo not found"}
-
-        photo.status = PhotoStatus.PROCESSING.value
-        photo.processing_started_at = now_utc
-        db.commit()
 
         # 1. Read file bytes
         stage = "DECODE"
@@ -90,8 +120,15 @@ def run_photo_pipeline(photo_id: str, event_id: str, db_override: Optional[Sessi
         faces = ai_service.detect_faces(file_bytes)
         photo.faces_detected_count = len(faces)
 
-        # 4. Embeddings & Persistence
+        # 4. Embeddings & Persistence (Clean up any partial previous face rows for 100% idempotency)
         stage = "EMBEDDINGS"
+        db.query(FaceEmbedding).filter(
+            FaceEmbedding.face_id.in_(
+                db.query(Face.id).filter(Face.photo_id == photo_id)
+            )
+        ).delete(synchronize_session=False)
+        db.query(Face).filter(Face.photo_id == photo_id).delete(synchronize_session=False)
+
         for detection in faces:
             crop_path = None
             if settings.FACE_DEBUG_CROPS_ENABLED:
@@ -196,8 +233,8 @@ def dispatch_photo_processing(photo_id: str, event_id: str, db: Optional[Session
     Non-blocking async dispatch:
     - Sets queued_at timestamp
     - In test mode: executes synchronously
-    - In local dev: submits to background ThreadPoolExecutor instantly (0ms latency, non-blocking)
-    - In production: dispatches to Celery/Redis queue
+    - In local dev: submits to background ThreadPoolExecutor (non-blocking)
+    - In production: dispatches to Celery/Redis queue; if broker is down, photo remains durably in PostgreSQL (status=UPLOADED)
     """
     now_utc = datetime.utcnow()
     # Update queued_at timestamp
@@ -224,7 +261,53 @@ def dispatch_photo_processing(photo_id: str, event_id: str, db: Optional[Session
             process_photo_task.delay(photo_id, event_id)
             return
         except Exception as exc:
-            logger.warning(f"Celery dispatch failed ({exc}), falling back to local threadpool")
+            logger.warning(f"Celery dispatch failed for photo {photo_id} ({exc}). Photo remains durably stored as UPLOADED in PostgreSQL for queue recovery.")
+            if settings.ENVIRONMENT != "production":
+                local_executor.submit(run_photo_pipeline, photo_id, event_id, None)
+            return
 
-    # Non-blocking fallback execution on local thread pool
-    local_executor.submit(run_photo_pipeline, photo_id, event_id, None)
+    # Non-blocking fallback execution on local thread pool for development
+    if settings.ENVIRONMENT != "production":
+        local_executor.submit(run_photo_pipeline, photo_id, event_id, None)
+
+
+def reconcile_orphaned_photos(
+    event_id: Optional[str] = None,
+    max_age_seconds: int = 60,
+    limit: int = 50,
+    db: Optional[Session] = None
+) -> int:
+    """
+    Durable reconciliation helper:
+    Finds photos in UPLOADED status older than max_age_seconds (or stale PROCESSING > 5 mins)
+    and safely re-dispatches them to Celery.
+    """
+    active_db = db if db is not None else get_db_session()
+    should_close = db is None
+    reconciled_count = 0
+
+    try:
+        cutoff = datetime.utcnow() - timedelta(seconds=max_age_seconds)
+        stale_proc_cutoff = datetime.utcnow() - timedelta(minutes=5)
+
+        query = active_db.query(Photo.id, Photo.event_id).filter(
+            Photo.is_deleted == False,
+            (
+                ((Photo.status == PhotoStatus.UPLOADED.value) & (Photo.created_at < cutoff)) |
+                ((Photo.status == PhotoStatus.PROCESSING.value) & (Photo.processing_started_at < stale_proc_cutoff))
+            )
+        )
+        if event_id:
+            query = query.filter(Photo.event_id == event_id)
+
+        orphaned = query.order_by(Photo.created_at.asc()).limit(limit).all()
+
+        for pid, eid in orphaned:
+            dispatch_photo_processing(photo_id=pid, event_id=eid, db=active_db)
+            reconciled_count += 1
+
+        return reconciled_count
+    finally:
+        if should_close:
+            active_db.close()
+
