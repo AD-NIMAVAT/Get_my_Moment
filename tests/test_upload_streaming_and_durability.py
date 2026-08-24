@@ -4,9 +4,11 @@ Upload Streaming, Large-File Memory Safety, and Storage Durability Tests (P1-BAT
 
 import io
 import os
+import uuid
+import secrets
 import pytest
 from PIL import Image
-from apps.api.models import Photo, Event
+from apps.api.models import Photo, Event, Photographer
 from apps.api.services.storage import storage_service
 from apps.api.config import settings
 from packages.shared.constants import PhotoStatus
