@@ -443,6 +443,7 @@ async def wireless_http_ingest(
                 status=PhotoStatus.UPLOADED.value,
                 is_guest_uploaded=False,
                 uploaded_by_guest_name=f"[WIRELESS] {camera_model}",
+                camera_model=camera_model,
             )
             db.add(photo)
             db.commit()
