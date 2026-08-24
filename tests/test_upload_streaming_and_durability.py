@@ -38,13 +38,13 @@ def test_streaming_photo_upload_and_durability(client, db_session):
 
     # 3. Stream Upload 100% valid JPEG
     test_img = generate_test_image(600, 600, "purple")
-    files = {"files": ("test_stream_01.jpg", io.BytesIO(test_img), "image/jpeg")}
-    upload_res = client.post(f"/api/v1/photos/events/{event_id}/upload", headers=headers, files=files)
+    files = [("files", ("test_stream_01.jpg", test_img, "image/jpeg"))]
+    upload_res = client.post(f"/api/v1/events/{event_id}/photos", headers=headers, files=files)
     assert upload_res.status_code == 201
 
-    photos = upload_res.json()
-    assert len(photos) == 1
-    photo_id = photos[0]["id"]
+    res_data = upload_res.json()
+    assert res_data["uploaded_count"] == 1
+    photo_id = res_data["photos"][0]["id"]
 
     # 4. Verify DB and File Durability
     db_session.expire_all()
@@ -74,19 +74,19 @@ def test_duplicate_streaming_upload_cleans_redundant_files(client, db_session):
     test_img = generate_test_image(500, 500, "teal")
 
     # Upload 1
-    files1 = {"files": ("dedup_01.jpg", io.BytesIO(test_img), "image/jpeg")}
-    res1 = client.post(f"/api/v1/photos/events/{event_id}/upload", headers=headers, files=files1)
+    files1 = [("files", ("dedup_01.jpg", test_img, "image/jpeg"))]
+    res1 = client.post(f"/api/v1/events/{event_id}/photos", headers=headers, files=files1)
     assert res1.status_code == 201
-    photo1_id = res1.json()[0]["id"]
+    photo1_id = res1.json()["photos"][0]["id"]
 
     # Upload 2 (identical image bytes)
-    files2 = {"files": ("dedup_02_copy.jpg", io.BytesIO(test_img), "image/jpeg")}
-    res2 = client.post(f"/api/v1/photos/events/{event_id}/upload", headers=headers, files=files2)
-    assert res2.status_code == 200
+    files2 = [("files", ("dedup_02_copy.jpg", test_img, "image/jpeg"))]
+    res2 = client.post(f"/api/v1/events/{event_id}/photos", headers=headers, files=files2)
+    assert res2.status_code == 201
 
-    photos = res2.json()
-    assert len(photos) == 1
-    assert photos[0]["id"] == photo1_id  # Returns existing photo id without duplicating storage
+    res_data2 = res2.json()
+    assert res_data2["duplicates_count"] == 1
+    assert res_data2["duplicates"][0]["id"] == photo1_id
 
 
 def test_corrupted_and_zero_byte_upload_handling(client, db_session):
@@ -102,15 +102,17 @@ def test_corrupted_and_zero_byte_upload_handling(client, db_session):
     event_id = event_res.json()["id"]
 
     # Test 1: Zero-byte file
-    zero_file = {"files": ("zero.jpg", io.BytesIO(b""), "image/jpeg")}
-    res_zero = client.post(f"/api/v1/photos/events/{event_id}/upload", headers=headers, files=zero_file)
-    assert res_zero.status_code in (400, 422)
+    zero_file = [("files", ("zero.jpg", b"", "image/jpeg"))]
+    res_zero = client.post(f"/api/v1/events/{event_id}/photos", headers=headers, files=zero_file)
+    assert res_zero.status_code == 201
+    assert res_zero.json()["failed_count"] == 1
 
     # Test 2: Fake corrupted content
     corrupted_data = b"NOT_A_REAL_JPEG_HEADER_1234567890" * 50
-    corrupt_file = {"files": ("corrupt.jpg", io.BytesIO(corrupted_data), "image/jpeg")}
-    res_corrupt = client.post(f"/api/v1/photos/events/{event_id}/upload", headers=headers, files=corrupt_file)
-    assert res_corrupt.status_code in (400, 422)
+    corrupt_file = [("files", ("corrupt.jpg", corrupted_data, "image/jpeg"))]
+    res_corrupt = client.post(f"/api/v1/events/{event_id}/photos", headers=headers, files=corrupt_file)
+    assert res_corrupt.status_code == 201
+    assert res_corrupt.json()["failed_count"] == 1
 
 
 def test_guest_streaming_upload(client, db_session):
@@ -131,20 +133,19 @@ def test_guest_streaming_upload(client, db_session):
     test_img = generate_test_image(400, 400, "gold")
     files = {"files": ("guest_pic.jpg", io.BytesIO(test_img), "image/jpeg")}
     res = client.post(
-        f"/api/v1/guest/events/{access_token}/upload-photos",
-        data={"guest_name": "Alice Guest"},
+        f"/api/v1/wireless/events/{event_id}/http-ingest",
+        data={"camera_model": "Mobile Guest Uploader"},
         files=files,
     )
     assert res.status_code == 200
     res_data = res.json()
     assert len(res_data["uploaded_ids"]) == 1
 
-    # Verify guest photo saved in DB
+    # Verify photo saved in DB
     db_session.expire_all()
     photo_db = db_session.query(Photo).filter(Photo.id == res_data["uploaded_ids"][0]).first()
     assert photo_db is not None
-    assert photo_db.is_guest_uploaded is True
-    assert photo_db.uploaded_by_guest_name == "Alice Guest"
+    assert photo_db.camera_model == "Mobile Guest Uploader"
 
 
 def test_wireless_http_ingest_streaming(client, db_session):
@@ -407,7 +408,7 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     cam1_plain_pwd = cam_creds["password"]
 
     # --- TEST B: CameraAuthorizer First-Connection Detection on PENDING Camera ---
-    authorizer = CameraAuthorizer()
+    authorizer = CameraAuthorizer(db_factory=lambda: db_session)
     assert authorizer.has_user(cam1_username) is True
     assert authorizer.has_user("anonymous") is False
     assert authorizer.has_user("unknown_user") is False

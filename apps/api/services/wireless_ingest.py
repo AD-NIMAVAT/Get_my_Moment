@@ -10,7 +10,7 @@ import logging
 import threading
 import uuid
 from datetime import datetime
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Callable
 from pyftpdlib.authorizers import DummyAuthorizer, AuthenticationFailed
 from pyftpdlib.handlers import FTPHandler
 from pyftpdlib.servers import FTPServer
@@ -18,6 +18,7 @@ from PIL import Image
 
 from apps.api.database import SessionLocal
 from apps.api.models import Photo, Event, Folder, CameraDevice
+from packages.shared.constants import PhotoStatus
 from apps.api.services.storage import storage_service, get_or_create_uncategorized_folder, reconcile_folder_counters
 from apps.api.auth import verify_password
 
@@ -45,11 +46,18 @@ class CameraAuthorizer(DummyAuthorizer):
     Fails closed on any unknown identity, anonymous access, or database disconnection.
     """
 
+    def __init__(self, db_factory: Optional[Callable] = None):
+        super().__init__()
+        self.db_factory = db_factory or SessionLocal
+
+    def _get_db(self):
+        return self.db_factory()
+
     def has_user(self, username: str) -> bool:
         if not username or username == "anonymous":
             return False
         try:
-            db = SessionLocal()
+            db = self._get_db()
             try:
                 cam = db.query(CameraDevice).filter(CameraDevice.ftp_username == username).first()
                 return cam is not None
@@ -65,7 +73,7 @@ class CameraAuthorizer(DummyAuthorizer):
 
         # Check Database CameraDevice
         try:
-            db = SessionLocal()
+            db = self._get_db()
             try:
                 camera = db.query(CameraDevice).filter(CameraDevice.ftp_username == username).first()
                 if not camera:
@@ -202,7 +210,7 @@ def process_incoming_camera_photo(
         try:
             # Parse directory path relative to FTP_INCOMING_DIR
             rel_path_to_incoming = os.path.relpath(file_path, FTP_INCOMING_DIR)
-            path_segments = [seg for seg in rel_path_to_incoming.replace(os.sep, "/").replace("/", "/").split("/") if seg and seg != "."]
+            path_segments = [seg for seg in rel_path_to_incoming.replace(os.sep, "/").split("/") if seg and seg != "."]
 
             event = None
             matched_folder_from_path = None
