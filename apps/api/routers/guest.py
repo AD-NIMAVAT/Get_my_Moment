@@ -1,3 +1,4 @@
+import os
 import time
 import base64
 import hmac
@@ -5,6 +6,7 @@ import hashlib
 from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from apps.api.database import get_db
 from apps.api.models import Event, Guest, Consent, Photographer, Photo, GuestSearch
@@ -450,6 +452,10 @@ def get_event_leads(
     leads = []
     for g in guests:
         consent = g.consent
+        safe_event_id = os.path.basename(event_id)
+        safe_guest_id = os.path.basename(g.id)
+        selfie_path = os.path.join(settings.STORAGE_LOCAL_ROOT, "selfies", safe_event_id, f"{safe_guest_id}.jpg")
+        has_selfie = os.path.exists(selfie_path)
         leads.append({
             "guest_id": g.id,
             "name": g.name,
@@ -459,6 +465,32 @@ def get_event_leads(
             "marketing_consent": consent.marketing_consent if consent else False,
             "searches_count": len(g.searches),
             "registered_at": g.created_at,
+            "has_selfie": has_selfie,
+            "selfie_url": f"/api/v1/events/{event_id}/guests/{g.id}/selfie" if has_selfie else None,
         })
     return leads
+
+
+@router.get("/events/{event_id}/guests/{guest_id}/selfie")
+def get_guest_selfie(
+    event_id: str,
+    guest_id: str,
+    current_photographer: Photographer = Depends(get_current_photographer),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns the selfie image captured by the registered event guest.
+    """
+    event = db.query(Event).filter(Event.id == event_id, Event.photographer_id == current_photographer.id).first()
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+
+    safe_event_id = os.path.basename(event_id)
+    safe_guest_id = os.path.basename(guest_id)
+    selfie_path = os.path.join(settings.STORAGE_LOCAL_ROOT, "selfies", safe_event_id, f"{safe_guest_id}.jpg")
+    if not os.path.exists(selfie_path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guest selfie not found.")
+
+    return FileResponse(selfie_path, media_type="image/jpeg")
+
 

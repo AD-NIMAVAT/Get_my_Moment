@@ -40,6 +40,8 @@ export default function EventCommandCenterPage() {
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
   
   const [leads, setLeads] = useState<GuestLead[]>([]);
+  const [selectedLeadForSelfie, setSelectedLeadForSelfie] = useState<GuestLead | null>(null);
+  const [selfieError, setSelfieError] = useState<boolean>(false);
   const [finance, setFinance] = useState<FinanceSummary | null>(null);
   const [operations, setOperations] = useState<OperationsData | null>(null);
   const [guestReport, setGuestReport] = useState<GuestUploadsReportResponse | null>(null);
@@ -1675,15 +1677,32 @@ export default function EventCommandCenterPage() {
                   return (
                     <div 
                       key={l.guest_id || (l as any).id || index} 
-                      className="neu-card p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white hover:border-[#E86A5B]/40 transition-all shadow-sm"
+                      className="neu-card p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white hover:border-[#E86A5B]/40 transition-all shadow-sm group"
                     >
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#FAF7F2] to-[#EAE6DF] border border-[#E0DCD3] flex items-center justify-center text-[#E86A5B] font-display font-black text-base shadow-inner shrink-0">
-                          {guestName.charAt(0).toUpperCase()}
+                      <div 
+                        className="flex items-center gap-3.5 cursor-pointer select-none"
+                        onClick={() => {
+                          setSelectedLeadForSelfie(l);
+                          setSelfieError(false);
+                        }}
+                        title="Click to view Guest Selfie & Details"
+                      >
+                        <div className="relative">
+                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#FAF7F2] to-[#EAE6DF] border border-[#E0DCD3] group-hover:border-[#E86A5B] flex items-center justify-center text-[#E86A5B] font-display font-black text-base shadow-inner shrink-0 transition-colors">
+                            {guestName.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white border border-[#E0DCD3] flex items-center justify-center shadow-xs text-[#E86A5B]">
+                            <Camera className="w-3 h-3" />
+                          </div>
                         </div>
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-bold text-[#1F1F1F]">{guestName}</span>
+                            <span className="text-sm font-bold text-[#1F1F1F] group-hover:text-[#E86A5B] transition-colors flex items-center gap-1.5">
+                              <span>{guestName}</span>
+                              <span className="text-[10px] font-semibold text-[#8A8A8A] bg-[#FAF7F2] px-1.5 py-0.5 rounded-md border border-[#E8E5E2] group-hover:border-[#E86A5B]/30 group-hover:text-[#E86A5B]">
+                                View Selfie 📸
+                              </span>
+                            </span>
                             {l.marketing_consent && (
                               <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
                                 Opt-In
@@ -1708,28 +1727,43 @@ export default function EventCommandCenterPage() {
                       </div>
 
                       {/* Quick Contact Actions */}
-                      {cleanPhone && (
-                        <div className="flex items-center gap-2 self-end sm:self-center">
-                          <a
-                            href={`https://wa.me/${cleanPhone.replace('+', '')}?text=Hello%20${encodeURIComponent(guestName)},%20thank%20you%20for%20attending%20${encodeURIComponent(event?.name || 'our event')}!%20Hope%20you%20enjoyed%20the%20photos.`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
-                            title="Chat on WhatsApp"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                            <span>WhatsApp</span>
-                          </a>
+                      <div className="flex items-center gap-2 self-end sm:self-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedLeadForSelfie(l);
+                            setSelfieError(false);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-[#FAF7F2] hover:bg-[#F0ECE4] text-[#1F1F1F] border border-[#E0DCD3] text-xs font-bold flex items-center gap-1.5 transition-all"
+                          title="View Guest Selfie"
+                        >
+                          <Camera className="w-3.5 h-3.5 text-[#E86A5B]" />
+                          <span className="hidden sm:inline">Selfie</span>
+                        </button>
 
-                          <a
-                            href={`tel:${cleanPhone}`}
-                            className="p-2 rounded-xl bg-[#FAF7F2] hover:bg-[#F0ECE4] text-[#1F1F1F] border border-[#E0DCD3] transition-all"
-                            title="Call Guest"
-                          >
-                            <Phone className="w-3.5 h-3.5 text-[#E86A5B]" />
-                          </a>
-                        </div>
-                      )}
+                        {cleanPhone && (
+                          <>
+                            <a
+                              href={`https://wa.me/${cleanPhone.replace('+', '')}?text=Hello%20${encodeURIComponent(guestName)},%20thank%20you%20for%20attending%20${encodeURIComponent(event?.name || 'our event')}!%20Hope%20you%20enjoyed%20the%20photos.`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                              title="Chat on WhatsApp"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                              <span>WhatsApp</span>
+                            </a>
+
+                            <a
+                              href={`tel:${cleanPhone}`}
+                              className="p-2 rounded-xl bg-[#FAF7F2] hover:bg-[#F0ECE4] text-[#1F1F1F] border border-[#E0DCD3] transition-all"
+                              title="Call Guest"
+                            >
+                              <Phone className="w-3.5 h-3.5 text-[#E86A5B]" />
+                            </a>
+                          </>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -2013,6 +2047,101 @@ export default function EventCommandCenterPage() {
             <button type="submit" className="btn-primary py-2.5 px-5 text-xs font-bold">Save Expense</button>
           </div>
         </form>
+      </Modal>
+
+      {/* GUEST SELFIE PREVIEW MODAL */}
+      <Modal
+        isOpen={!!selectedLeadForSelfie}
+        onClose={() => setSelectedLeadForSelfie(null)}
+        title={selectedLeadForSelfie?.name || 'Guest Details'}
+        subtitle={selectedLeadForSelfie ? `${selectedLeadForSelfie.mobile} • Registered Guest` : ''}
+        icon={<Sparkles className="w-5 h-5 text-[#E86A5B]" />}
+        size="md"
+      >
+        {selectedLeadForSelfie && (
+          <div className="space-y-5">
+            {/* Selfie Image Card */}
+            <div className="relative rounded-3xl overflow-hidden bg-[#FAF7F2] border border-[#E8E5E2] aspect-4/3 flex items-center justify-center shadow-inner">
+              {!selfieError ? (
+                <img
+                  src={`/api/v1/events/${eventId}/guests/${selectedLeadForSelfie.guest_id}/selfie`}
+                  alt={`${selectedLeadForSelfie.name}'s Selfie`}
+                  onError={() => setSelfieError(true)}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="text-center p-8 space-y-2">
+                  <div className="w-16 h-16 rounded-2xl bg-[#E86A5B]/10 text-[#E86A5B] flex items-center justify-center mx-auto text-2xl font-bold font-display">
+                    {selectedLeadForSelfie.name.charAt(0).toUpperCase()}
+                  </div>
+                  <h4 className="text-sm font-bold text-[#1F1F1F]">No Selfie Preview on Record</h4>
+                  <p className="text-xs text-[#6B6B6B] max-w-xs mx-auto">
+                    This guest registered their details. Their selfie will automatically display here when they perform their next facial photo search.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Guest Information Details */}
+            <div className="p-4 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[#6B6B6B]">Guest Name:</span>
+                <span className="font-bold text-[#1F1F1F]">{selectedLeadForSelfie.name}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#6B6B6B]">Mobile Number:</span>
+                <span className="font-mono font-semibold text-[#1F1F1F]">{selectedLeadForSelfie.mobile}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#6B6B6B]">AI Photo Searches:</span>
+                <span className="font-bold text-[#E86A5B]">{selectedLeadForSelfie.searches_count || 0} searches</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#6B6B6B]">Registration Time:</span>
+                <span className="text-[#4A4A4A]">
+                  {selectedLeadForSelfie.registered_at 
+                    ? new Date(selectedLeadForSelfie.registered_at).toLocaleString('en-IN') 
+                    : 'Recent Visitor'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#6B6B6B]">Marketing Consent:</span>
+                <span className={`font-bold ${selectedLeadForSelfie.marketing_consent ? 'text-emerald-600' : 'text-[#888]'}`}>
+                  {selectedLeadForSelfie.marketing_consent ? '✓ Opted In' : 'No'}
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <a
+                href={`https://wa.me/${selectedLeadForSelfie.mobile.replace(/[^0-9]/g, '')}?text=Hello%20${encodeURIComponent(selectedLeadForSelfie.name)},%20thank%20you%20for%20attending%20${encodeURIComponent(event?.name || 'our event')}!%20Hope%20you%20enjoyed%20the%20photos.`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Chat on WhatsApp</span>
+              </a>
+
+              <a
+                href={`tel:${selectedLeadForSelfie.mobile.replace(/[^0-9+]/g, '')}`}
+                className="py-2.5 px-4 rounded-xl bg-[#FAF7F2] hover:bg-[#F0ECE4] text-[#1F1F1F] border border-[#E0DCD3] text-xs font-bold flex items-center gap-1.5 transition-all"
+              >
+                <Phone className="w-4 h-4 text-[#E86A5B]" />
+                <span>Call</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => setSelectedLeadForSelfie(null)}
+                className="py-2.5 px-4 rounded-xl bg-white hover:bg-gray-50 text-[#6B6B6B] border border-[#E8E5E2] text-xs font-bold transition-all"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* CONFIRM DELETE EVENT DIALOG */}

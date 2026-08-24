@@ -246,6 +246,8 @@ export interface GuestLead {
   searches_count: number;
   created_at?: string;
   registered_at?: string;
+  has_selfie?: boolean;
+  selfie_url?: string | null;
 }
 
 export interface MatchSearchResult {

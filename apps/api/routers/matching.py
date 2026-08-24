@@ -2,6 +2,7 @@
 AI Selfie Search and Event-Scoped Facial Vector Matching Router
 """
 
+import os
 import time
 from typing import List, Dict
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
@@ -79,6 +80,16 @@ async def search_event_photos_by_selfie(
         )
 
     selfie_hash = storage_service.calculate_sha256(selfie_bytes)
+
+    # Save guest selfie so photographer can preview the guest's selfie in CRM leads
+    try:
+        selfie_dir = os.path.join(settings.STORAGE_LOCAL_ROOT, "selfies", str(event.id))
+        os.makedirs(selfie_dir, exist_ok=True)
+        selfie_file_path = os.path.join(selfie_dir, f"{guest.id}.jpg")
+        with open(selfie_file_path, "wb") as sf:
+            sf.write(selfie_bytes)
+    except Exception:
+        pass
 
     # 4. Strict Event-Scoped Vector Search (WHERE event_id = :event_id)
     # Fetch all face embeddings with associated photo_id in a SINGLE joined query (Zero N+1)
