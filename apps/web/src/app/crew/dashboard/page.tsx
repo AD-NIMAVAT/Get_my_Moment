@@ -239,24 +239,29 @@ export default function CrewDashboardPage() {
                     <button
                       key={f.id}
                       onClick={() => handleSwitchCeremony(f.id, f.name)}
-                      className={`p-3.5 rounded-2xl text-left transition-all relative ${
+                      className={`p-4 rounded-2xl text-left transition-all relative min-h-[58px] flex flex-col justify-between cursor-pointer active:scale-95 ${
                         isActive
-                          ? "bg-[#E86A5B] text-white shadow-lg shadow-[#E86A5B]/30 scale-[1.02]"
+                          ? "bg-[#E86A5B] text-white shadow-lg shadow-[#E86A5B]/30 ring-2 ring-[#E86A5B]/50 scale-[1.02]"
                           : "bg-[#FAF9F7] border border-[#E8E5E2] hover:border-[#E86A5B]/50 text-[#1F1F1F]"
                       }`}
                     >
-                      {isAssigned && (
-                        <span className={`absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                          isActive ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-800"
-                        }`}>
-                          Your Duty
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <FolderIcon className={`w-4 h-4 ${isActive ? "text-white" : "text-[#E86A5B]"}`} />
+                        {isActive && (
+                          <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping" />
+                        )}
+                        {isAssigned && !isActive && (
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase bg-emerald-100 text-emerald-800">
+                            Your Duty
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold block truncate">{f.name}</span>
+                        <span className={`text-[10px] block mt-0.5 ${isActive ? "text-white/90 font-medium" : "text-[#6B6B6B]"}`}>
+                          {f.photo_count} photos synced
                         </span>
-                      )}
-                      <FolderIcon className={`w-4 h-4 mb-2 ${isActive ? "text-white" : "text-[#E86A5B]"}`} />
-                      <span className="text-xs font-bold block truncate">{f.name}</span>
-                      <span className={`text-[10px] block mt-0.5 ${isActive ? "text-white/80" : "text-[#6B6B6B]"}`}>
-                        {f.photo_count} photos synced
-                      </span>
+                      </div>
                     </button>
                   );
                 })}

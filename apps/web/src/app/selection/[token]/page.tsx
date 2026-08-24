@@ -139,7 +139,7 @@ export default function ClientSelectionPage() {
   }) || [];
 
   return (
-    <div className="min-h-screen bg-[#F3F1EC] text-[#1F1F1F] pb-16 selection:bg-[#E86A5B] selection:text-white">
+    <div className="min-h-screen bg-[#F3F1EC] text-[#1F1F1F] pb-32 selection:bg-[#E86A5B] selection:text-white">
       <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1850px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Client Header Card */}
         <div className="neu-card p-6 sm:p-8 relative overflow-hidden mb-8">
@@ -327,6 +327,39 @@ export default function ClientSelectionPage() {
                   Save Note
                 </button>
               </div>
+        {/* Sticky Floating Selection Action Bar for Mobile & Desktop */}
+        {selectedCount > 0 && (
+          <div className="fixed bottom-4 inset-x-4 max-w-xl mx-auto z-40 bg-[#F3F1EC]/95 backdrop-blur-xl border border-white/80 p-3 sm:p-4 rounded-3xl shadow-[0_12px_30px_rgba(0,0,0,0.12),4px_4px_10px_#D4D0C7,-4px_-4px_10px_#FFFFFF] flex items-center justify-between gap-3 animate-in slide-in-from-bottom-5 duration-300">
+            <div className="flex items-center gap-2.5 min-w-0 pl-1">
+              <div className="w-8 h-8 rounded-full bg-[#E86A5B] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
+                <Heart className="w-4 h-4 fill-current" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-[#1F1F1F] block truncate">
+                  {selectedCount} Photos Selected
+                </span>
+                <span className="text-[10px] text-[#6B6B6B] block truncate">
+                  {data?.total_photos ? Math.round((selectedCount / data.total_photos) * 100) : 0}% of total album
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setActiveCeremony(activeCeremony === 'SELECTED_ONLY' ? 'ALL' : 'SELECTED_ONLY')}
+                className="px-3 py-2 rounded-xl bg-white border border-[#E0DCD3] text-xs font-bold text-[#1F1F1F] hover:text-[#E86A5B] transition-all hidden xs:flex items-center gap-1 shadow-sm"
+              >
+                <span>{activeCeremony === 'SELECTED_ONLY' ? 'Show All' : 'Review Selected'}</span>
+              </button>
+
+              <button
+                onClick={handleSubmitSelection}
+                disabled={submitting || data?.is_submitted}
+                className="btn-primary py-2.5 px-4 rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5 active:scale-95 transition-all disabled:opacity-50"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{data?.is_submitted ? 'Submitted ✓' : submitting ? 'Submitting...' : 'Submit Final'}</span>
+              </button>
             </div>
           </div>
         )}
