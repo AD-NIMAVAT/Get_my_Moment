@@ -301,6 +301,7 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     - Secret exposure protection (passwords never returned in GET)
     - Zero-side-effect on cross-event attempts
     """
+    from apps.api.models.photographer import Photographer
     from apps.api.models.camera import CameraDevice
     from apps.api.auth import create_access_token
 

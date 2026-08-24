@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from apps.api.database import get_db
 from apps.api.models.event import Event
@@ -74,8 +74,7 @@ class CameraResponse(BaseModel):
     rejected_at: Optional[datetime] = None
     revoked_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CameraCreatedResponse(BaseModel):
