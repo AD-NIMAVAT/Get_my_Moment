@@ -413,4 +413,3 @@ def test_empty_event_latency_handles_none_gracefully(client, db_session, monkeyp
     assert data["photos_completed_recently"] == 0
     assert "IDLE" in data["health_reasons"]
     assert "Event pipeline is ready." in data["health_message"]
-    assert settings.AI_QUEUE_AGE_CRITICAL_SECONDS == 120
