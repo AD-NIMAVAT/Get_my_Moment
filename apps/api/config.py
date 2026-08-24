@@ -104,8 +104,8 @@ class Settings(BaseSettings):
     SELLER_SUPPORT_EMAIL: str = "billing@getmymoment.com"
 
     # Public URLs
-    NEXT_PUBLIC_API_URL: str = "http://localhost:8000/api/v1"
-    NEXT_PUBLIC_APP_URL: str = "http://localhost:3000"
+    NEXT_PUBLIC_API_URL: str = "https://www.getmymoment.fun/api/v1"
+    NEXT_PUBLIC_APP_URL: str = "https://www.getmymoment.fun"
 
     # Initial Tunable Endpoint Rate Limits (Configurable via Environment)
     RATE_LIMIT_AUTH_LOGIN: str = "5/minute"

@@ -2,6 +2,7 @@
 QR Code Engine - Generation and Printable Sheets
 """
 
+import os
 import io
 import qrcode
 from qrcode.image.styledpil import StyledPilImage
@@ -15,7 +16,10 @@ class QRService:
     @staticmethod
     def get_event_url(access_token: str) -> str:
         """Construct the full guest welcome URL for an event access token."""
-        base_url = settings.NEXT_PUBLIC_APP_URL.rstrip("/")
+        app_url = os.environ.get("NEXT_PUBLIC_APP_URL") or settings.NEXT_PUBLIC_APP_URL or "https://www.getmymoment.fun"
+        if ("localhost" in app_url or "127.0.0.1" in app_url) and getattr(settings, "ENVIRONMENT", "") == "production":
+            app_url = "https://www.getmymoment.fun"
+        base_url = app_url.rstrip("/")
         return f"{base_url}/e/{access_token}"
 
     @classmethod
