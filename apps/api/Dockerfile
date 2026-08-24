@@ -16,6 +16,7 @@ RUN pip install --no-cache-dir -r /app/apps/api/requirements.txt
 COPY packages /app/packages
 COPY workers /app/workers
 COPY apps/api /app/apps/api
+COPY tests /app/tests
 
 ENV PYTHONPATH=/app
 
