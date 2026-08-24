@@ -168,7 +168,8 @@ def process_incoming_camera_photo(
     target_folder_id: Optional[str] = None,
     db: Optional[object] = None,
     camera_username: Optional[str] = None,
-    camera_id: Optional[str] = None
+    camera_id: Optional[str] = None,
+    incoming_base_dir: Optional[str] = None
 ):
     """
     Processes a photo received via wireless camera FTP upload or background directory watcher.
@@ -208,8 +209,9 @@ def process_incoming_camera_photo(
             close_db_on_exit = True
 
         try:
-            # Parse directory path relative to FTP_INCOMING_DIR
-            rel_path_to_incoming = os.path.relpath(file_path, FTP_INCOMING_DIR)
+            # Parse directory path relative to base directory
+            base_dir = incoming_base_dir or FTP_INCOMING_DIR
+            rel_path_to_incoming = os.path.relpath(file_path, base_dir)
             path_segments = [seg for seg in rel_path_to_incoming.replace(os.sep, "/").split("/") if seg and seg != "."]
 
             event = None

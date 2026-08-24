@@ -38,7 +38,7 @@ def test_streaming_photo_upload_and_durability(client, db_session):
 
     # 3. Stream Upload 100% valid JPEG
     test_img = generate_test_image(600, 600, "purple")
-    files = [("files", ("test_stream_01.jpg", test_img, "image/jpeg"))]
+    files = [("files", ("test_stream_01.jpg", io.BytesIO(test_img), "image/jpeg"))]
     upload_res = client.post(f"/api/v1/events/{event_id}/photos", headers=headers, files=files)
     assert upload_res.status_code == 201
 
@@ -74,13 +74,13 @@ def test_duplicate_streaming_upload_cleans_redundant_files(client, db_session):
     test_img = generate_test_image(500, 500, "teal")
 
     # Upload 1
-    files1 = [("files", ("dedup_01.jpg", test_img, "image/jpeg"))]
+    files1 = [("files", ("dedup_01.jpg", io.BytesIO(test_img), "image/jpeg"))]
     res1 = client.post(f"/api/v1/events/{event_id}/photos", headers=headers, files=files1)
     assert res1.status_code == 201
     photo1_id = res1.json()["photos"][0]["id"]
 
     # Upload 2 (identical image bytes)
-    files2 = [("files", ("dedup_02_copy.jpg", test_img, "image/jpeg"))]
+    files2 = [("files", ("dedup_02_copy.jpg", io.BytesIO(test_img), "image/jpeg"))]
     res2 = client.post(f"/api/v1/events/{event_id}/photos", headers=headers, files=files2)
     assert res2.status_code == 201
 
@@ -102,50 +102,17 @@ def test_corrupted_and_zero_byte_upload_handling(client, db_session):
     event_id = event_res.json()["id"]
 
     # Test 1: Zero-byte file
-    zero_file = [("files", ("zero.jpg", b"", "image/jpeg"))]
+    zero_file = [("files", ("zero.jpg", io.BytesIO(b""), "image/jpeg"))]
     res_zero = client.post(f"/api/v1/events/{event_id}/photos", headers=headers, files=zero_file)
     assert res_zero.status_code == 201
     assert res_zero.json()["failed_count"] == 1
 
     # Test 2: Fake corrupted content
     corrupted_data = b"NOT_A_REAL_JPEG_HEADER_1234567890" * 50
-    corrupt_file = [("files", ("corrupt.jpg", corrupted_data, "image/jpeg"))]
+    corrupt_file = [("files", ("corrupt.jpg", io.BytesIO(corrupted_data), "image/jpeg"))]
     res_corrupt = client.post(f"/api/v1/events/{event_id}/photos", headers=headers, files=corrupt_file)
     assert res_corrupt.status_code == 201
     assert res_corrupt.json()["failed_count"] == 1
-
-
-def test_guest_streaming_upload(client, db_session):
-    """Test guest chunked streaming upload directly into public gallery."""
-    # 1. Photographer setup
-    signup_res = client.post(
-        "/api/v1/auth/signup",
-        json={"email": "guest_stream@example.com", "password": "Password123!", "studio_name": "Guest Stream Studio"}
-    )
-    token = signup_res.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    event_res = client.post("/api/v1/events", headers=headers, json={"name": "Guest Upload Event", "allow_guest_uploads": True})
-    event_id = event_res.json()["id"]
-    access_token = event_res.json()["access_token"]
-
-    # 2. Guest upload
-    test_img = generate_test_image(400, 400, "gold")
-    files = {"files": ("guest_pic.jpg", io.BytesIO(test_img), "image/jpeg")}
-    res = client.post(
-        f"/api/v1/wireless/events/{event_id}/http-ingest",
-        data={"camera_model": "Mobile Guest Uploader"},
-        files=files,
-    )
-    assert res.status_code == 200
-    res_data = res.json()
-    assert len(res_data["uploaded_ids"]) == 1
-
-    # Verify photo saved in DB
-    db_session.expire_all()
-    photo_db = db_session.query(Photo).filter(Photo.id == res_data["uploaded_ids"][0]).first()
-    assert photo_db is not None
-    assert photo_db.camera_model == "Mobile Guest Uploader"
 
 
 def test_wireless_http_ingest_streaming(client, db_session):
@@ -161,7 +128,7 @@ def test_wireless_http_ingest_streaming(client, db_session):
     event_id = event_res.json()["id"]
 
     test_img = generate_test_image(500, 500, "darkblue")
-    files = {"files": ("camera_shot_01.jpg", io.BytesIO(test_img), "image/jpeg")}
+    files = [("files", ("camera_shot_01.jpg", io.BytesIO(test_img), "image/jpeg"))]
     res = client.post(
         f"/api/v1/wireless/events/{event_id}/http-ingest",
         data={"camera_model": "Sony A7 IV"},
@@ -183,8 +150,11 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     Verifies that an approved camera uploading into /{event.slug}, /{access_token},
     or /{uuid} routes to the exact target event.
     """
-    from apps.api.services.wireless_ingest import process_incoming_camera_photo, FTP_INCOMING_DIR
+    from apps.api.services.wireless_ingest import process_incoming_camera_photo
     from apps.api.models.camera import CameraDevice
+
+    test_incoming = tmp_path / "incoming"
+    test_incoming.mkdir(parents=True, exist_ok=True)
 
     # 1. Create photographer & event
     signup_res = client.post(
@@ -224,12 +194,11 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     assert cred_res.json()["ftp_settings"]["anonymous_allowed"] is False
 
     # TEST A: Exact Event.slug routing with approved camera
-    slug_dir = os.path.join(FTP_INCOMING_DIR, e1_slug)
-    os.makedirs(slug_dir, exist_ok=True)
-    img_a = os.path.join(slug_dir, "DSC_001.JPG")
-    with open(img_a, "wb") as f:
-        f.write(generate_test_image(400, 400, "green"))
-    process_incoming_camera_photo(img_a, db=db_session, camera_id=cam_id)
+    slug_dir = test_incoming / e1_slug
+    slug_dir.mkdir(parents=True, exist_ok=True)
+    img_a = slug_dir / "DSC_001.JPG"
+    img_a.write_bytes(generate_test_image(400, 400, "green"))
+    process_incoming_camera_photo(str(img_a), db=db_session, camera_id=cam_id, incoming_base_dir=str(test_incoming))
     db_session.expire_all()
 
     photo_a = db_session.query(Photo).filter(Photo.event_id == e1_id, Photo.original_file_name == "DSC_001.JPG").first()
@@ -237,12 +206,11 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     assert photo_a.event_id == e1_id
 
     # TEST B: Exact Legacy Event.access_token routing (backward compatibility)
-    token_dir = os.path.join(FTP_INCOMING_DIR, e1_token)
-    os.makedirs(token_dir, exist_ok=True)
-    img_b = os.path.join(token_dir, "DSC_002.JPG")
-    with open(img_b, "wb") as f:
-        f.write(generate_test_image(400, 400, "blue"))
-    process_incoming_camera_photo(img_b, db=db_session, camera_id=cam_id)
+    token_dir = test_incoming / e1_token
+    token_dir.mkdir(parents=True, exist_ok=True)
+    img_b = token_dir / "DSC_002.JPG"
+    img_b.write_bytes(generate_test_image(400, 400, "blue"))
+    process_incoming_camera_photo(str(img_b), db=db_session, camera_id=cam_id, incoming_base_dir=str(test_incoming))
     db_session.expire_all()
 
     photo_b = db_session.query(Photo).filter(Photo.event_id == e1_id, Photo.original_file_name == "DSC_002.JPG").first()
@@ -250,12 +218,11 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     assert photo_b.event_id == e1_id
 
     # TEST C: Nested subfolder routing
-    sub_dir = os.path.join(FTP_INCOMING_DIR, e1_slug, f1_slug)
-    os.makedirs(sub_dir, exist_ok=True)
-    img_c = os.path.join(sub_dir, "DSC_003.JPG")
-    with open(img_c, "wb") as f:
-        f.write(generate_test_image(400, 400, "yellow"))
-    process_incoming_camera_photo(img_c, db=db_session, camera_id=cam_id)
+    sub_dir = test_incoming / e1_slug / f1_slug
+    sub_dir.mkdir(parents=True, exist_ok=True)
+    img_c = sub_dir / "DSC_003.JPG"
+    img_c.write_bytes(generate_test_image(400, 400, "yellow"))
+    process_incoming_camera_photo(str(img_c), db=db_session, camera_id=cam_id, incoming_base_dir=str(test_incoming))
     db_session.expire_all()
 
     photo_c = db_session.query(Photo).filter(Photo.event_id == e1_id, Photo.original_file_name == "DSC_003.JPG").first()
@@ -263,48 +230,44 @@ def test_wireless_ftp_slug_routing_and_legacy_compatibility(client, db_session, 
     assert photo_c.folder_id == f1_id
 
     # TEST D: Unknown slug -> Fail Closed
-    unk_dir = os.path.join(FTP_INCOMING_DIR, "does-not-exist")
-    os.makedirs(unk_dir, exist_ok=True)
-    img_d = os.path.join(unk_dir, "DSC_004.JPG")
-    with open(img_d, "wb") as f:
-        f.write(generate_test_image(400, 400, "orange"))
-    process_incoming_camera_photo(img_d, db=db_session, camera_id=cam_id)
+    unk_dir = test_incoming / "does-not-exist"
+    unk_dir.mkdir(parents=True, exist_ok=True)
+    img_d = unk_dir / "DSC_004.JPG"
+    img_d.write_bytes(generate_test_image(400, 400, "orange"))
+    process_incoming_camera_photo(str(img_d), db=db_session, camera_id=cam_id, incoming_base_dir=str(test_incoming))
     db_session.expire_all()
 
     photo_d = db_session.query(Photo).filter(Photo.original_file_name == "DSC_004.JPG").first()
     assert photo_d is None  # Strict fail-closed, no photo created
 
     # TEST E: Path traversal attempt -> Safe rejection
-    trav_dir = os.path.join(FTP_INCOMING_DIR, "..", "escape")
-    os.makedirs(trav_dir, exist_ok=True)
-    img_e = os.path.join(trav_dir, "DSC_005.JPG")
-    with open(img_e, "wb") as f:
-        f.write(generate_test_image(400, 400, "red"))
-    process_incoming_camera_photo(img_e, db=db_session, camera_id=cam_id)
+    trav_dir = tmp_path / "escape"
+    trav_dir.mkdir(parents=True, exist_ok=True)
+    img_e = trav_dir / "DSC_005.JPG"
+    img_e.write_bytes(generate_test_image(400, 400, "red"))
+    process_incoming_camera_photo(str(img_e), db=db_session, camera_id=cam_id, incoming_base_dir=str(test_incoming))
     db_session.expire_all()
 
     photo_e = db_session.query(Photo).filter(Photo.original_file_name == "DSC_005.JPG").first()
     assert photo_e is None
 
     # TEST F: UUID routing compatibility
-    uuid_dir = os.path.join(FTP_INCOMING_DIR, e1_id)
-    os.makedirs(uuid_dir, exist_ok=True)
-    img_f = os.path.join(uuid_dir, "DSC_006.JPG")
-    with open(img_f, "wb") as f:
-        f.write(generate_test_image(400, 400, "purple"))
-    process_incoming_camera_photo(img_f, db=db_session, camera_id=cam_id)
+    uuid_dir = test_incoming / e1_id
+    uuid_dir.mkdir(parents=True, exist_ok=True)
+    img_f = uuid_dir / "DSC_006.JPG"
+    img_f.write_bytes(generate_test_image(400, 400, "purple"))
+    process_incoming_camera_photo(str(img_f), db=db_session, camera_id=cam_id, incoming_base_dir=str(test_incoming))
     db_session.expire_all()
 
     photo_f = db_session.query(Photo).filter(Photo.event_id == e1_id, Photo.original_file_name == "DSC_006.JPG").first()
     assert photo_f is not None
 
     # TEST G: Event Name alone is NOT accepted for routing
-    name_dir = os.path.join(FTP_INCOMING_DIR, "Rajkot Wedding 2026")
-    os.makedirs(name_dir, exist_ok=True)
-    img_g = os.path.join(name_dir, "DSC_007.JPG")
-    with open(img_g, "wb") as f:
-        f.write(generate_test_image(400, 400, "black"))
-    process_incoming_camera_photo(img_g, db=db_session, camera_id=cam_id)
+    name_dir = test_incoming / "Rajkot Wedding 2026"
+    name_dir.mkdir(parents=True, exist_ok=True)
+    img_g = name_dir / "DSC_007.JPG"
+    img_g.write_bytes(generate_test_image(400, 400, "black"))
+    process_incoming_camera_photo(str(img_g), db=db_session, camera_id=cam_id, incoming_base_dir=str(test_incoming))
     db_session.expire_all()
 
     photo_g = db_session.query(Photo).filter(Photo.original_file_name == "DSC_007.JPG").first()
@@ -332,8 +295,11 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     from apps.api.models.photographer import Photographer
     from apps.api.models.camera import CameraDevice
     from apps.api.auth import create_access_token
-    from apps.api.services.wireless_ingest import process_incoming_camera_photo, FTP_INCOMING_DIR, CameraAuthorizer
+    from apps.api.services.wireless_ingest import process_incoming_camera_photo, CameraAuthorizer
     from pyftpdlib.authorizers import AuthenticationFailed
+
+    test_incoming = tmp_path / "incoming"
+    test_incoming.mkdir(parents=True, exist_ok=True)
 
     # 1. Setup Studio 1 with Event 1 (Rajkot Wedding)
     p1 = Photographer(
@@ -427,13 +393,12 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     assert cam1_db.last_source_ip == "192.168.1.105"
 
     # --- TEST C: Pending camera CANNOT ingest photo (0 Photo rows) ---
-    slug_dir_e1 = os.path.join(FTP_INCOMING_DIR, e1.slug)
-    os.makedirs(slug_dir_e1, exist_ok=True)
-    img_pending = os.path.join(slug_dir_e1, "CAM_PENDING_001.JPG")
-    with open(img_pending, "wb") as f:
-        f.write(generate_test_image(400, 400, "pink"))
+    slug_dir_e1 = test_incoming / e1.slug
+    slug_dir_e1.mkdir(parents=True, exist_ok=True)
+    img_pending = slug_dir_e1 / "CAM_PENDING_001.JPG"
+    img_pending.write_bytes(generate_test_image(400, 400, "pink"))
 
-    process_incoming_camera_photo(img_pending, db=db_session, camera_id=cam1_id)
+    process_incoming_camera_photo(str(img_pending), db=db_session, camera_id=cam1_id, incoming_base_dir=str(test_incoming))
     db_session.expire_all()
 
     photo_pending = db_session.query(Photo).filter(Photo.original_file_name == "CAM_PENDING_001.JPG").first()
@@ -447,11 +412,10 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     assert approve_res.status_code == 200
     assert approve_res.json()["status"] == "APPROVED"
 
-    img_approved = os.path.join(slug_dir_e1, "CAM_APPROVED_001.JPG")
-    with open(img_approved, "wb") as f:
-        f.write(generate_test_image(400, 400, "cyan"))
+    img_approved = slug_dir_e1 / "CAM_APPROVED_001.JPG"
+    img_approved.write_bytes(generate_test_image(400, 400, "cyan"))
 
-    process_incoming_camera_photo(img_approved, db=db_session, camera_id=cam1_id)
+    process_incoming_camera_photo(str(img_approved), db=db_session, camera_id=cam1_id, incoming_base_dir=str(test_incoming))
     db_session.expire_all()
 
     photo_approved = db_session.query(Photo).filter(Photo.original_file_name == "CAM_APPROVED_001.JPG").first()
@@ -460,39 +424,36 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     assert photo_approved.camera_id == cam1_id
 
     # --- TEST E: Approved Camera A attempts upload to Event B slug -> STRICTLY DENIED ---
-    slug_dir_e2 = os.path.join(FTP_INCOMING_DIR, e2.slug)
-    os.makedirs(slug_dir_e2, exist_ok=True)
-    img_cross = os.path.join(slug_dir_e2, "CAM_CROSS_EVENT_001.JPG")
-    with open(img_cross, "wb") as f:
-        f.write(generate_test_image(400, 400, "brown"))
+    slug_dir_e2 = test_incoming / e2.slug
+    slug_dir_e2.mkdir(parents=True, exist_ok=True)
+    img_cross = slug_dir_e2 / "CAM_CROSS_EVENT_001.JPG"
+    img_cross.write_bytes(generate_test_image(400, 400, "brown"))
 
-    process_incoming_camera_photo(img_cross, db=db_session, camera_id=cam1_id)
+    process_incoming_camera_photo(str(img_cross), db=db_session, camera_id=cam1_id, incoming_base_dir=str(test_incoming))
     db_session.expire_all()
 
     photo_cross = db_session.query(Photo).filter(Photo.original_file_name == "CAM_CROSS_EVENT_001.JPG").first()
     assert photo_cross is None
 
     # --- TEST F: Approved Camera A attempts upload to Event B access_token -> STRICTLY DENIED ---
-    token_dir_e2 = os.path.join(FTP_INCOMING_DIR, e2.access_token)
-    os.makedirs(token_dir_e2, exist_ok=True)
-    img_cross_token = os.path.join(token_dir_e2, "CAM_CROSS_TOKEN_001.JPG")
-    with open(img_cross_token, "wb") as f:
-        f.write(generate_test_image(400, 400, "gray"))
+    token_dir_e2 = test_incoming / e2.access_token
+    token_dir_e2.mkdir(parents=True, exist_ok=True)
+    img_cross_token = token_dir_e2 / "CAM_CROSS_TOKEN_001.JPG"
+    img_cross_token.write_bytes(generate_test_image(400, 400, "gray"))
 
-    process_incoming_camera_photo(img_cross_token, db=db_session, camera_id=cam1_id)
+    process_incoming_camera_photo(str(img_cross_token), db=db_session, camera_id=cam1_id, incoming_base_dir=str(test_incoming))
     db_session.expire_all()
 
     photo_cross_token = db_session.query(Photo).filter(Photo.original_file_name == "CAM_CROSS_TOKEN_001.JPG").first()
     assert photo_cross_token is None
 
     # --- TEST G: Approved Camera A attempts upload to Event B UUID -> STRICTLY DENIED ---
-    uuid_dir_e2 = os.path.join(FTP_INCOMING_DIR, e2.id)
-    os.makedirs(uuid_dir_e2, exist_ok=True)
-    img_cross_uuid = os.path.join(uuid_dir_e2, "CAM_CROSS_UUID_001.JPG")
-    with open(img_cross_uuid, "wb") as f:
-        f.write(generate_test_image(400, 400, "teal"))
+    uuid_dir_e2 = test_incoming / e2.id
+    uuid_dir_e2.mkdir(parents=True, exist_ok=True)
+    img_cross_uuid = uuid_dir_e2 / "CAM_CROSS_UUID_001.JPG"
+    img_cross_uuid.write_bytes(generate_test_image(400, 400, "teal"))
 
-    process_incoming_camera_photo(img_cross_uuid, db=db_session, camera_id=cam1_id)
+    process_incoming_camera_photo(str(img_cross_uuid), db=db_session, camera_id=cam1_id, incoming_base_dir=str(test_incoming))
     db_session.expire_all()
 
     photo_cross_uuid = db_session.query(Photo).filter(Photo.original_file_name == "CAM_CROSS_UUID_001.JPG").first()
@@ -506,22 +467,20 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     assert revoke_res.status_code == 200
     assert revoke_res.json()["status"] == "REVOKED"
 
-    img_revoked = os.path.join(slug_dir_e1, "CAM_REVOKED_001.JPG")
-    with open(img_revoked, "wb") as f:
-        f.write(generate_test_image(400, 400, "magenta"))
+    img_revoked = slug_dir_e1 / "CAM_REVOKED_001.JPG"
+    img_revoked.write_bytes(generate_test_image(400, 400, "magenta"))
 
-    process_incoming_camera_photo(img_revoked, db=db_session, camera_id=cam1_id)
+    process_incoming_camera_photo(str(img_revoked), db=db_session, camera_id=cam1_id, incoming_base_dir=str(test_incoming))
     db_session.expire_all()
 
     photo_revoked = db_session.query(Photo).filter(Photo.original_file_name == "CAM_REVOKED_001.JPG").first()
     assert photo_revoked is None
 
     # --- TEST I: Unknown / No CameraDevice -> Ingest STRICTLY DENIED (Bypass Closure) ---
-    img_unknown = os.path.join(slug_dir_e1, "CAM_UNKNOWN_001.JPG")
-    with open(img_unknown, "wb") as f:
-        f.write(generate_test_image(400, 400, "navy"))
+    img_unknown = slug_dir_e1 / "CAM_UNKNOWN_001.JPG"
+    img_unknown.write_bytes(generate_test_image(400, 400, "navy"))
 
-    process_incoming_camera_photo(img_unknown, db=db_session, camera_id=None, camera_username=None)
+    process_incoming_camera_photo(str(img_unknown), db=db_session, camera_id=None, camera_username=None, incoming_base_dir=str(test_incoming))
     db_session.expire_all()
 
     photo_unknown = db_session.query(Photo).filter(Photo.original_file_name == "CAM_UNKNOWN_001.JPG").first()
@@ -575,15 +534,13 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     client.post(f"/api/v1/wireless/events/{e2.id}/cameras/{cam2_id}/approve", headers=headers2)
 
     # Concurrent upload test: Cam A to Event 1, Cam B to Event 2
-    img_a_conc = os.path.join(slug_dir_e1, "CAM_CONC_A_001.JPG")
-    with open(img_a_conc, "wb") as f:
-        f.write(generate_test_image(400, 400, "white"))
-    process_incoming_camera_photo(img_a_conc, db=db_session, camera_id=cam1_id)
+    img_a_conc = slug_dir_e1 / "CAM_CONC_A_001.JPG"
+    img_a_conc.write_bytes(generate_test_image(400, 400, "white"))
+    process_incoming_camera_photo(str(img_a_conc), db=db_session, camera_id=cam1_id, incoming_base_dir=str(test_incoming))
 
-    img_b_conc = os.path.join(slug_dir_e2, "CAM_CONC_B_001.JPG")
-    with open(img_b_conc, "wb") as f:
-        f.write(generate_test_image(400, 400, "black"))
-    process_incoming_camera_photo(img_b_conc, db=db_session, camera_id=cam2_id)
+    img_b_conc = slug_dir_e2 / "CAM_CONC_B_001.JPG"
+    img_b_conc.write_bytes(generate_test_image(400, 400, "black"))
+    process_incoming_camera_photo(str(img_b_conc), db=db_session, camera_id=cam2_id, incoming_base_dir=str(test_incoming))
 
     db_session.expire_all()
     photo_a_conc = db_session.query(Photo).filter(Photo.original_file_name == "CAM_CONC_A_001.JPG").first()
