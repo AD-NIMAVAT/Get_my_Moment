@@ -204,7 +204,7 @@ def process_incoming_camera_photo(
         try:
             # Parse directory path relative to FTP_INCOMING_DIR
             rel_path_to_incoming = os.path.relpath(file_path, FTP_INCOMING_DIR)
-            path_segments = [seg for seg in rel_path_to_incoming.replace("\", "/").split("/") if seg and seg != "."]
+            path_segments = [seg for seg in rel_path_to_incoming.replace(os.sep, "/").replace("/", "/").split("/") if seg and seg != "."]
 
             event = None
             matched_folder_from_path = None
