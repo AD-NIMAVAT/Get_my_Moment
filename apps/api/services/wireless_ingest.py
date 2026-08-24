@@ -5,6 +5,7 @@ Enables real-time cable-free photo ingestion directly from camera shutter clicks
 
 import os
 import time
+import uuid
 import logging
 import threading
 from typing import Dict, Optional
@@ -24,6 +25,16 @@ logger = logging.getLogger("WirelessCameraIngest")
 
 FTP_INCOMING_DIR = os.path.join(os.getcwd(), "data", "wireless_incoming")
 os.makedirs(FTP_INCOMING_DIR, exist_ok=True)
+
+
+def is_valid_uuid(val: str) -> bool:
+    """Safely validate string against UUID format without raising ValueError."""
+    try:
+        uuid.UUID(str(val))
+        return True
+    except (ValueError, TypeError, AttributeError):
+        return False
+
 
 
 def process_incoming_camera_photo(
@@ -80,48 +91,95 @@ def process_incoming_camera_photo(
         try:
             event = None
             camera_name = "[CAMERA] Wi-Fi Direct Shoot"
-
-            # 1. Check path tokens in subfolders (e.g. /incoming/{access_token}/{folder_slug}/IMG_0001.JPG)
             matched_folder_from_path = None
-            parts = file_path.replace("\\", "/").split("/")
-            for i, part in enumerate(parts):
-                match = db.query(Event).filter((Event.access_token == part) | (Event.id == part)).first()
-                if match:
-                    event = match
-                    # Check if next subfolder matches a ceremony or folder name
-                    if i + 1 < len(parts) - 1:
-                        sub_name = parts[i+1].strip()
-                        sub_folder = db.query(Folder).filter(
-                            Folder.event_id == event.id,
-                            Folder.deleted_at.is_(None),
-                            (Folder.slug == sub_name) | (Folder.name == sub_name) | (Folder.name.ilike(f"%{sub_name}%"))
-                        ).first()
-                        if sub_folder:
-                            matched_folder_from_path = sub_folder
-                            camera_name = f"[CAMERA] {sub_folder.name}"
-                        else:
-                            camera_name = f"[CAMERA] {sub_name}"
-                    break
 
-            # 2. Check explicit target_event_id
-            if not event and target_event_id:
-                event = db.query(Event).filter(Event.id == target_event_id).first()
+            # Determine relative path from FTP_INCOMING_DIR
+            try:
+                rel_path = os.path.relpath(os.path.abspath(file_path), os.path.abspath(FTP_INCOMING_DIR))
+            except Exception:
+                rel_path = os.path.basename(file_path)
 
-            # 3. Check active event set in wireless server singleton
-            if not event and wireless_server.active_event_id:
-                event = db.query(Event).filter(Event.id == wireless_server.active_event_id).first()
+            # Normalize slashes and reject traversal attempts
+            normalized_rel = rel_path.replace("\\", "/").strip("/")
+            path_segments = [p.strip() for p in normalized_rel.split("/") if p.strip() and p.strip() != "."]
 
-            # 4. Fallback: Latest active event
-            if not event:
-                event = db.query(Event).filter(Event.status == EventStatus.ACTIVE.value).order_by(Event.created_at.desc()).first()
-
-            # 5. Last resort fallback
-            if not event:
-                event = db.query(Event).order_by(Event.created_at.desc()).first()
-
-            if not event:
-                logger.warning(f"⚠️ [WIRELESS CAMERA] No events exist in database yet to ingest camera photo '{filename}'.")
+            if any(seg in ("..", "~") for seg in path_segments):
+                logger.warning(f"⚠️ [WIRELESS CAMERA] Path traversal attempt rejected: {file_path}")
                 return
+
+            if len(path_segments) > 1:
+                # Structure: [root_event_dir, optional_subfolders..., filename]
+                root_dir = path_segments[0]
+
+                # 1. EXACT Event.slug matching with ambiguity protection
+                slug_matches = db.query(Event).filter(
+                    Event.slug == root_dir,
+                    Event.is_deleted == False
+                ).all()
+
+                if len(slug_matches) == 1:
+                    event = slug_matches[0]
+                elif len(slug_matches) > 1:
+                    # Disambiguate if target_event_id or active_event_id matches one of them
+                    disambiguated = [e for e in slug_matches if e.id == wireless_server.active_event_id or e.id == target_event_id]
+                    if len(disambiguated) == 1:
+                        event = disambiguated[0]
+                    else:
+                        logger.warning(f"⚠️ [WIRELESS CAMERA] Ambiguous event slug '{root_dir}' matched {len(slug_matches)} events. Failing closed.")
+                        return
+
+                # 2. EXACT legacy Event.access_token matching (backward compatibility)
+                if not event:
+                    token_matches = db.query(Event).filter(
+                        Event.access_token == root_dir,
+                        Event.is_deleted == False
+                    ).all()
+                    if len(token_matches) == 1:
+                        event = token_matches[0]
+                    elif len(token_matches) > 1:
+                        disambiguated = [e for e in token_matches if e.id == wireless_server.active_event_id or e.id == target_event_id]
+                        if len(disambiguated) == 1:
+                            event = disambiguated[0]
+                        else:
+                            logger.warning(f"⚠️ [WIRELESS CAMERA] Ambiguous access_token '{root_dir}' matched {len(token_matches)} events. Failing closed.")
+                            return
+
+                # 3. EXACT Event.id UUID matching (only if valid UUID string)
+                if not event and is_valid_uuid(root_dir):
+                    event = db.query(Event).filter(
+                        Event.id == root_dir,
+                        Event.is_deleted == False
+                    ).first()
+
+                # If root directory was provided by camera but matches NO valid event, FAIL CLOSED
+                if not event:
+                    logger.warning(f"⚠️ [WIRELESS CAMERA] Unknown event routing directory '{root_dir}'. Ingest rejected (fail closed).")
+                    return
+
+                # Check optional subfolder inside the already-resolved event
+                if len(path_segments) > 2:
+                    sub_name = path_segments[1]
+                    sub_folder = db.query(Folder).filter(
+                        Folder.event_id == event.id,
+                        Folder.deleted_at.is_(None),
+                        (Folder.slug == sub_name) | (Folder.name == sub_name)
+                    ).first()
+                    if sub_folder:
+                        matched_folder_from_path = sub_folder
+                        camera_name = f"[CAMERA] {sub_folder.name}"
+                    else:
+                        camera_name = f"[CAMERA] {sub_name}"
+
+            else:
+                # Direct FTP root upload without subfolder: resolve via explicit context
+                if target_event_id:
+                    event = db.query(Event).filter(Event.id == target_event_id, Event.is_deleted == False).first()
+                elif wireless_server.active_event_id:
+                    event = db.query(Event).filter(Event.id == wireless_server.active_event_id, Event.is_deleted == False).first()
+
+                if not event:
+                    logger.warning(f"⚠️ [WIRELESS CAMERA] Direct root upload without target event context for '{filename}'. Ingest rejected (fail closed).")
+                    return
 
             event_id = event.id
             studio_id = event.photographer_id

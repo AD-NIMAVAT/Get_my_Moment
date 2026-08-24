@@ -106,7 +106,7 @@ export function WirelessCameraModal({
 
   const ftpHost = credentials?.ftp_settings?.host || "";
   const ftpPort = credentials?.ftp_settings?.port || 2121;
-  const destinationPath = `/${accessToken}`;
+  const destinationPath = credentials?.ftp_settings?.destination_folder || (accessToken ? `/${accessToken}` : "");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">

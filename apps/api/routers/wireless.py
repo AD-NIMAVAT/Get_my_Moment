@@ -92,9 +92,12 @@ def get_camera_credentials(
         except Exception:
             pass
 
+    dest_folder = f"/{event.slug}" if (event.slug and event.slug.strip()) else f"/{event.access_token}"
+
     return {
         "event_id": event.id,
         "event_name": event.name,
+        "slug": event.slug,
         "access_token": event.access_token,
         "ftp_settings": {
             "host": server_ip,
@@ -103,7 +106,7 @@ def get_camera_credentials(
             "password": "shoot123",
             "anonymous_allowed": True,
             "passive_mode": True,
-            "destination_folder": f"/{event.access_token}",
+            "destination_folder": dest_folder,
         },
         "http_relay_url": f"http://{server_ip}:8000/api/v1/wireless/events/{event.id}/http-ingest",
         "brand_guides": {
@@ -112,7 +115,7 @@ def get_camera_credentials(
                 "steps": [
                     "1. Connect Sony camera to same Wi-Fi as laptop (Menu -> Network -> Wi-Fi).",
                     "2. Go to: Menu -> Network -> [FTP Transfer] -> [FTP Transfer Func.] -> ON.",
-                    "3. Select [Server Setting 1] -> Set Host: " + server_ip + " | Port: 2121.",
+                    "3. Select [Server Setting 1] -> Set Host: " + server_ip + " | Port: " + str(server_port) + " | Directory: " + dest_folder + ".",
                     "4. Set User: 'camera' | Password: 'shoot123' | Passive Mode: ON.",
                     "5. Set [Auto FTP Transfer] to ON. Every shutter press will now wirelessly transmit!",
                 ],
@@ -122,7 +125,7 @@ def get_camera_credentials(
                 "steps": [
                     "1. Connect Canon camera to Wi-Fi (Menu -> Communication settings -> Wi-Fi).",
                     "2. Go to: [FTP transfer settings] -> [Create New Connection].",
-                    "3. Select [FTP] -> Target Host: " + server_ip + " | Port: 2121.",
+                    "3. Select [FTP] -> Target Host: " + server_ip + " | Port: " + str(server_port) + " | Directory: " + dest_folder + ".",
                     "4. Enter Login: 'camera' | Password: 'shoot123'.",
                     "5. Enable [Automatic transfer]. New clicks will stream instantly to the gallery!",
                 ],
@@ -131,7 +134,7 @@ def get_camera_credentials(
                 "title": "Nikon Z Series (Z9, Z8, Z6 III, D850)",
                 "steps": [
                     "1. Connect camera to Wi-Fi (Network menu -> Connect to PC / FTP).",
-                    "2. Select [FTP server] -> [Add profile] -> Host: " + server_ip + " (Port 2121).",
+                    "2. Select [FTP server] -> [Add profile] -> Host: " + server_ip + " (Port " + str(server_port) + ") | Directory: " + dest_folder + ".",
                     "3. Enter User: 'camera' | Pass: 'shoot123'.",
                     "4. Turn ON [Auto send]. Photos will transmit seamlessly in real-time.",
                 ],
