@@ -54,7 +54,7 @@ def test_streaming_photo_upload_and_durability(client, db_session):
     assert photo_db.file_size == len(test_img)
 
     # Verify physical file existence
-    local_path = storage_service.get_local_path(photo_db.file_path)
+    local_path = storage_service.get_absolute_path(photo_db.file_path)
     assert os.path.exists(local_path)
     assert os.path.getsize(local_path) == len(test_img)
 
@@ -136,10 +136,10 @@ def test_wireless_http_ingest_streaming(client, db_session):
     )
     assert res.status_code == 200
     res_data = res.json()
-    assert len(res_data["uploaded_ids"]) == 1
+    assert res_data["uploaded_count"] == 1
 
     db_session.expire_all()
-    photo_db = db_session.query(Photo).filter(Photo.id == res_data["uploaded_ids"][0]).first()
+    photo_db = db_session.query(Photo).filter(Photo.event_id == event_id, Photo.original_file_name == "camera_shot_01.jpg").first()
     assert photo_db is not None
     assert photo_db.camera_model == "Sony A7 IV"
 
