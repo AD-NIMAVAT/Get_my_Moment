@@ -617,6 +617,32 @@ export default function EventCommandCenterPage() {
     setTimeout(() => setCopiedSelection(false), 2000);
   };
 
+  const handleExportLeadsCsv = () => {
+    if (leads.length === 0) {
+      toast.error('No leads to export');
+      return;
+    }
+    const headers = ['Guest ID', 'Name', 'Mobile', 'Registered At', 'Searches Count', 'Marketing Consent', 'Face Search Consent'];
+    const rows = leads.map(l => [
+      l.guest_id || (l as any).id || '',
+      `"${(l.name || (l as any).guest_name || '').replace(/"/g, '""')}"`,
+      `"${(l.mobile || (l as any).guest_phone || '').replace(/"/g, '""')}"`,
+      l.registered_at || l.created_at || '',
+      l.searches_count ?? 0,
+      l.marketing_consent ? 'YES' : 'NO',
+      l.face_search_consent ? 'YES' : 'NO',
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `${event?.slug || 'event'}-guest-leads.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('📥 Guest Leads exported to CSV!');
+  };
+
   const handleConfirmDelete = async () => {
     try {
       setDeleting(true);
@@ -1571,23 +1597,142 @@ export default function EventCommandCenterPage() {
 
         {/* TAB: Leads */}
         {activeTab === 'leads' && (
-          <div className="neu-card p-7 space-y-4">
-            <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Wedding Guest Inquiries & CRM Leads</h3>
+          <div className="space-y-6">
+            {/* Header & Quick Action Card */}
+            <div className="neu-card p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-display font-extrabold text-[#1F1F1F] flex items-center gap-2">
+                  <Users className="w-5 h-5 text-[#E86A5B]" />
+                  <span>Wedding Guest Leads &amp; CRM Contacts ({leads.length})</span>
+                </h3>
+                <p className="text-xs text-[#6B6B6B] mt-0.5">
+                  Guests who registered with their name and mobile number to access AI event photos.
+                </p>
+              </div>
+
+              {leads.length > 0 && (
+                <button
+                  onClick={handleExportLeadsCsv}
+                  className="btn-secondary py-2 px-3.5 text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Export Leads CSV</span>
+                </button>
+              )}
+            </div>
+
+            {/* Metrics Overview */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-4 rounded-2xl bg-white border border-[#E8E5E2] shadow-2xs space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A]">Total Registered Guests</span>
+                <p className="text-2xl font-display font-black text-[#1F1F1F]">{leads.length}</p>
+                <span className="text-[11px] text-[#6B6B6B]">Logged in via QR Code</span>
+              </div>
+              <div className="p-4 rounded-2xl bg-white border border-[#E8E5E2] shadow-2xs space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A]">AI Face Searches</span>
+                <p className="text-2xl font-display font-black text-[#E86A5B]">
+                  {leads.reduce((acc, l) => acc + (l.searches_count || 0), 0)}
+                </p>
+                <span className="text-[11px] text-[#6B6B6B]">Selfie photo lookups</span>
+              </div>
+              <div className="p-4 rounded-2xl bg-white border border-[#E8E5E2] shadow-2xs space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A]">Marketing Opt-Ins</span>
+                <p className="text-2xl font-display font-black text-emerald-600">
+                  {leads.filter(l => l.marketing_consent).length}
+                </p>
+                <span className="text-[11px] text-[#6B6B6B]">Ready for CRM follow-ups</span>
+              </div>
+            </div>
+
+            {/* Guest Leads List */}
             {leads.length === 0 ? (
-              <div className="p-8 text-center bg-[#FAF9F7] rounded-2xl border border-dashed border-[#E8E5E2] text-xs text-[#6B6B6B]">
-                No guest leads collected yet. Leads arrive automatically when guests request photo access.
+              <div className="neu-card p-10 text-center space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-[#E86A5B]/10 text-[#E86A5B] flex items-center justify-center mx-auto">
+                  <Users className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-bold text-[#1F1F1F]">No Guest Leads Yet</h4>
+                <p className="text-xs text-[#6B6B6B] max-w-sm mx-auto">
+                  When wedding guests scan the QR code and login with their Name &amp; Mobile number to view photos, their contact details will appear here in real-time.
+                </p>
               </div>
             ) : (
               <div className="space-y-3">
-                {leads.map((l) => (
-                  <div key={l.id} className="p-4 rounded-2xl bg-[#FAF9F7] border border-[#E8E5E2] flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold text-[#1F1F1F] block">{l.guest_name}</span>
-                      <span className="text-[11px] text-[#6B6B6B]">{l.guest_phone}</span>
+                {leads.map((l, index) => {
+                  const guestName = l.name || (l as any).guest_name || 'Guest Visitor';
+                  const guestPhone = l.mobile || (l as any).guest_phone || (l as any).phone || '';
+                  const cleanPhone = guestPhone.replace(/[^0-9+]/g, '');
+                  const regDate = l.registered_at || l.created_at;
+                  const formattedDate = regDate && !isNaN(new Date(regDate).getTime())
+                    ? new Date(regDate).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : 'Recent Visitor';
+
+                  return (
+                    <div 
+                      key={l.guest_id || (l as any).id || index} 
+                      className="neu-card p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white hover:border-[#E86A5B]/40 transition-all shadow-sm"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#FAF7F2] to-[#EAE6DF] border border-[#E0DCD3] flex items-center justify-center text-[#E86A5B] font-display font-black text-base shadow-inner shrink-0">
+                          {guestName.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-[#1F1F1F]">{guestName}</span>
+                            {l.marketing_consent && (
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Opt-In
+                              </span>
+                            )}
+                            {(l.searches_count ?? 0) > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-[#E86A5B]/10 text-[#E86A5B] border border-[#E86A5B]/20">
+                                {l.searches_count} {l.searches_count === 1 ? 'Search' : 'Searches'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-[#6B6B6B] flex-wrap">
+                            {guestPhone ? (
+                              <span className="font-mono font-semibold text-[#333]">{guestPhone}</span>
+                            ) : (
+                              <span className="italic text-[#999]">No phone</span>
+                            )}
+                            <span>•</span>
+                            <span className="text-[11px] text-[#888]">{formattedDate}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Quick Contact Actions */}
+                      {cleanPhone && (
+                        <div className="flex items-center gap-2 self-end sm:self-center">
+                          <a
+                            href={`https://wa.me/${cleanPhone.replace('+', '')}?text=Hello%20${encodeURIComponent(guestName)},%20thank%20you%20for%20attending%20${encodeURIComponent(event?.name || 'our event')}!%20Hope%20you%20enjoyed%20the%20photos.`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                            title="Chat on WhatsApp"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span>WhatsApp</span>
+                          </a>
+
+                          <a
+                            href={`tel:${cleanPhone}`}
+                            className="p-2 rounded-xl bg-[#FAF7F2] hover:bg-[#F0ECE4] text-[#1F1F1F] border border-[#E0DCD3] transition-all"
+                            title="Call Guest"
+                          >
+                            <Phone className="w-3.5 h-3.5 text-[#E86A5B]" />
+                          </a>
+                        </div>
+                      )}
                     </div>
-                    <span className="text-xs text-[#6B6B6B]">{new Date(l.created_at).toLocaleDateString()}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
