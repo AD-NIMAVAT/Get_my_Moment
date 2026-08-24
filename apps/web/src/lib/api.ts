@@ -753,6 +753,9 @@ class ApiClient {
       const err = await res.json();
       throw new Error(err.detail || 'Failed to upgrade plan');
     }
+    return res.json();
+  }
+
   async changePassword(data: { current_password: string; new_password: string }): Promise<{ message: string }> {
     const res = await fetch(`${this.baseUrl}/auth/change-password`, {
       method: 'POST',
