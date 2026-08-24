@@ -18,9 +18,7 @@ from PIL import Image
 
 from apps.api.database import SessionLocal
 from apps.api.models import Photo, Event, Folder, CameraDevice
-from packages.shared.constants import PhotoStatus
-from apps.api.services.storage import storage_service
-from apps.api.services.folder_service import get_or_create_uncategorized_folder, reconcile_folder_counters
+from apps.api.services.storage import storage_service, get_or_create_uncategorized_folder, reconcile_folder_counters
 from apps.api.auth import verify_password
 
 logger = logging.getLogger("WirelessCameraIngest")
@@ -351,7 +349,7 @@ def process_incoming_camera_photo(
                 target_folder = db.query(Folder).filter(Folder.id == wireless_server.active_folder_id, Folder.event_id == event_id).first()
 
             if not target_folder:
-                target_folder = get_or_create_uncategorized_folder(db, event_id, studio_id)
+                target_folder = get_or_create_uncategorized_folder(db, studio_id=studio_id, event_id=event_id)
 
             # Check duplicate by sha256
             import hashlib
