@@ -84,8 +84,9 @@ def test_photo_pipeline_telemetry_timestamps(client, db_session):
     assert photo.status == PhotoStatus.PROCESSED.value
 
 
-def test_event_health_endpoint_and_tenancy(client, db_session):
+def test_event_health_endpoint_and_tenancy(client, db_session, monkeypatch):
     """Verify GET /api/v1/events/{id}/health exposes aggregated metrics and blocks cross-tenant access."""
+    monkeypatch.setattr("apps.api.routers.events.queue_telemetry.get_queue_depth", lambda: 0)
     token_a = get_auth_token_for(client, "health_tenant_a@studio.com", "Studio A Health")
     token_b = get_auth_token_for(client, "health_tenant_b@studio.com", "Studio B Health")
 
@@ -216,6 +217,7 @@ def test_event_health_oldest_queue_age(client, db_session):
 def test_event_health_pipeline_states_and_thresholds(client, db_session, monkeypatch):
     """Verify READY, PROCESSING, WARNING, CRITICAL, and TELEMETRY_UNAVAILABLE states."""
     from apps.api.config import settings
+    monkeypatch.setattr("apps.api.routers.events.queue_telemetry.get_queue_depth", lambda: 0)
     token = get_auth_token_for(client, "states_tester@studio.com", "States Studio")
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -289,6 +291,13 @@ def test_event_health_pipeline_states_and_thresholds(client, db_session, monkeyp
     res = client.get(f"/api/v1/events/{event_id}/health", headers=headers)
     assert res.status_code == 200
     assert res.json()["pipeline_health"] == "CRITICAL"
+
+    # 5. State: TELEMETRY_UNAVAILABLE (Redis connection offline)
+    monkeypatch.setattr("apps.api.routers.events.queue_telemetry.get_queue_depth", lambda: None)
+    res_unavail = client.get(f"/api/v1/events/{event_id}/health", headers=headers)
+    assert res_unavail.status_code == 200
+    assert res_unavail.json()["pipeline_health"] == "TELEMETRY_UNAVAILABLE"
+    assert res_unavail.json()["queue_metrics_unavailable"] is True
 
 
 def test_durable_photo_ingest_preserves_data_under_backlog(client, db_session):

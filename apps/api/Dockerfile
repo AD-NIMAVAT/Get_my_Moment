@@ -17,6 +17,8 @@ COPY packages /app/packages
 COPY workers /app/workers
 COPY apps/api /app/apps/api
 COPY tests /app/tests
+COPY scripts /app/scripts
+COPY docs /app/docs
 
 ENV PYTHONPATH=/app
 
