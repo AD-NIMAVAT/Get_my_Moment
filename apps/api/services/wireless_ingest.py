@@ -21,6 +21,7 @@ from apps.api.models import Photo, Event, Folder, CameraDevice
 from packages.shared.constants import PhotoStatus
 from apps.api.services.storage import storage_service, get_or_create_uncategorized_folder, reconcile_folder_counters
 from apps.api.auth import verify_password
+from workers.ai_worker.worker import dispatch_photo_processing
 
 logger = logging.getLogger("WirelessCameraIngest")
 logger.setLevel(logging.INFO)
@@ -128,38 +129,6 @@ class CameraAuthorizer(DummyAuthorizer):
 
     def get_msg_quit(self, username: str) -> str:
         return "Goodbye"
-
-
-def dispatch_photo_processing(photo_id: str, event_id: str):
-    """
-    Enqueues Celery AI task for face detection & recognition.
-    Falls back gracefully to inline processing if Celery broker is unavailable.
-    """
-    try:
-        from workers.tasks import process_photo_task
-        process_photo_task.delay(photo_id=photo_id, event_id=event_id)
-        logger.info(f"⚡ [CELERY ENQUEUED] Dispatched AI face worker for photo {photo_id}")
-    except Exception as exc:
-        logger.warning(f"⚠️ Celery broker unreachable ({exc}), falling back to direct background thread processing.")
-        def run_inline():
-            try:
-                from apps.api.database import SessionLocal as SyncSession
-                from packages.ai.pipeline import FacePipeline
-                inline_db = SyncSession()
-                try:
-                    p = inline_db.query(Photo).filter(Photo.id == photo_id).first()
-                    if p:
-                        pipeline = FacePipeline()
-                        full_img_path = storage_service.get_local_path(p.file_path)
-                        if full_img_path and os.path.exists(full_img_path):
-                            logger.info(f"Processing photo inline for face recognition: {p.id}")
-                finally:
-                    inline_db.close()
-            except Exception as e:
-                logger.error(f"Inline processing fallback failed for photo {photo_id}: {e}")
-
-        t = threading.Thread(target=run_inline, daemon=True)
-        t.start()
 
 
 def process_incoming_camera_photo(

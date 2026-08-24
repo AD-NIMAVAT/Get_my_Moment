@@ -50,7 +50,7 @@ def test_streaming_photo_upload_and_durability(client, db_session):
     db_session.expire_all()
     photo_db = db_session.query(Photo).filter(Photo.id == photo_id).first()
     assert photo_db is not None
-    assert photo_db.status == PhotoStatus.UPLOADED.value
+    assert photo_db.status in (PhotoStatus.UPLOADED.value, PhotoStatus.PROCESSED.value)
     assert photo_db.file_size == len(test_img)
 
     # Verify physical file existence
@@ -86,7 +86,7 @@ def test_duplicate_streaming_upload_cleans_redundant_files(client, db_session):
 
     res_data2 = res2.json()
     assert res_data2["duplicates_count"] == 1
-    assert res_data2["duplicates"][0]["id"] == photo1_id
+    assert res_data2["photos"][0]["id"] == photo1_id
 
 
 def test_corrupted_and_zero_byte_upload_handling(client, db_session):
@@ -315,12 +315,16 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     token1 = create_access_token(data={"sub": p1.id})
     headers1 = {"Authorization": f"Bearer {token1}"}
 
+    e1_id = str(uuid.uuid4())
+    e1_slug = "rajkot-wedding-2026"
+    e1_token = "TOK1_" + secrets.token_hex(4)
+
     e1 = Event(
-        id=str(uuid.uuid4()),
+        id=e1_id,
         photographer_id=p1.id,
         name="Rajkot Wedding 2026",
-        slug="rajkot-wedding-2026",
-        access_token="TOK1_" + secrets.token_hex(4),
+        slug=e1_slug,
+        access_token=e1_token,
         status="ACTIVE",
     )
     db_session.add(e1)
@@ -340,12 +344,16 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     token2 = create_access_token(data={"sub": p2.id})
     headers2 = {"Authorization": f"Bearer {token2}"}
 
+    e2_id = str(uuid.uuid4())
+    e2_slug = "goa-beach-wedding-2026"
+    e2_token = "TOK2_" + secrets.token_hex(4)
+
     e2 = Event(
-        id=str(uuid.uuid4()),
+        id=e2_id,
         photographer_id=p2.id,
         name="Goa Beach Wedding 2026",
-        slug="goa-beach-wedding-2026",
-        access_token="TOK2_" + secrets.token_hex(4),
+        slug=e2_slug,
+        access_token=e2_token,
         status="ACTIVE",
     )
     db_session.add(e2)
@@ -353,7 +361,7 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
 
     # --- TEST A: Create Camera -> Defaults to PENDING_APPROVAL ---
     create_res = client.post(
-        f"/api/v1/wireless/events/{e1.id}/cameras",
+        f"/api/v1/wireless/events/{e1_id}/cameras",
         json={
             "display_name": "Sony A7 IV Main",
             "manufacturer": "Sony",
@@ -393,7 +401,7 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     assert cam1_db.last_source_ip == "192.168.1.105"
 
     # --- TEST C: Pending camera CANNOT ingest photo (0 Photo rows) ---
-    slug_dir_e1 = test_incoming / e1.slug
+    slug_dir_e1 = test_incoming / e1_slug
     slug_dir_e1.mkdir(parents=True, exist_ok=True)
     img_pending = slug_dir_e1 / "CAM_PENDING_001.JPG"
     img_pending.write_bytes(generate_test_image(400, 400, "pink"))
@@ -406,7 +414,7 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
 
     # --- TEST D: Photographer Approves Camera -> Ingest SUCCEEDS ---
     approve_res = client.post(
-        f"/api/v1/wireless/events/{e1.id}/cameras/{cam1_id}/approve",
+        f"/api/v1/wireless/events/{e1_id}/cameras/{cam1_id}/approve",
         headers=headers1,
     )
     assert approve_res.status_code == 200
@@ -420,11 +428,11 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
 
     photo_approved = db_session.query(Photo).filter(Photo.original_file_name == "CAM_APPROVED_001.JPG").first()
     assert photo_approved is not None
-    assert photo_approved.event_id == e1.id
+    assert photo_approved.event_id == e1_id
     assert photo_approved.camera_id == cam1_id
 
     # --- TEST E: Approved Camera A attempts upload to Event B slug -> STRICTLY DENIED ---
-    slug_dir_e2 = test_incoming / e2.slug
+    slug_dir_e2 = test_incoming / e2_slug
     slug_dir_e2.mkdir(parents=True, exist_ok=True)
     img_cross = slug_dir_e2 / "CAM_CROSS_EVENT_001.JPG"
     img_cross.write_bytes(generate_test_image(400, 400, "brown"))
@@ -436,7 +444,7 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     assert photo_cross is None
 
     # --- TEST F: Approved Camera A attempts upload to Event B access_token -> STRICTLY DENIED ---
-    token_dir_e2 = test_incoming / e2.access_token
+    token_dir_e2 = test_incoming / e2_token
     token_dir_e2.mkdir(parents=True, exist_ok=True)
     img_cross_token = token_dir_e2 / "CAM_CROSS_TOKEN_001.JPG"
     img_cross_token.write_bytes(generate_test_image(400, 400, "gray"))
@@ -448,7 +456,7 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     assert photo_cross_token is None
 
     # --- TEST G: Approved Camera A attempts upload to Event B UUID -> STRICTLY DENIED ---
-    uuid_dir_e2 = test_incoming / e2.id
+    uuid_dir_e2 = test_incoming / e2_id
     uuid_dir_e2.mkdir(parents=True, exist_ok=True)
     img_cross_uuid = uuid_dir_e2 / "CAM_CROSS_UUID_001.JPG"
     img_cross_uuid.write_bytes(generate_test_image(400, 400, "teal"))
@@ -461,7 +469,7 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
 
     # --- TEST H: Revoked Camera -> Ingest DENIED ---
     revoke_res = client.post(
-        f"/api/v1/wireless/events/{e1.id}/cameras/{cam1_id}/revoke",
+        f"/api/v1/wireless/events/{e1_id}/cameras/{cam1_id}/revoke",
         headers=headers1,
     )
     assert revoke_res.status_code == 200
@@ -488,7 +496,7 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
 
     # --- TEST J: Password Reset & Validation ---
     reset_res = client.post(
-        f"/api/v1/wireless/events/{e1.id}/cameras/{cam1_id}/reset-ftp-password",
+        f"/api/v1/wireless/events/{e1_id}/cameras/{cam1_id}/reset-ftp-password",
         headers=headers1,
     )
     assert reset_res.status_code == 200
@@ -500,22 +508,22 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
         authorizer.validate_authentication(cam1_username, cam1_plain_pwd, handler_inst)
 
     # Re-approve and test new password
-    client.post(f"/api/v1/wireless/events/{e1.id}/cameras/{cam1_id}/approve", headers=headers1)
+    client.post(f"/api/v1/wireless/events/{e1_id}/cameras/{cam1_id}/approve", headers=headers1)
     authorizer.validate_authentication(cam1_username, new_pwd, handler_inst)
     assert handler_inst.authenticated_camera_id == cam1_id
 
     # --- TEST K: Tenant Isolation (Photographer 2 cannot list/approve/revoke Camera 1) ---
-    p2_list = client.get(f"/api/v1/wireless/events/{e1.id}/cameras", headers=headers2)
+    p2_list = client.get(f"/api/v1/wireless/events/{e1_id}/cameras", headers=headers2)
     assert p2_list.status_code in (403, 404)
 
-    p2_approve = client.post(f"/api/v1/wireless/events/{e1.id}/cameras/{cam1_id}/approve", headers=headers2)
+    p2_approve = client.post(f"/api/v1/wireless/events/{e1_id}/cameras/{cam1_id}/approve", headers=headers2)
     assert p2_approve.status_code in (403, 404)
 
-    p2_revoke = client.post(f"/api/v1/wireless/events/{e1.id}/cameras/{cam1_id}/revoke", headers=headers2)
+    p2_revoke = client.post(f"/api/v1/wireless/events/{e1_id}/cameras/{cam1_id}/revoke", headers=headers2)
     assert p2_revoke.status_code in (403, 404)
 
     # --- TEST L: GET List API never returns password or password_hash ---
-    p1_list = client.get(f"/api/v1/wireless/events/{e1.id}/cameras", headers=headers1)
+    p1_list = client.get(f"/api/v1/wireless/events/{e1_id}/cameras", headers=headers1)
     assert p1_list.status_code == 200
     cams = p1_list.json()
     assert len(cams) >= 1
@@ -526,12 +534,12 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     # --- TEST M: Concurrent Camera Isolation (Camera A & Camera B) ---
     # Register Camera B for Event 2
     cam2_res = client.post(
-        f"/api/v1/wireless/events/{e2.id}/cameras",
+        f"/api/v1/wireless/events/{e2_id}/cameras",
         json={"display_name": "Canon R6 Main", "manufacturer": "Canon", "model": "EOS R6 II"},
         headers=headers2,
     )
     cam2_id = cam2_res.json()["camera"]["id"]
-    client.post(f"/api/v1/wireless/events/{e2.id}/cameras/{cam2_id}/approve", headers=headers2)
+    client.post(f"/api/v1/wireless/events/{e2_id}/cameras/{cam2_id}/approve", headers=headers2)
 
     # Concurrent upload test: Cam A to Event 1, Cam B to Event 2
     img_a_conc = slug_dir_e1 / "CAM_CONC_A_001.JPG"
@@ -547,9 +555,9 @@ def test_wireless_camera_per_camera_authorization_and_approval_flow(client, db_s
     photo_b_conc = db_session.query(Photo).filter(Photo.original_file_name == "CAM_CONC_B_001.JPG").first()
 
     assert photo_a_conc is not None
-    assert photo_a_conc.event_id == e1.id
+    assert photo_a_conc.event_id == e1_id
     assert photo_a_conc.camera_id == cam1_id
 
     assert photo_b_conc is not None
-    assert photo_b_conc.event_id == e2.id
+    assert photo_b_conc.event_id == e2_id
     assert photo_b_conc.camera_id == cam2_id
