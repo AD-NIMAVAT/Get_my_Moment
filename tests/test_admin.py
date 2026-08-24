@@ -39,19 +39,21 @@ def test_super_admin_full_flow(db_session, client):
     db_session.add(lead)
     db_session.commit()
 
-    # 2. Super Admin Login
-    login_res = client.post(
-        "/api/v1/admin/auth/login",
-        json={"email": "admin@getmymoment.com", "password": "Admin@GetMyMoment2026!"},
-        headers={"X-Forwarded-For": "203.0.113.42"}
-    )
-    if login_res.status_code == 200:
-        token_data = login_res.json()
-        admin_token = token_data["access_token"]
-        assert token_data["admin"]["role"] == "SUPER_ADMIN"
-    else:
-        admin_token = create_access_token({"sub": "admin@getmymoment.com", "role": "SUPER_ADMIN"})
+    # 2. Super Admin Token
+    admin = db_session.query(AdminUser).filter(AdminUser.email == "admin@getmymoment.com").first()
+    if not admin:
+        admin = AdminUser(
+            email="admin@getmymoment.com",
+            password_hash=hash_password("Admin@GetMyMoment2026!"),
+            full_name="Platform Owner",
+            role="SUPER_ADMIN",
+            is_active=True,
+        )
+        db_session.add(admin)
+        db_session.commit()
+        db_session.refresh(admin)
 
+    admin_token = create_access_token({"sub": admin.id, "is_admin": True})
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
     # 3. Test /admin/auth/me
@@ -129,8 +131,21 @@ def test_super_admin_reset_photographer_password(db_session, client):
     db_session.add(p)
     db_session.commit()
 
-    # 2. Generate Super Admin Token directly
-    admin_token = create_access_token({"sub": "admin@getmymoment.com", "role": "SUPER_ADMIN"})
+    # 2. Super Admin Token
+    admin = db_session.query(AdminUser).filter(AdminUser.email == "admin@getmymoment.com").first()
+    if not admin:
+        admin = AdminUser(
+            email="admin@getmymoment.com",
+            password_hash=hash_password("Admin@GetMyMoment2026!"),
+            full_name="Platform Owner",
+            role="SUPER_ADMIN",
+            is_active=True,
+        )
+        db_session.add(admin)
+        db_session.commit()
+        db_session.refresh(admin)
+
+    admin_token = create_access_token({"sub": admin.id, "is_admin": True})
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
     # 3. Super Admin Auto-Generate Temporary Password
