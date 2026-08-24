@@ -101,6 +101,15 @@ class CameraAuthorizer(DummyAuthorizer):
                     pass
                 db.commit()
 
+                # Ensure event directory exists on disk for camera CWD/MKD/upload
+                if camera.event_id:
+                    event = db.query(Event).filter(Event.id == camera.event_id).first()
+                    if event:
+                        if event.slug:
+                            os.makedirs(os.path.join(FTP_INCOMING_DIR, event.slug), exist_ok=True)
+                        if event.access_token:
+                            os.makedirs(os.path.join(FTP_INCOMING_DIR, event.access_token), exist_ok=True)
+
                 # Attach camera identity and event binding to handler context
                 handler.authenticated_camera_id = camera.id
                 handler.authenticated_camera_event_id = camera.event_id
@@ -492,10 +501,28 @@ class WirelessCameraServerManager:
         handler.authorizer = authorizer
         handler.banner = "Get My Moment Wireless Camera Ingest Ready"
 
+        # Explicitly configure passive ports range matching Docker & UFW firewall
+        handler.passive_ports = range(30000, 30101)
+
         tcp_domain = os.environ.get("RAILWAY_TCP_PROXY_DOMAIN", os.environ.get("FTP_PUBLIC_HOST"))
         if tcp_domain:
             handler.masquerade_address = tcp_domain
             logger.info(f"🌐 FTP Masquerade Address set to: {tcp_domain}")
+
+        # Pre-create incoming directories for all active events
+        try:
+            db = SessionLocal()
+            try:
+                events = db.query(Event).filter(Event.is_deleted == False).all()
+                for e in events:
+                    if e.slug:
+                        os.makedirs(os.path.join(FTP_INCOMING_DIR, e.slug), exist_ok=True)
+                    if e.access_token:
+                        os.makedirs(os.path.join(FTP_INCOMING_DIR, e.access_token), exist_ok=True)
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"Could not pre-create event directories: {e}")
 
         http_port = int(os.environ.get("PORT", 8000))
         target_port = self.port if self.port != http_port else 2122
