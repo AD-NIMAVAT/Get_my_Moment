@@ -19,4 +19,4 @@ COPY workers /app/workers
 
 ENV PYTHONPATH=/app
 
-CMD ["celery", "-A", "workers.ai_worker.worker", "worker", "--loglevel=info", "--concurrency=2"]
+CMD ["sh", "-c", "celery -A workers.ai_worker.worker worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-2} --prefetch-multiplier=${CELERY_WORKER_PREFETCH_MULTIPLIER:-1}"]

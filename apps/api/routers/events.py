@@ -581,15 +581,18 @@ def get_event_health_telemetry(
     q_depth = queue_telemetry.get_queue_depth()
     q_unavailable = (q_depth is None)
 
-    # 6. Pipeline health assessment
-    if photos_failed > 0:
-        pipeline_health = "ATTENTION_REQUIRED"
-    elif q_depth is not None and q_depth > 50:
-        pipeline_health = "BACKLOG"
-    elif photos_processing > 0 or (q_depth is not None and q_depth > 0):
+    # 6. Pipeline health assessment (Decoupled, configurable thresholds)
+    pending_count = photos_uploaded + photos_processing
+    if q_unavailable:
+        pipeline_health = "TELEMETRY_UNAVAILABLE"
+    elif photos_failed > 0 or pending_count > settings.AI_BACKLOG_CRITICAL_THRESHOLD or (oldest_queue_age is not None and oldest_queue_age > settings.AI_QUEUE_AGE_CRITICAL_SECONDS):
+        pipeline_health = "CRITICAL"
+    elif pending_count > settings.AI_BACKLOG_WARNING_THRESHOLD or (oldest_queue_age is not None and oldest_queue_age > settings.AI_QUEUE_AGE_WARNING_SECONDS):
+        pipeline_health = "WARNING"
+    elif pending_count > 0 or (q_depth is not None and q_depth > 0):
         pipeline_health = "PROCESSING"
     else:
-        pipeline_health = "HEALTHY"
+        pipeline_health = "READY"
 
     return EventHealthResponse(
         event_id=event.id,
@@ -604,6 +607,9 @@ def get_event_health_telemetry(
         queue_depth=q_depth,
         queue_metrics_unavailable=q_unavailable,
         oldest_queue_age_seconds=oldest_queue_age,
+        active_task_count=None,
+        reserved_task_count=None,
+        database_pending_count=pending_count,
         avg_processing_duration_ms=avg_duration,
         p95_processing_duration_ms=p95_duration,
         avg_ai_inference_ms=avg_ai,

@@ -44,10 +44,20 @@ class Settings(BaseSettings):
             return v.replace("postgres://", "postgresql://", 1)
         return v
 
-    # Redis & Celery
+    # Redis & Celery Deployment / Capacity Settings (Hardware-Portable)
     REDIS_URL: str = "redis://localhost:6379/0"
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
+    CELERY_WORKER_CONCURRENCY: int = 2
+    CELERY_WORKER_PREFETCH_MULTIPLIER: int = 1
+    CELERY_TASK_ACKS_LATE: bool = True
+    CELERY_TASK_REJECT_ON_WORKER_LOST: bool = True
+
+    # Ingest Backlog Observability & Health Thresholds (Provisional / Configurable)
+    AI_BACKLOG_WARNING_THRESHOLD: int = 25
+    AI_BACKLOG_CRITICAL_THRESHOLD: int = 100
+    AI_QUEUE_AGE_WARNING_SECONDS: int = 30
+    AI_QUEUE_AGE_CRITICAL_SECONDS: int = 120
 
     # Storage
     STORAGE_DRIVER: str = "local"

@@ -137,7 +137,7 @@ export interface EventHealthData {
   event_id: string;
   event_name: string;
   status: string;
-  pipeline_health: 'HEALTHY' | 'PROCESSING' | 'BACKLOG' | 'ATTENTION_REQUIRED';
+  pipeline_health: 'READY' | 'HEALTHY' | 'PROCESSING' | 'WARNING' | 'CRITICAL' | 'BACKLOG' | 'ATTENTION_REQUIRED' | 'TELEMETRY_UNAVAILABLE';
   photos_total: number;
   photos_uploaded: number;
   photos_processing: number;
@@ -146,6 +146,9 @@ export interface EventHealthData {
   queue_depth?: number | null;
   queue_metrics_unavailable?: boolean;
   oldest_queue_age_seconds?: number | null;
+  active_task_count?: number | null;
+  reserved_task_count?: number | null;
+  database_pending_count?: number;
   avg_processing_duration_ms?: number;
   p95_processing_duration_ms?: number;
   avg_ai_inference_ms?: number;

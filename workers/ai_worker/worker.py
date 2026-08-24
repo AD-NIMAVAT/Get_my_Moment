@@ -35,8 +35,11 @@ try:
         timezone="UTC",
         enable_utc=True,
         task_track_started=True,
-        broker_connection_timeout=0.2,
-        broker_connection_retry_on_startup=False,
+        worker_prefetch_multiplier=settings.CELERY_WORKER_PREFETCH_MULTIPLIER,
+        task_acks_late=settings.CELERY_TASK_ACKS_LATE,
+        task_reject_on_worker_lost=settings.CELERY_TASK_REJECT_ON_WORKER_LOST,
+        broker_connection_timeout=2.0,
+        broker_connection_retry_on_startup=True,
     )
 except ImportError:
     HAS_CELERY = False
@@ -215,5 +218,13 @@ def dispatch_photo_processing(photo_id: str, event_id: str, db: Optional[Session
         run_photo_pipeline(photo_id, event_id, db_override=db)
         return
 
-    # Non-blocking instant execution on background thread pool
+    # In production, dispatch async task to Celery / Redis queue if available
+    if HAS_CELERY and celery_app is not None:
+        try:
+            process_photo_task.delay(photo_id, event_id)
+            return
+        except Exception as exc:
+            logger.warning(f"Celery dispatch failed ({exc}), falling back to local threadpool")
+
+    # Non-blocking fallback execution on local thread pool
     local_executor.submit(run_photo_pipeline, photo_id, event_id, None)

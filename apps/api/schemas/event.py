@@ -85,6 +85,9 @@ class EventHealthResponse(BaseModel):
     queue_depth: Optional[int] = None
     queue_metrics_unavailable: bool = False
     oldest_queue_age_seconds: Optional[int] = None
+    active_task_count: Optional[int] = None
+    reserved_task_count: Optional[int] = None
+    database_pending_count: int = 0
     avg_processing_duration_ms: Optional[int] = None
     p95_processing_duration_ms: Optional[int] = None
     avg_ai_inference_ms: Optional[int] = None
