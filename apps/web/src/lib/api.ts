@@ -138,6 +138,8 @@ export interface EventHealthData {
   event_name: string;
   status: string;
   pipeline_health: 'READY' | 'HEALTHY' | 'PROCESSING' | 'WARNING' | 'CRITICAL' | 'BACKLOG' | 'ATTENTION_REQUIRED' | 'TELEMETRY_UNAVAILABLE';
+  health_reasons?: string[];
+  health_message?: string;
   photos_total: number;
   photos_uploaded: number;
   photos_processing: number;
@@ -149,11 +151,20 @@ export interface EventHealthData {
   active_task_count?: number | null;
   reserved_task_count?: number | null;
   database_pending_count?: number;
-  avg_processing_duration_ms?: number;
-  p95_processing_duration_ms?: number;
-  avg_ai_inference_ms?: number;
+  capture_to_guest_p50_ms?: number | null;
+  capture_to_guest_p95_ms?: number | null;
+  processing_p50_ms?: number | null;
+  processing_p95_ms?: number | null;
+  avg_processing_duration_ms?: number | null;
+  p95_processing_duration_ms?: number | null;
+  ai_inference_p50_ms?: number | null;
+  ai_inference_p95_ms?: number | null;
+  avg_ai_inference_ms?: number | null;
   last_photo_received_at?: string;
   last_guest_ready_at?: string;
+  photos_received_recently?: number;
+  photos_completed_recently?: number;
+  recent_activity_window_minutes?: number;
 }
 
 export interface FolderItem {

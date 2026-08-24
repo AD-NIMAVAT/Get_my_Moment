@@ -344,3 +344,73 @@ def test_celery_hardware_portable_configuration_defaults():
     assert settings.AI_BACKLOG_CRITICAL_THRESHOLD == 100
     assert settings.AI_QUEUE_AGE_WARNING_SECONDS == 30
     assert settings.AI_QUEUE_AGE_CRITICAL_SECONDS == 120
+
+
+def test_capture_to_guest_latency_percentiles(client, db_session, monkeypatch):
+    """Verify that Capture-to-Guest latency is computed as (guest_ready_at - queued_at) across latest 100 photos."""
+    monkeypatch.setattr("apps.api.routers.events.queue_telemetry.get_queue_depth", lambda: 0)
+    token = get_auth_token_for(client, "c2g_tester@studio.com", "C2G Studio")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    create_res = client.post("/api/v1/events", headers=headers, json={"name": "C2G Latency Event"})
+    event_id = create_res.json()["id"]
+
+    from datetime import timedelta
+    now = datetime.utcnow()
+    # Add 10 processed photos with distinct queue wait & processing times
+    for i in range(10):
+        # Queued 10s - (i*1s) ago, guest ready now
+        q_time = now - timedelta(milliseconds=1000 + i * 200)
+        p = Photo(
+            event_id=event_id,
+            file_path=f"storage/photos/c2g_{i}.jpg",
+            original_file_name=f"c2g_{i}.jpg",
+            sha256_hash=f"c2g_hash_{i}_{'0'*50}",
+            file_size=1024,
+            mime_type="image/jpeg",
+            status=PhotoStatus.PROCESSED.value,
+            queued_at=q_time,
+            guest_ready_at=now,
+            processing_duration_ms=500 + i * 50,
+            ai_inference_ms=300 + i * 20,
+        )
+        db_session.add(p)
+    db_session.commit()
+
+    health_res = client.get(f"/api/v1/events/{event_id}/health", headers=headers)
+    assert health_res.status_code == 200
+    data = health_res.json()
+
+    assert data["capture_to_guest_p50_ms"] is not None
+    assert data["capture_to_guest_p95_ms"] is not None
+    assert data["capture_to_guest_p50_ms"] >= 1000
+    assert data["processing_p50_ms"] is not None
+    assert data["ai_inference_p50_ms"] is not None
+    assert data["recent_activity_window_minutes"] == 15
+    assert data["photos_completed_recently"] == 10
+    assert "PROCESSING_NORMALLY" in data["health_reasons"] or "IDLE" in data["health_reasons"]
+
+
+def test_empty_event_latency_handles_none_gracefully(client, db_session, monkeypatch):
+    """Verify that an event with 0 photos returns None for latencies without errors."""
+    monkeypatch.setattr("apps.api.routers.events.queue_telemetry.get_queue_depth", lambda: 0)
+    token = get_auth_token_for(client, "empty_tester@studio.com", "Empty Studio")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    create_res = client.post("/api/v1/events", headers=headers, json={"name": "Empty Event"})
+    event_id = create_res.json()["id"]
+
+    health_res = client.get(f"/api/v1/events/{event_id}/health", headers=headers)
+    assert health_res.status_code == 200
+    data = health_res.json()
+    assert data["pipeline_health"] == "READY"
+    assert data["photos_total"] == 0
+    assert data["capture_to_guest_p50_ms"] is None
+    assert data["capture_to_guest_p95_ms"] is None
+    assert data["processing_p50_ms"] is None
+    assert data["ai_inference_p50_ms"] is None
+    assert data["photos_received_recently"] == 0
+    assert data["photos_completed_recently"] == 0
+    assert "IDLE" in data["health_reasons"]
+    assert "Event pipeline is ready." in data["health_message"]
+    assert settings.AI_QUEUE_AGE_CRITICAL_SECONDS == 120

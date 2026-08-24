@@ -76,22 +76,45 @@ class EventHealthResponse(BaseModel):
     event_id: str
     event_name: str
     status: str
-    pipeline_health: str
+    pipeline_health: str  # READY, PROCESSING, WARNING, CRITICAL, TELEMETRY_UNAVAILABLE
+    health_reasons: list[str] = Field(default_factory=list)
+    health_message: str = "Event pipeline is ready."
+
+    # Ingest & Counts
     photos_total: int
     photos_uploaded: int
     photos_processing: int
     photos_ready: int
     photos_failed: int
+
+    # Backlog & Queue
     queue_depth: Optional[int] = None
     queue_metrics_unavailable: bool = False
     oldest_queue_age_seconds: Optional[int] = None
     active_task_count: Optional[int] = None
     reserved_task_count: Optional[int] = None
     database_pending_count: int = 0
-    avg_processing_duration_ms: Optional[int] = None
-    p95_processing_duration_ms: Optional[int] = None
-    avg_ai_inference_ms: Optional[int] = None
+
+    # True Capture-to-Guest Latency (guest_ready_at - queued_at)
+    capture_to_guest_p50_ms: Optional[int] = None
+    capture_to_guest_p95_ms: Optional[int] = None
+
+    # Worker Processing Duration (guest_ready_at - processing_started_at)
+    processing_p50_ms: Optional[int] = None
+    processing_p95_ms: Optional[int] = None
+    avg_processing_duration_ms: Optional[int] = None  # backward compat
+    p95_processing_duration_ms: Optional[int] = None  # backward compat
+
+    # AI Inference (face detection + embeddings)
+    ai_inference_p50_ms: Optional[int] = None
+    ai_inference_p95_ms: Optional[int] = None
+    avg_ai_inference_ms: Optional[int] = None  # backward compat
+
+    # Live Activity Window & Timestamps
     last_photo_received_at: Optional[datetime] = None
     last_guest_ready_at: Optional[datetime] = None
+    photos_received_recently: int = 0
+    photos_completed_recently: int = 0
+    recent_activity_window_minutes: int = 15
 
     model_config = ConfigDict(from_attributes=True)

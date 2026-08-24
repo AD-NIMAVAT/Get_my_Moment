@@ -20,7 +20,7 @@ import {
   ExternalLink, Download, Sparkles, CheckCircle2, ShieldCheck, 
   IndianRupee, DollarSign, Plus, MessageSquare, Send, CheckSquare, 
   Calendar, Layers, Heart, FileText, Trash2, ToggleLeft, ToggleRight, 
-  AlertCircle, Phone, Wifi, Folder as FolderIcon, FolderPlus, MoveRight,
+  AlertCircle, AlertTriangle, Phone, Wifi, Folder as FolderIcon, FolderPlus, MoveRight,
   Lock, Eye, MoreVertical, X, Activity, Clock, Zap
 } from 'lucide-react';
 
@@ -137,29 +137,48 @@ export default function EventCommandCenterPage() {
     // Lock wireless camera ingest receiver to this active event
     api.getWirelessCredentials(eventId).catch(() => {});
 
-    // Polling interval (every 2.5 seconds)
+    // Polling interval (every 3 seconds when tab is visible)
+    let isPolling = false;
     const interval = setInterval(async () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return; // Pause polling when tab is hidden to conserve network & CPU
+      }
+      if (isPolling) return;
+      isPolling = true;
+
       try {
-        const latestPhotos = await api.getEventPhotos(eventId);
-        setPhotos((prev) => {
-          if (latestPhotos.length > prev.length) {
-            const newlyAdded = latestPhotos.filter(
-              (lp) => !prev.some((p) => p.id === lp.id)
-            );
-            if (newlyAdded.length > 0) {
-              const name = newlyAdded[0].original_file_name;
-              toast.success(`📸 Live Wireless Photo: ${name} synced instantly!`);
-              // Also refresh folders for updated counters
-              api.getFolders(eventId).then(setFolders).catch(() => {});
+        const [latestPhotos, latestHealth] = await Promise.all([
+          api.getEventPhotos(eventId).catch(() => null),
+          api.getEventHealth(eventId).catch(() => null),
+        ]);
+
+        if (latestHealth) {
+          setHealth(latestHealth);
+        }
+
+        if (latestPhotos) {
+          setPhotos((prev) => {
+            if (latestPhotos.length > prev.length) {
+              const newlyAdded = latestPhotos.filter(
+                (lp) => !prev.some((p) => p.id === lp.id)
+              );
+              if (newlyAdded.length > 0) {
+                const name = newlyAdded[0].original_file_name;
+                toast.success(`📸 Live Wireless Photo: ${name} synced instantly!`);
+                // Also refresh folders for updated counters
+                api.getFolders(eventId).then(setFolders).catch(() => {});
+              }
+              return latestPhotos;
             }
-            return latestPhotos;
-          }
-          return prev;
-        });
+            return prev;
+          });
+        }
       } catch (e) {
         // silent polling catch
+      } finally {
+        isPolling = false;
       }
-    }, 2500);
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [eventId, user]);
@@ -525,51 +544,139 @@ export default function EventCommandCenterPage() {
       <div className="max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1850px] mx-auto px-4 sm:px-6 py-6 space-y-6">
         {/* Live Ingest & AI Pipeline Telemetry Panel */}
         {health && (
-          <div className="p-4 sm:p-5 rounded-3xl neu-card bg-[#FAF9F7] border border-[#E8E5E2] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
-                health.pipeline_health === 'HEALTHY' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' :
-                health.pipeline_health === 'PROCESSING' ? 'bg-amber-50 text-amber-600 border border-amber-200' :
-                health.pipeline_health === 'BACKLOG' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
-                'bg-rose-50 text-rose-600 border border-rose-200'
-              }`}>
-                <Activity className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-display font-extrabold text-[#1F1F1F]">
-                    Live AI Ingest &amp; Pipeline Telemetry
-                  </span>
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                    health.pipeline_health === 'HEALTHY' ? 'bg-emerald-100 text-emerald-800' :
-                    health.pipeline_health === 'PROCESSING' ? 'bg-blue-100 text-blue-800' :
-                    health.pipeline_health === 'BACKLOG' ? 'bg-amber-100 text-amber-900' :
-                    'bg-rose-100 text-rose-800'
-                  }`}>
-                    {health.pipeline_health.replace('_', ' ')}
-                  </span>
+          <div className="p-4 sm:p-5 rounded-3xl neu-card bg-[#FAF9F7] border border-[#E8E5E2] space-y-4">
+            {/* Top Status & Diagnostics Header */}
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-[#E8E5E2]/60 pb-3">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+                  health.pipeline_health === 'READY' || health.pipeline_health === 'HEALTHY' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' :
+                  health.pipeline_health === 'PROCESSING' ? 'bg-blue-50 text-blue-600 border border-blue-200' :
+                  health.pipeline_health === 'WARNING' || health.pipeline_health === 'BACKLOG' ? 'bg-amber-50 text-amber-600 border border-amber-200' :
+                  health.pipeline_health === 'TELEMETRY_UNAVAILABLE' ? 'bg-purple-50 text-purple-600 border border-purple-200' :
+                  'bg-rose-50 text-rose-600 border border-rose-200'
+                }`}>
+                  {health.pipeline_health === 'READY' || health.pipeline_health === 'HEALTHY' ? <CheckCircle2 className="w-5 h-5" /> :
+                   health.pipeline_health === 'PROCESSING' ? <Activity className="w-5 h-5 animate-pulse" /> :
+                   health.pipeline_health === 'WARNING' || health.pipeline_health === 'BACKLOG' ? <AlertTriangle className="w-5 h-5" /> :
+                   health.pipeline_health === 'TELEMETRY_UNAVAILABLE' ? <Clock className="w-5 h-5" /> :
+                   <AlertCircle className="w-5 h-5" />}
                 </div>
-                <p className="text-[11px] text-[#6B6B6B]">
-                  Queue: {health.queue_depth} pending • {health.photos_ready} of {health.photos_total} photos guest-ready
-                </p>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-display font-extrabold text-[#1F1F1F]">
+                      Live Pipeline &amp; Ingest Monitor
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                      health.pipeline_health === 'READY' || health.pipeline_health === 'HEALTHY' ? 'bg-emerald-100 text-emerald-800' :
+                      health.pipeline_health === 'PROCESSING' ? 'bg-blue-100 text-blue-800' :
+                      health.pipeline_health === 'WARNING' || health.pipeline_health === 'BACKLOG' ? 'bg-amber-100 text-amber-900' :
+                      health.pipeline_health === 'TELEMETRY_UNAVAILABLE' ? 'bg-purple-100 text-purple-900' :
+                      'bg-rose-100 text-rose-800'
+                    }`}>
+                      {health.pipeline_health.replace('_', ' ')}
+                    </span>
+                    {health.health_reasons?.map((reason, idx) => (
+                      <span key={idx} className="px-1.5 py-0.5 rounded bg-[#E8E5E2]/80 text-[#555] text-[9px] font-mono font-medium">
+                        {reason}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-[#555] mt-0.5">
+                    {health.health_message || 'Pipeline active and monitoring event ingestion.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end md:self-auto">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-[#E8E5E2] text-[10px] font-semibold text-[#6B6B6B] shadow-2xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Live Auto-Sync
+                </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-4 flex-wrap w-full md:w-auto text-xs">
-              <div className="neu-pill px-3 py-1.5 flex items-center gap-1.5 text-[11px] text-[#1F1F1F]">
-                <Clock className="w-3.5 h-3.5 text-[#E86A5B]" />
-                <span>Avg AI: <strong>{health.avg_processing_duration_ms !== null && health.avg_processing_duration_ms !== undefined ? `${health.avg_processing_duration_ms}ms` : 'N/A'}</strong></span>
-                {health.p95_processing_duration_ms !== null && health.p95_processing_duration_ms !== undefined && (
-                  <span className="text-[10px] text-[#6B6B6B]">(p95: {health.p95_processing_duration_ms}ms)</span>
-                )}
+            {/* 4 Operational Breakdown Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Card 1: Photos & Delivery */}
+              <div className="p-3 rounded-2xl bg-white border border-[#E8E5E2] shadow-2xs space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] flex items-center justify-between">
+                  <span>Photos &amp; Guest Ready</span>
+                  <Camera className="w-3.5 h-3.5 text-[#E86A5B]" />
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-base font-black text-[#1F1F1F]">{health.photos_ready}</span>
+                  <span className="text-xs text-[#8A8A8A]">/ {health.photos_total} Total</span>
+                  <span className="text-[10px] font-bold text-emerald-600 ml-auto">
+                    {health.photos_total > 0 ? `${Math.round((health.photos_ready / health.photos_total) * 100)}%` : '100%'}
+                  </span>
+                </div>
+                <div className="text-[10px] text-[#6B6B6B] flex items-center justify-between pt-1 border-t border-[#F0EEEB]">
+                  <span>Queued: <strong>{health.photos_uploaded}</strong></span>
+                  <span>Active: <strong>{health.photos_processing}</strong></span>
+                  {health.photos_failed > 0 && <span className="text-rose-600 font-bold">Failed: {health.photos_failed}</span>}
+                </div>
               </div>
 
-              {health.photos_failed > 0 && (
-                <div className="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-[11px] flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>{health.photos_failed} Failed</span>
+              {/* Card 2: AI Backlog & Queue */}
+              <div className="p-3 rounded-2xl bg-white border border-[#E8E5E2] shadow-2xs space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] flex items-center justify-between">
+                  <span>AI Queue &amp; Backlog</span>
+                  <Layers className="w-3.5 h-3.5 text-[#E86A5B]" />
                 </div>
-              )}
+                <div className="flex items-baseline gap-1.5">
+                  <span className={`text-base font-black ${health.queue_depth && health.queue_depth > 25 ? 'text-amber-600' : 'text-[#1F1F1F]'}`}>
+                    {health.queue_metrics_unavailable ? 'N/A' : (health.queue_depth ?? 0)}
+                  </span>
+                  <span className="text-xs text-[#8A8A8A]">in Redis queue</span>
+                </div>
+                <div className="text-[10px] text-[#6B6B6B] flex items-center justify-between pt-1 border-t border-[#F0EEEB]">
+                  <span>Oldest: <strong>{health.oldest_queue_age_seconds !== null && health.oldest_queue_age_seconds !== undefined ? `${health.oldest_queue_age_seconds}s` : '0s'}</strong></span>
+                  <span>Workers: <strong>2</strong></span>
+                </div>
+              </div>
+
+              {/* Card 3: Performance & Latency */}
+              <div className="p-3 rounded-2xl bg-white border border-[#E8E5E2] shadow-2xs space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] flex items-center justify-between">
+                  <span>Capture-to-Guest</span>
+                  <Clock className="w-3.5 h-3.5 text-[#E86A5B]" />
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-base font-black text-[#1F1F1F]">
+                    {health.capture_to_guest_p50_ms !== null && health.capture_to_guest_p50_ms !== undefined ? `${health.capture_to_guest_p50_ms}ms` :
+                     (health.processing_p50_ms !== null && health.processing_p50_ms !== undefined ? `${health.processing_p50_ms}ms` :
+                      (health.avg_processing_duration_ms ? `${health.avg_processing_duration_ms}ms` : 'N/A'))}
+                  </span>
+                  <span className="text-[10px] text-[#8A8A8A]">
+                    {health.capture_to_guest_p95_ms ? `(p95: ${health.capture_to_guest_p95_ms}ms)` :
+                     (health.processing_p95_ms ? `(p95: ${health.processing_p95_ms}ms)` : '')}
+                  </span>
+                </div>
+                <div className="text-[10px] text-[#6B6B6B] flex items-center justify-between pt-1 border-t border-[#F0EEEB]">
+                  <span>AI: <strong>{health.ai_inference_p50_ms !== null && health.ai_inference_p50_ms !== undefined ? `${health.ai_inference_p50_ms}ms` : (health.avg_ai_inference_ms ? `${health.avg_ai_inference_ms}ms` : 'N/A')}</strong></span>
+                  <span>Sample: <strong>Latest 100</strong></span>
+                </div>
+              </div>
+
+              {/* Card 4: Live Activity */}
+              <div className="p-3 rounded-2xl bg-white border border-[#E8E5E2] shadow-2xs space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] flex items-center justify-between">
+                  <span>Activity (Past 15m)</span>
+                  <Zap className="w-3.5 h-3.5 text-[#E86A5B]" />
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-base font-black text-[#1F1F1F]">
+                    {health.photos_received_recently ?? 0}
+                  </span>
+                  <span className="text-xs text-[#8A8A8A]">received</span>
+                  <span className="text-[10px] text-emerald-600 font-bold ml-auto">
+                    {health.photos_completed_recently ?? 0} ready
+                  </span>
+                </div>
+                <div className="text-[10px] text-[#6B6B6B] flex items-center justify-between pt-1 border-t border-[#F0EEEB] truncate">
+                  <span>Last Ingest: <strong>{health.last_photo_received_at ? new Date(health.last_photo_received_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'None'}</strong></span>
+                </div>
+              </div>
             </div>
           </div>
         )}

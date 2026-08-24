@@ -542,31 +542,65 @@ def get_event_health_telemetry(
         Photo.status == PhotoStatus.PROCESSED.value
     ).scalar()
 
-    # 3. Latency calculations (average & p95 over latest 100 processed photos)
+    # 3. Latency calculations (over bounded sample of latest 100 processed photos)
     recent_latencies = db.query(
+        Photo.queued_at,
+        Photo.guest_ready_at,
         Photo.processing_duration_ms,
         Photo.ai_inference_ms
     ).filter(
         Photo.event_id == event_id,
         Photo.status == PhotoStatus.PROCESSED.value,
-        Photo.processing_duration_ms.isnot(None)
+        Photo.guest_ready_at.isnot(None),
+        Photo.is_deleted == False
     ).order_by(Photo.guest_ready_at.desc()).limit(100).all()
 
-    avg_duration = None
-    p95_duration = None
-    avg_ai = None
+    c2g_list = []
+    proc_list = []
+    ai_list = []
 
-    if recent_latencies:
-        durations = sorted([r[0] for r in recent_latencies if r[0] is not None])
-        ai_times = [r[1] for r in recent_latencies if r[1] is not None]
-        if durations:
-            avg_duration = int(sum(durations) / len(durations))
-            p95_idx = int(len(durations) * 0.95)
-            p95_duration = durations[min(p95_idx, len(durations) - 1)]
-        if ai_times:
-            avg_ai = int(sum(ai_times) / len(ai_times))
+    for q_at, gr_at, proc_ms, ai_ms in recent_latencies:
+        if q_at and gr_at:
+            c2g_ms = max(0, int((gr_at - q_at).total_seconds() * 1000))
+            c2g_list.append(c2g_ms)
+        elif proc_ms is not None:
+            c2g_list.append(proc_ms)
+        
+        if proc_ms is not None:
+            proc_list.append(proc_ms)
+        if ai_ms is not None:
+            ai_list.append(ai_ms)
 
-    # 4. Oldest pending photo in queue age
+    def calc_stats(vals):
+        if not vals:
+            return None, None, None
+        s = sorted(vals)
+        avg_v = int(sum(s) / len(s))
+        p50_idx = int(len(s) * 0.50)
+        p95_idx = min(int(len(s) * 0.95), len(s) - 1)
+        return s[p50_idx], s[p95_idx], avg_v
+
+    c2g_p50, c2g_p95, _ = calc_stats(c2g_list)
+    proc_p50, proc_p95, proc_avg = calc_stats(proc_list)
+    ai_p50, ai_p95, ai_avg = calc_stats(ai_list)
+
+    # 4. Recent activity metrics (past 15-minute window)
+    from datetime import timedelta
+    recent_cutoff = datetime.utcnow() - timedelta(minutes=15)
+    photos_received_recently = db.query(func.count(Photo.id)).filter(
+        Photo.event_id == event_id,
+        Photo.created_at >= recent_cutoff,
+        Photo.is_deleted == False
+    ).scalar() or 0
+
+    photos_completed_recently = db.query(func.count(Photo.id)).filter(
+        Photo.event_id == event_id,
+        Photo.guest_ready_at >= recent_cutoff,
+        Photo.status == PhotoStatus.PROCESSED.value,
+        Photo.is_deleted == False
+    ).scalar() or 0
+
+    # 5. Oldest pending photo in queue age
     oldest_queued = db.query(func.min(Photo.queued_at)).filter(
         Photo.event_id == event_id,
         Photo.status.in_([PhotoStatus.UPLOADED.value, PhotoStatus.PROCESSING.value]),
@@ -577,11 +611,11 @@ def get_event_health_telemetry(
     if oldest_queued:
         oldest_queue_age = max(0, int((datetime.utcnow() - oldest_queued).total_seconds()))
 
-    # 5. Queue depth from Redis
+    # 6. Queue depth from Redis
     q_depth = queue_telemetry.get_queue_depth()
     q_unavailable = (q_depth is None)
 
-    # 6. Pipeline health assessment (Decoupled, configurable thresholds)
+    # 7. Pipeline health assessment (Decoupled, configurable thresholds)
     pending_count = photos_uploaded + photos_processing
     if q_unavailable:
         pipeline_health = "TELEMETRY_UNAVAILABLE"
@@ -594,11 +628,45 @@ def get_event_health_telemetry(
     else:
         pipeline_health = "READY"
 
+    # 8. Diagnostic health reasons & human-readable message
+    health_reasons = []
+    if q_unavailable:
+        health_reasons.append("QUEUE_TELEMETRY_UNAVAILABLE")
+    if photos_failed > 0:
+        health_reasons.append("FAILED_PHOTOS_PRESENT")
+    if pending_count > settings.AI_BACKLOG_CRITICAL_THRESHOLD:
+        health_reasons.append("BACKLOG_CRITICAL")
+    elif pending_count > settings.AI_BACKLOG_WARNING_THRESHOLD:
+        health_reasons.append("BACKLOG_WARNING")
+    if oldest_queue_age is not None and oldest_queue_age > settings.AI_QUEUE_AGE_CRITICAL_SECONDS:
+        health_reasons.append("QUEUE_AGE_CRITICAL")
+    elif oldest_queue_age is not None and oldest_queue_age > settings.AI_QUEUE_AGE_WARNING_SECONDS:
+        health_reasons.append("QUEUE_AGE_WARNING")
+
+    if not health_reasons:
+        if pending_count > 0 or (q_depth is not None and q_depth > 0):
+            health_reasons.append("PROCESSING_NORMALLY")
+        else:
+            health_reasons.append("IDLE")
+
+    if pipeline_health == "READY":
+        health_message = "Event pipeline is ready."
+    elif pipeline_health == "PROCESSING":
+        health_message = "Photos are arriving and processing normally."
+    elif pipeline_health == "WARNING":
+        health_message = "AI processing is falling behind. Photos are safe, but guest delivery may be delayed."
+    elif pipeline_health == "CRITICAL":
+        health_message = "AI backlog is high. Photos remain durably stored, but guest delivery is significantly delayed."
+    else:
+        health_message = "Queue monitoring is temporarily unavailable. Photo processing status cannot be fully verified."
+
     return EventHealthResponse(
         event_id=event.id,
         event_name=event.name,
         status=event.status,
         pipeline_health=pipeline_health,
+        health_reasons=health_reasons,
+        health_message=health_message,
         photos_total=total_photos,
         photos_uploaded=photos_uploaded,
         photos_processing=photos_processing,
@@ -610,9 +678,18 @@ def get_event_health_telemetry(
         active_task_count=None,
         reserved_task_count=None,
         database_pending_count=pending_count,
-        avg_processing_duration_ms=avg_duration,
-        p95_processing_duration_ms=p95_duration,
-        avg_ai_inference_ms=avg_ai,
+        capture_to_guest_p50_ms=c2g_p50,
+        capture_to_guest_p95_ms=c2g_p95,
+        processing_p50_ms=proc_p50,
+        processing_p95_ms=proc_p95,
+        avg_processing_duration_ms=proc_avg,
+        p95_processing_duration_ms=proc_p95,
+        ai_inference_p50_ms=ai_p50,
+        ai_inference_p95_ms=ai_p95,
+        avg_ai_inference_ms=ai_avg,
         last_photo_received_at=last_photo_received,
         last_guest_ready_at=last_guest_ready,
+        photos_received_recently=photos_received_recently,
+        photos_completed_recently=photos_completed_recently,
+        recent_activity_window_minutes=15,
     )
