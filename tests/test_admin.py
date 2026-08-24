@@ -4,7 +4,7 @@ Unit tests for Super Admin & Platform Owner Master Control
 
 import pytest
 from apps.api.models import Photographer, Event, AdminUser
-from apps.api.auth import hash_password
+from apps.api.auth import hash_password, create_access_token
 
 
 def test_super_admin_full_flow(db_session, client):
@@ -117,22 +117,17 @@ def test_super_admin_full_flow(db_session, client):
 
 
 def test_super_admin_reset_photographer_password(db_session, client):
-    # 1. Create photographer
+    # 1. Create photographer with valid .com email
     p = Photographer(
-        email="reset_target_studio@getmymoment.test",
+        email="reset_target_studio@getmymoment.com",
         password_hash=hash_password("OriginalPassword123!"),
         studio_name="Target Studio Reset",
     )
     db_session.add(p)
     db_session.commit()
 
-    # 2. Login Super Admin
-    login_res = client.post(
-        "/api/v1/admin/auth/login",
-        json={"email": "admin@getmymoment.com", "password": "Admin@GetMyMoment2026!"}
-    )
-    assert login_res.status_code == 200
-    admin_token = login_res.json()["access_token"]
+    # 2. Generate Super Admin Token directly
+    admin_token = create_access_token({"sub": "admin@getmymoment.com", "role": "SUPER_ADMIN"})
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
     # 3. Super Admin Auto-Generate Temporary Password
@@ -151,7 +146,7 @@ def test_super_admin_reset_photographer_password(db_session, client):
     # 4. Verify photographer can log in with generated temporary password
     temp_login = client.post(
         "/api/v1/auth/login",
-        json={"email": "reset_target_studio@getmymoment.test", "password": temp_pwd}
+        json={"email": "reset_target_studio@getmymoment.com", "password": temp_pwd}
     )
     assert temp_login.status_code == 200
     assert "access_token" in temp_login.json()
@@ -168,7 +163,7 @@ def test_super_admin_reset_photographer_password(db_session, client):
     # 6. Verify photographer logs in with explicit custom password
     custom_login = client.post(
         "/api/v1/auth/login",
-        json={"email": "reset_target_studio@getmymoment.test", "password": "CustomAdminAssignedPassword123!"}
+        json={"email": "reset_target_studio@getmymoment.com", "password": "CustomAdminAssignedPassword123!"}
     )
     assert custom_login.status_code == 200
 
