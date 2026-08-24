@@ -521,8 +521,8 @@ class WirelessCameraServerManager:
                         os.makedirs(os.path.join(FTP_INCOMING_DIR, e.access_token), exist_ok=True)
             finally:
                 db.close()
-        except Exception as e:
-            logger.warning(f"Could not pre-create event directories: {e}")
+        except Exception:
+            pass
 
         http_port = int(os.environ.get("PORT", 8000))
         target_port = self.port if self.port != http_port else 2122

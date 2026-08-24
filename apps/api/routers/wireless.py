@@ -410,6 +410,8 @@ async def wireless_http_ingest(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
+    target_folder = get_or_create_uncategorized_folder(db, studio_id=event.photographer_id, event_id=event_id)
+
     uploaded_ids = []
     for file in files:
         try:
@@ -418,6 +420,7 @@ async def wireless_http_ingest(
                 upload_file=file,
                 original_filename=file.filename or "wireless_click.jpg",
                 studio_id=event.photographer_id,
+                folder_id=target_folder.id if target_folder else None,
             )
 
             existing = db.query(Photo).filter(
@@ -433,6 +436,7 @@ async def wireless_http_ingest(
                 id=file_id,
                 studio_id=event.photographer_id,
                 event_id=event_id,
+                folder_id=target_folder.id if target_folder else None,
                 original_file_name=file.filename or "wireless_click.jpg",
                 file_path=rel_path,
                 file_size=file_size,
