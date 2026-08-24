@@ -1168,7 +1168,7 @@ export default function ProfileAndPricingPage() {
                 const msg = encodeURIComponent(
                   `Hello Get My Moment Support! 📸\n\nStudio Name: ${profile?.studio_name || 'My Studio'}\nPlan: ${profile?.subscription_plan || 'TRIAL'}\nStudio ID: ${profile?.id || 'N/A'}\nEmail: ${profile?.email || 'N/A'}\n\nI need priority assistance with:`
                 );
-                window.open(`https://wa.me/919876543210?text=${msg}`, '_blank');
+                window.open(`https://wa.me/919662086550?text=${msg}`, '_blank');
               }}
               className="py-3.5 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-extrabold flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-600/25 cursor-pointer self-start md:self-auto flex-shrink-0"
             >
@@ -1309,8 +1309,8 @@ export default function ProfileAndPricingPage() {
                   </div>
                   <div>
                     <span className="text-[10px] text-[#6B6B6B] block font-medium">Studio Support Email</span>
-                    <a href="mailto:support@getmymoment.in" className="text-xs font-bold text-[#1F1F1F] hover:text-[#E86A5B]">
-                      support@getmymoment.in
+                    <a href="mailto:getmymoments@gmail.com" className="text-xs font-bold text-[#1F1F1F] hover:text-[#E86A5B]">
+                      getmymoments@gmail.com
                     </a>
                   </div>
                 </div>
@@ -1321,7 +1321,9 @@ export default function ProfileAndPricingPage() {
                   </div>
                   <div>
                     <span className="text-[10px] text-[#6B6B6B] block font-medium">Direct Phone / WhatsApp</span>
-                    <span className="text-xs font-bold text-[#1F1F1F] font-mono">+91 98765 43210</span>
+                    <a href="tel:+919662086550" className="text-xs font-bold text-[#1F1F1F] font-mono hover:text-[#3FA66B] block">
+                      +91 96620 86550
+                    </a>
                   </div>
                 </div>
               </div>

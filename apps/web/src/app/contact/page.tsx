@@ -89,7 +89,7 @@ export default function ContactUsPage() {
 
   const openWhatsAppChat = () => {
     const text = encodeURIComponent("Hello Get My Moment Support! 📸 I am interested in a demo / have a question regarding the Studio Platform.");
-    window.open(`https://wa.me/919876543210?text=${text}`, '_blank');
+    window.open(`https://wa.me/919662086550?text=${text}`, '_blank');
   };
 
   return (
@@ -140,7 +140,7 @@ export default function ContactUsPage() {
                   </div>
                   <div>
                     <h3 className="text-xs font-bold text-[#1F1F1F]">Instant WhatsApp Support</h3>
-                    <p className="text-[11px] text-[#6B6B6B] mt-0.5">+91 98765 43210 (Direct Chat)</p>
+                    <p className="text-[11px] text-[#6B6B6B] mt-0.5">+91 96620 86550 (Direct Chat)</p>
                   </div>
                 </div>
                 <div className="w-8 h-8 rounded-xl bg-[#F3F1EC] shadow-[2px_2px_5px_#D4D0C7,-2px_-2px_5px_#FFFFFF] flex items-center justify-center text-[#3FA66B]">
@@ -156,10 +156,12 @@ export default function ContactUsPage() {
                   </div>
                   <div>
                     <span className="text-[10px] font-bold uppercase text-[#6B6B6B] tracking-wider block">Official Email</span>
-                    <a href="mailto:support@getmymoment.in" className="text-xs font-bold text-[#1F1F1F] hover:text-[#E86A5B] transition-colors">
-                      support@getmymoment.in
+                    <a href="mailto:getmymoments@gmail.com" className="text-xs font-bold text-[#1F1F1F] hover:text-[#E86A5B] transition-colors">
+                      getmymoments@gmail.com
                     </a>
-                    <span className="text-[11px] text-[#6B6B6B] block mt-0.5">sales@getmymoment.in</span>
+                    <a href="mailto:prozone.studio1441@gmail.com" className="text-[11px] text-[#6B6B6B] hover:text-[#E86A5B] block mt-0.5 transition-colors">
+                      prozone.studio1441@gmail.com
+                    </a>
                   </div>
                 </div>
 
@@ -169,7 +171,9 @@ export default function ContactUsPage() {
                   </div>
                   <div>
                     <span className="text-[10px] font-bold uppercase text-[#6B6B6B] tracking-wider block">Helpline / Sales</span>
-                    <span className="text-xs font-bold text-[#1F1F1F] font-mono">+91 98765 43210</span>
+                    <a href="tel:+919662086550" className="text-xs font-bold text-[#1F1F1F] font-mono hover:text-[#E86A5B] transition-colors block mt-0.5">
+                      +91 96620 86550
+                    </a>
                   </div>
                 </div>
 
@@ -180,7 +184,7 @@ export default function ContactUsPage() {
                   <div>
                     <span className="text-[10px] font-bold uppercase text-[#6B6B6B] tracking-wider block">Headquarters & Labs</span>
                     <span className="text-xs font-medium text-[#1F1F1F] leading-tight block mt-0.5">
-                      Get My Moment Technologies, Ring Road / SG Highway, Surat & Ahmedabad, Gujarat, India.
+                      Get My Moment, Rajkot, Gujarat, India
                     </span>
                   </div>
                 </div>
@@ -192,9 +196,8 @@ export default function ContactUsPage() {
                   <div>
                     <span className="text-[10px] font-bold uppercase text-[#6B6B6B] tracking-wider block">Studio Support Hours</span>
                     <span className="text-xs font-semibold text-[#1F1F1F] block mt-0.5">
-                      Monday – Saturday: 9:00 AM – 8:00 PM IST
+                      24/7 Support
                     </span>
-                    <span className="text-[10px] text-[#6B6B6B] block">Emergency Shoot Support: 24/7 on WhatsApp</span>
                   </div>
                 </div>
               </div>

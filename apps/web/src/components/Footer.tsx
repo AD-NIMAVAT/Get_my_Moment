@@ -73,9 +73,9 @@ export function Footer() {
       title: 'Connect & Community',
       links: [
         { label: 'Instagram Community', href: 'https://instagram.com', isExternal: true },
-        { label: 'WhatsApp Studio Help', href: 'https://wa.me', isExternal: true },
+        { label: 'WhatsApp Studio Help', href: 'https://wa.me/919662086550', isExternal: true },
         { label: 'YouTube Tutorials', href: 'https://youtube.com', isExternal: true },
-        { label: 'contact@getmymoment.fun', href: 'mailto:contact@getmymoment.fun', isExternal: true },
+        { label: 'getmymoments@gmail.com', href: 'mailto:getmymoments@gmail.com', isExternal: true },
       ]
     }
   };
@@ -320,10 +320,10 @@ export function Footer() {
         {/* ========================================================================= */}
         <div className="border-t border-[#E2DDD5] bg-[#EBE8E1]/70 relative z-10">
           <div className="max-w-7xl 2xl:max-w-[1500px] 3xl:max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-12 py-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#6B6B6B]">
-            <div className="flex items-center gap-2 text-center sm:text-left">
+            <div className="flex flex-col sm:flex-row items-center gap-2 text-center sm:text-left">
               <span>© {new Date().getFullYear()} <strong className="text-[#1F1F1F]">Get My Moment</strong>. All rights reserved.</span>
               <span className="hidden sm:inline text-[#D4D0C7]">•</span>
-              <span className="hidden sm:inline text-[11px] text-[#8C8C8C]">Made for Indian Wedding Studios</span>
+              <span className="text-[11px] text-[#8C8C8C]">Developed by Pro_Technologies</span>
             </div>
 
             <div className="flex items-center gap-4 text-[11px] sm:text-xs font-medium text-[#6B6B6B] flex-wrap justify-center">
