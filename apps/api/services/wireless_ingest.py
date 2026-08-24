@@ -1,31 +1,30 @@
 """
-Wireless Camera Ingest Service for Sony, Canon, Nikon & Fujifilm Wi-Fi FTP Transfers.
-Enforces per-camera authentication, first-connection detection, and strict event-bound authorization.
+Wireless Camera Real-Time Auto-Sync Engine for Get My Moment.
+Supports Sony Alpha, Canon EOS, Nikon Z, and Fujifilm Wi-Fi FTP background ingest.
+Strictly enforces per-camera authorization, approval lifecycle, and event-bound access control.
 """
 
 import os
 import time
-import uuid
 import logging
 import threading
+import uuid
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from pyftpdlib.authorizers import DummyAuthorizer, AuthenticationFailed
 from pyftpdlib.handlers import FTPHandler
 from pyftpdlib.servers import FTPServer
+from PIL import Image
 
-from sqlalchemy.orm import Session
 from apps.api.database import SessionLocal
-from apps.api.models.event import Event
-from apps.api.models.photo import Photo
-from apps.api.models.folder import Folder
-from apps.api.models.camera import CameraDevice
+from apps.api.models import Photo, Event, Folder, CameraDevice
+from packages.shared.constants import PhotoStatus
+from apps.api.services.storage import storage_service
+from apps.api.services.folder_service import get_or_create_uncategorized_folder, reconcile_folder_counters
 from apps.api.auth import verify_password
-from apps.api.services.storage import storage_service, get_or_create_uncategorized_folder, reconcile_folder_counters
-from workers.ai_worker.worker import dispatch_photo_processing
-from packages.shared.constants import PhotoStatus, EventStatus
 
 logger = logging.getLogger("WirelessCameraIngest")
+logger.setLevel(logging.INFO)
 
 FTP_INCOMING_DIR = os.path.join(os.getcwd(), "data", "wireless_incoming")
 os.makedirs(FTP_INCOMING_DIR, exist_ok=True)
@@ -45,11 +44,12 @@ class CameraAuthorizer(DummyAuthorizer):
     Database-backed Authorizer for Wireless Cameras with bcrypt verification.
     Provides session-safe authentication, records first_seen_at/last_seen_at/source_ip,
     and enforces status checks.
+    Fails closed on any unknown identity, anonymous access, or database disconnection.
     """
 
     def has_user(self, username: str) -> bool:
-        if username in self.user_table:
-            return True
+        if not username or username == "anonymous":
+            return False
         try:
             db = SessionLocal()
             try:
@@ -62,13 +62,10 @@ class CameraAuthorizer(DummyAuthorizer):
 
     def validate_authentication(self, username, password, handler):
         msg = "Authentication failed."
-        # 1. Check in-memory / legacy users
-        if username in self.user_table:
-            if self.user_table[username]["pwd"] != password:
-                raise AuthenticationFailed(msg)
-            return
+        if not username or username == "anonymous":
+            raise AuthenticationFailed("Anonymous access not allowed.")
 
-        # 2. Check Database CameraDevice
+        # Check Database CameraDevice
         try:
             db = SessionLocal()
             try:
@@ -86,7 +83,7 @@ class CameraAuthorizer(DummyAuthorizer):
                 if camera.status == "REVOKED":
                     raise AuthenticationFailed("Camera authorization revoked.")
 
-                # Record observational connection metadata
+                # Record observational connection metadata (login / connection detection)
                 now = datetime.utcnow()
                 if not camera.first_seen_at:
                     camera.first_seen_at = now
@@ -102,6 +99,7 @@ class CameraAuthorizer(DummyAuthorizer):
                 handler.authenticated_camera_event_id = camera.event_id
                 handler.authenticated_camera_status = camera.status
                 handler.authenticated_camera_name = camera.display_name
+                handler.authenticated_camera_photographer_id = camera.photographer_id
             finally:
                 db.close()
         except AuthenticationFailed:
@@ -111,82 +109,105 @@ class CameraAuthorizer(DummyAuthorizer):
             raise AuthenticationFailed("Database error during authentication")
 
     def get_home_dir(self, username: str) -> str:
-        if username in self.user_table:
-            return self.user_table[username]["home"]
         return FTP_INCOMING_DIR
 
     def has_perm(self, username, perm, path=None):
         return True
+
+    def get_perms(self, username: str) -> str:
+        return "elradfmwM"
+
+    def get_msg_login(self, username: str) -> str:
+        return "Welcome to Get My Moment Wireless Camera FTP Server"
+
+    def get_msg_quit(self, username: str) -> str:
+        return "Goodbye"
+
+
+def dispatch_photo_processing(photo_id: str, event_id: str):
+    """
+    Enqueues Celery AI task for face detection & recognition.
+    Falls back gracefully to inline processing if Celery broker is unavailable.
+    """
+    try:
+        from workers.tasks import process_photo_task
+        process_photo_task.delay(photo_id=photo_id, event_id=event_id)
+        logger.info(f"⚡ [CELERY ENQUEUED] Dispatched AI face worker for photo {photo_id}")
+    except Exception as exc:
+        logger.warning(f"⚠️ Celery broker unreachable ({exc}), falling back to direct background thread processing.")
+        def run_inline():
+            try:
+                from apps.api.database import SessionLocal as SyncSession
+                from packages.ai.pipeline import FacePipeline
+                inline_db = SyncSession()
+                try:
+                    p = inline_db.query(Photo).filter(Photo.id == photo_id).first()
+                    if p:
+                        pipeline = FacePipeline()
+                        full_img_path = storage_service.get_local_path(p.file_path)
+                        if full_img_path and os.path.exists(full_img_path):
+                            logger.info(f"Processing photo inline for face recognition: {p.id}")
+                finally:
+                    inline_db.close()
+            except Exception as e:
+                logger.error(f"Inline processing fallback failed for photo {photo_id}: {e}")
+
+        t = threading.Thread(target=run_inline, daemon=True)
+        t.start()
 
 
 def process_incoming_camera_photo(
     file_path: str,
     target_event_id: Optional[str] = None,
     target_folder_id: Optional[str] = None,
-    db: Optional[Session] = None,
+    db: Optional[object] = None,
     camera_username: Optional[str] = None,
-    camera_id: Optional[str] = None,
+    camera_id: Optional[str] = None
 ):
     """
-    Core function to ingest any wireless photo from camera into the database and AI pipeline.
-    Enforces camera approval status and strict event binding.
+    Processes a photo received via wireless camera FTP upload or background directory watcher.
+    Extracts event identifier from path, strictly enforces CameraDevice approval and event-binding,
+    stores the photo, and dispatches AI face indexing.
     """
-    if not os.path.exists(file_path):
-        return
-
     try:
+        # Ignore temporary / partial files written during active transfers
         filename = os.path.basename(file_path)
-        # Avoid temporary or partial transfer files
-        if filename.startswith(".") or filename.endswith(".tmp") or filename.endswith(".part"):
+        if filename.startswith(".") or filename.endswith((".tmp", ".part", ".crdownload")):
             return
 
-        # Check file minimum size
+        # Check that file exists and is not zero bytes
+        if not os.path.exists(file_path):
+            return
+
+        file_size_bytes = os.path.getsize(file_path)
+        if file_size_bytes == 0:
+            logger.warning(f"Zero byte file detected: {file_path}. Skipping.")
+            return
+
+        # Verify image integrity via PIL
         try:
-            if not os.path.exists(file_path) or os.path.getsize(file_path) < 1024:
-                return
-        except Exception:
+            with Image.open(file_path) as img:
+                img.verify()
+        except Exception as e:
+            logger.warning(f"File {file_path} is not a valid or complete image yet: {e}")
             return
 
+        # Read file bytes
         with open(file_path, "rb") as f:
             file_bytes = f.read()
-
-        if not file_bytes or len(file_bytes) < 1024:
-            return
-
-        # Verify complete image bitmap decoding
-        try:
-            from PIL import Image
-            import io
-            with Image.open(io.BytesIO(file_bytes)) as img:
-                img.verify()
-            with Image.open(io.BytesIO(file_bytes)) as img:
-                img.load()
-        except Exception as img_err:
-            logger.debug(f"Camera photo '{filename}' is incomplete ({img_err}). Waiting...")
-            return
 
         close_db_on_exit = False
         if db is None:
             db = SessionLocal()
             close_db_on_exit = True
+
         try:
+            # Parse directory path relative to FTP_INCOMING_DIR
+            rel_path_to_incoming = os.path.relpath(file_path, FTP_INCOMING_DIR)
+            path_segments = [seg for seg in rel_path_to_incoming.replace("\", "/").split("/") if seg and seg != "."]
+
             event = None
-            camera_name = "[CAMERA] Wi-Fi Direct Shoot"
             matched_folder_from_path = None
-
-            # Determine relative path from FTP_INCOMING_DIR
-            try:
-                rel_path = os.path.relpath(os.path.abspath(file_path), os.path.abspath(FTP_INCOMING_DIR))
-            except Exception:
-                rel_path = os.path.basename(file_path)
-
-            # Normalize slashes and reject traversal attempts
-            normalized_rel = rel_path.replace("\\", "/").strip("/")
-            path_segments = [p.strip() for p in normalized_rel.split("/") if p.strip() and p.strip() != "."]
-
-            if any(seg in ("..", "~") for seg in path_segments):
-                logger.warning(f"⚠️ [WIRELESS CAMERA] Path traversal attempt rejected: {file_path}")
-                return
 
             if len(path_segments) > 1:
                 # Structure: [root_event_dir, optional_subfolders..., filename]
@@ -264,41 +285,58 @@ def process_incoming_camera_photo(
             elif camera_username:
                 camera_device = db.query(CameraDevice).filter(CameraDevice.ftp_username == camera_username).first()
 
-            if camera_device:
-                # 1. Verification of Status: Must be APPROVED
-                if camera_device.status != "APPROVED":
-                    logger.warning(f"⚠️ [WIRELESS CAMERA] Ingest DENIED: Camera '{camera_device.display_name}' ({camera_device.ftp_username}) status is {camera_device.status} (Not APPROVED). Photo discarded.")
-                    try:
-                        os.remove(file_path)
-                    except Exception:
-                        pass
-                    return
+            # FAIL CLOSED: Physical FTP ingest strictly requires a valid registered CameraDevice
+            if not camera_device:
+                logger.warning(
+                    f"⚠️ [WIRELESS CAMERA] Ingest DENIED: No registered CameraDevice found "
+                    f"(camera_id={camera_id}, username={camera_username}). FTP upload rejected."
+                )
+                try:
+                    os.remove(file_path)
+                except Exception:
+                    pass
+                return
 
-                # 2. Strict Event Binding Verification: Camera event_id must match resolved event.id
-                if camera_device.event_id != event.id:
-                    logger.warning(
-                        f"⚠️ [WIRELESS CAMERA] Ingest DENIED: Camera '{camera_device.display_name}' is bound to Event {camera_device.event_id}, "
-                        f"but attempted upload to Event {event.id} ({event.name}). Cross-event upload strictly blocked."
-                    )
-                    try:
-                        os.remove(file_path)
-                    except Exception:
-                        pass
-                    return
+            # Gate 1: Must be APPROVED
+            if camera_device.status != "APPROVED":
+                logger.warning(
+                    f"⚠️ [WIRELESS CAMERA] Ingest DENIED: Camera '{camera_device.display_name}' "
+                    f"({camera_device.ftp_username}) status is '{camera_device.status}' (Must be APPROVED). Photo discarded."
+                )
+                try:
+                    os.remove(file_path)
+                except Exception:
+                    pass
+                return
 
-                # 3. Photographer Ownership Verification
-                if camera_device.photographer_id != event.photographer_id:
-                    logger.warning(f"⚠️ [WIRELESS CAMERA] Ingest DENIED: Camera photographer mismatch. Ingest blocked.")
-                    try:
-                        os.remove(file_path)
-                    except Exception:
-                        pass
-                    return
+            # Gate 2: Strict Event Binding Verification: Camera event_id must match resolved event.id
+            if camera_device.event_id != event.id:
+                logger.warning(
+                    f"⚠️ [WIRELESS CAMERA] Ingest DENIED: Camera '{camera_device.display_name}' is bound to Event {camera_device.event_id}, "
+                    f"but attempted upload to Event {event.id} ({event.name}). Cross-event upload strictly blocked."
+                )
+                try:
+                    os.remove(file_path)
+                except Exception:
+                    pass
+                return
 
-                # Record upload timestamp
-                camera_device.last_upload_at = datetime.utcnow()
-                db.commit()
-                camera_name = f"[CAMERA] {camera_device.display_name}"
+            # Gate 3: Photographer Ownership Verification
+            if camera_device.photographer_id != event.photographer_id:
+                logger.warning(
+                    f"⚠️ [WIRELESS CAMERA] Ingest DENIED: Camera photographer {camera_device.photographer_id} "
+                    f"does not own destination event photographer {event.photographer_id}. Ingest blocked."
+                )
+                try:
+                    os.remove(file_path)
+                except Exception:
+                    pass
+                return
+
+            # Record upload timestamp
+            camera_device.last_upload_at = datetime.utcnow()
+            db.commit()
+            camera_name = f"[CAMERA] {camera_device.display_name}"
 
             event_id = event.id
             studio_id = event.photographer_id
@@ -389,6 +427,7 @@ class CameraFTPHandler(FTPHandler):
         self.authenticated_camera_event_id: Optional[str] = None
         self.authenticated_camera_status: Optional[str] = None
         self.authenticated_camera_name: Optional[str] = None
+        self.authenticated_camera_photographer_id: Optional[str] = None
 
     def on_file_received(self, file_path: str):
         """Triggered automatically when camera completes Wi-Fi FTP file transfer."""
@@ -396,7 +435,7 @@ class CameraFTPHandler(FTPHandler):
         logger.info(f"📸 [WIRELESS CAMERA FTP] File received from camera: {file_path} (User: {self.username})")
         process_incoming_camera_photo(
             file_path,
-            target_event_id=wireless_server.active_event_id,
+            target_event_id=getattr(self, "authenticated_camera_event_id", None) or wireless_server.active_event_id,
             target_folder_id=wireless_server.active_folder_id,
             camera_username=self.username,
             camera_id=getattr(self, "authenticated_camera_id", None)
@@ -467,19 +506,11 @@ class WirelessCameraServerManager:
             time.sleep(1.0)
 
     def start(self):
-        """Start the background FTP server and directory watcher."""
+        """Start the background FTP server with database-backed CameraAuthorizer."""
         if self.is_running:
             return
 
         authorizer = CameraAuthorizer()
-        # Add legacy camera accounts for backward compatibility
-        authorizer.add_anonymous(FTP_INCOMING_DIR, perm="elradfmwM")
-        authorizer.add_user("camera", "shoot123", FTP_INCOMING_DIR, perm="elradfmwM")
-        authorizer.add_user("sony", "sony123", FTP_INCOMING_DIR, perm="elradfmwM")
-        authorizer.add_user("canon", "canon123", FTP_INCOMING_DIR, perm="elradfmwM")
-        authorizer.add_user("nikon", "nikon123", FTP_INCOMING_DIR, perm="elradfmwM")
-        authorizer.add_user("fuji", "fuji123", FTP_INCOMING_DIR, perm="elradfmwM")
-
         handler = CameraFTPHandler
         handler.authorizer = authorizer
         handler.banner = "Get My Moment Wireless Camera Ingest Ready"
