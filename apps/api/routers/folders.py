@@ -11,11 +11,13 @@ import re
 import threading
 from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Header, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
+from jose import jwt
 
+from apps.api.config import settings
 from apps.api.database import get_db
 from apps.api.models import Photographer, Event, Folder, FolderType, Photo
 from apps.api.auth import get_current_photographer
@@ -432,16 +434,66 @@ def move_photos(
 def download_folder_zip(
     event_id: str,
     folder_id: str,
-    current_user: Photographer = Depends(get_current_photographer),
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """Stream a ZIP archive containing all high-res original photos of the specified folder."""
-    event = verify_event_ownership(event_id, current_user, db)
+    event = db.query(Event).filter(Event.id == event_id, Event.is_deleted == False).first()
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+
+    is_authorized = False
+
+    # Path A: Valid Guest or Selection Capability Token, or Photographer/Admin JWT via query token
+    if token:
+        if event.access_token == token or event.selection_token == token:
+            if not event.allow_downloads:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Downloads disabled for this event.")
+            is_authorized = True
+        else:
+            try:
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+                is_admin = payload.get("is_admin", False)
+                user_id = payload.get("sub")
+                if is_admin:
+                    is_authorized = True
+                elif user_id and event.photographer_id == user_id:
+                    is_authorized = True
+                else:
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to download photos from this event.")
+            except HTTPException:
+                raise
+            except Exception:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid access token.")
+
+    # Path B: Authenticated Photographer or Admin JWT via Header
+    elif authorization and authorization.startswith("Bearer "):
+        bearer_token = authorization.split(" ", 1)[1].strip()
+        try:
+            payload = jwt.decode(bearer_token, settings.SECRET_KEY, algorithms=["HS256"])
+            is_admin = payload.get("is_admin", False)
+            user_id = payload.get("sub")
+            if is_admin:
+                is_authorized = True
+            elif user_id and event.photographer_id == user_id:
+                is_authorized = True
+            else:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to download photos from this event.")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials.")
+
+    if not is_authorized:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please provide a valid download token or bearer credentials."
+        )
 
     folder = db.query(Folder).filter(
         Folder.id == folder_id,
         Folder.event_id == event.id,
-        Folder.studio_id == current_user.id
     ).first()
     if not folder:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found.")

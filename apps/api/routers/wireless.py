@@ -42,44 +42,12 @@ def get_public_ip() -> str:
         return "127.0.0.1"
 
 
-# --- Pydantic Schemas ---
-
-class CreateCameraRequest(BaseModel):
-    display_name: str
-    manufacturer: Optional[str] = None
-    model: Optional[str] = None
-
-
-class UpdateCameraRequest(BaseModel):
-    display_name: Optional[str] = None
-    manufacturer: Optional[str] = None
-    model: Optional[str] = None
-
-
-class CameraResponse(BaseModel):
-    id: str
-    event_id: str
-    photographer_id: str
-    display_name: str
-    manufacturer: Optional[str] = None
-    model: Optional[str] = None
-    ftp_username: str
-    status: str
-    first_seen_at: Optional[datetime] = None
-    last_seen_at: Optional[datetime] = None
-    last_upload_at: Optional[datetime] = None
-    last_source_ip: Optional[str] = None
-    created_at: datetime
-    approved_at: Optional[datetime] = None
-    rejected_at: Optional[datetime] = None
-    revoked_at: Optional[datetime] = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class CameraCreatedResponse(BaseModel):
-    camera: CameraResponse
-    credentials: dict
+from apps.api.schemas.camera import (
+    CreateCameraRequest,
+    UpdateCameraRequest,
+    CameraResponse,
+    CameraCreatedResponse,
+)
 
 
 # --- Camera Management Endpoints ---
@@ -114,7 +82,7 @@ def create_event_camera(
     db: Session = Depends(get_db),
     current_photographer: Photographer = Depends(get_current_photographer),
 ):
-    """Register a new camera device in PENDING_APPROVAL status and generate unique FTP credentials."""
+    """Register a new camera device (optionally auto-approved) and generate unique FTP credentials."""
     event = db.query(Event).filter(
         Event.id == event_id,
         Event.photographer_id == current_photographer.id,
@@ -139,7 +107,10 @@ def create_event_camera(
     plain_password = secrets.token_urlsafe(8) + "Aa1!"
     pwd_hash = hash_password(plain_password)
 
-    # Initial status MUST be PENDING_APPROVAL
+    # Status: APPROVED if auto_approve is True, otherwise PENDING_APPROVAL
+    initial_status = "APPROVED" if payload.auto_approve else "PENDING_APPROVAL"
+    approved_at = datetime.utcnow() if payload.auto_approve else None
+
     camera = CameraDevice(
         photographer_id=current_photographer.id,
         event_id=event.id,
@@ -148,7 +119,8 @@ def create_event_camera(
         model=payload.model.strip() if payload.model else None,
         ftp_username=cand_username,
         password_hash=pwd_hash,
-        status="PENDING_APPROVAL",
+        status=initial_status,
+        approved_at=approved_at,
     )
     db.add(camera)
     db.commit()
@@ -200,6 +172,35 @@ def update_event_camera(
     db.commit()
     db.refresh(camera)
     return camera
+
+
+@router.delete("/events/{event_id}/cameras/{camera_id}")
+def delete_event_camera(
+    event_id: str,
+    camera_id: str,
+    db: Session = Depends(get_db),
+    current_photographer: Photographer = Depends(get_current_photographer),
+):
+    """Delete a registered camera device for an event owned by the authenticated photographer."""
+    event = db.query(Event).filter(
+        Event.id == event_id,
+        Event.photographer_id == current_photographer.id,
+        Event.is_deleted == False
+    ).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found or access denied")
+
+    camera = db.query(CameraDevice).filter(
+        CameraDevice.id == camera_id,
+        CameraDevice.event_id == event_id,
+        CameraDevice.photographer_id == current_photographer.id
+    ).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found or access denied")
+
+    db.delete(camera)
+    db.commit()
+    return {"message": "Camera device deleted successfully", "id": camera_id}
 
 
 @router.post("/events/{event_id}/cameras/{camera_id}/approve", response_model=CameraResponse)

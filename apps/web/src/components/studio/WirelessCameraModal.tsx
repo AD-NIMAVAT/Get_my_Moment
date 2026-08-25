@@ -43,10 +43,12 @@ export function WirelessCameraModal({
   // Add Camera Form State
   const [showAddForm, setShowAddForm] = useState(false);
   const [cameraName, setCameraName] = useState("");
-  const [cameraManufacturer, setCameraManufacturer] = useState("Sony");
+  const [cameraManufacturer, setCameraManufacturer] = useState("Sony Alpha");
   const [cameraModel, setCameraModel] = useState("");
+  const [cameraAutoApprove, setCameraAutoApprove] = useState(true);
   const [addCameraLoading, setAddCameraLoading] = useState(false);
   const [createdCredentials, setCreatedCredentials] = useState<any>(null);
+  const [createdCameraInfo, setCreatedCameraInfo] = useState<any>(null);
 
   // Edit Camera State
   const [editingCamera, setEditingCamera] = useState<CameraDeviceItem | null>(null);
@@ -70,8 +72,20 @@ export function WirelessCameraModal({
     return "";
   };
 
+  // Strict Frontend Isolation: Clear all stale camera state when eventId or isOpen changes
   useEffect(() => {
-    if (isOpen) {
+    setCameras([]);
+    setEditingCamera(null);
+    setCreatedCredentials(null);
+    setCreatedCameraInfo(null);
+    setResetPasswordResult(null);
+    setShowAddForm(false);
+    setCameraName("");
+    setCameraModel("");
+    setCameraAutoApprove(true);
+    setCredentials(null);
+
+    if (isOpen && eventId) {
       loadData();
       loadCameras();
     }
@@ -115,6 +129,24 @@ export function WirelessCameraModal({
     setTimeout(() => setCopiedField(null), 2000);
   };
 
+  const copyAllCredentials = (creds: any, camInfo?: any) => {
+    const text = [
+      `=== Get My Moment Camera FTP Settings ===`,
+      `Event: ${eventName}`,
+      camInfo ? `Camera: ${camInfo.display_name} (${camInfo.manufacturer || ""} ${camInfo.model || ""})` : ``,
+      `Host: ${creds.host}`,
+      `Port: ${creds.port}`,
+      `Username: ${creds.username}`,
+      `Password: ${creds.password}`,
+      `Remote Directory: ${creds.destination_folder}`,
+      `Passive Mode: ON`,
+    ].filter(Boolean).join("\n");
+
+    navigator.clipboard.writeText(text);
+    setCopiedField("all_creds");
+    setTimeout(() => setCopiedField(null), 2500);
+  };
+
   const handleAddCamera = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cameraName.trim()) return;
@@ -128,10 +160,12 @@ export function WirelessCameraModal({
           display_name: cameraName.trim(),
           manufacturer: cameraManufacturer,
           model: cameraModel.trim() || undefined,
+          auto_approve: cameraAutoApprove,
         },
         token
       );
       setCreatedCredentials(res.credentials);
+      setCreatedCameraInfo(res.camera);
       setCameraName("");
       setCameraModel("");
       setShowAddForm(false);
@@ -140,6 +174,17 @@ export function WirelessCameraModal({
       alert(err.message || "Failed to register camera");
     } finally {
       setAddCameraLoading(false);
+    }
+  };
+
+  const handleDeleteCamera = async (cameraId: string, camName: string) => {
+    if (!confirm(`Are you sure you want to permanently delete camera "${camName}"? Its FTP credentials will be revoked immediately.`)) return;
+    const token = getAuthToken();
+    try {
+      await api.deleteEventCamera(eventId, cameraId, token);
+      setCameras((prev) => prev.filter((c) => c.id !== cameraId));
+    } catch (err: any) {
+      alert(err.message || "Failed to delete camera");
     }
   };
 
@@ -275,9 +320,9 @@ export function WirelessCameraModal({
             <Wifi className="w-7 h-7" />
           </div>
           <div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <h2 className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-[#1F1F1F]">
-                Wireless Camera Live Sync & Access Control
+                Connected Cameras
               </h2>
               <span className="px-2.5 py-0.5 text-xs font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-200 rounded-full flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping" />
@@ -285,7 +330,7 @@ export function WirelessCameraModal({
               </span>
             </div>
             <p className="text-xs sm:text-sm text-[#6B6B6B] mt-1">
-              Per-camera authorization and Wi-Fi streaming for <strong className="text-[#E86A5B] font-bold">{eventName}</strong>.
+              Event Workspace: <strong className="text-[#E86A5B] font-bold">{eventName}</strong>
             </p>
           </div>
         </div>
@@ -334,49 +379,121 @@ export function WirelessCameraModal({
             <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-start gap-3">
               <Info className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
               <div className="text-xs text-emerald-900 leading-relaxed">
-                <strong className="text-emerald-800 block mb-0.5 font-bold">🔒 Strict Event-Bound Security:</strong>
-                Only cameras created and <strong className="text-emerald-950">APPROVED</strong> for this event can upload photos. If a camera attempts to upload to another event, ingest is strictly blocked.
+                <strong className="text-emerald-800 block mb-0.5 font-bold">🔒 Strict Event-Bound Camera Isolation:</strong>
+                Only cameras created and assigned to <strong className="text-emerald-950">&quot;{eventName}&quot;</strong> can stream photos into this gallery. Cross-event uploads are strictly rejected at the server level.
               </div>
             </div>
 
-            {/* One-Time Credentials Banner (When Camera Created) */}
+            {/* One-Time Credentials Success Card (When Camera Created) */}
             {createdCredentials && (
-              <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 shadow-md">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-amber-900 flex items-center gap-2">
-                    <Key className="w-4 h-4 text-amber-700" />
-                    NEW CAMERA CREDENTIALS GENERATED (SHOW ONCE)
-                  </span>
-                  <button
-                    onClick={() => setCreatedCredentials(null)}
-                    className="text-xs text-amber-800 hover:text-amber-950 font-bold"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-                <p className="text-xs text-amber-800 mb-3">{createdCredentials.warning}</p>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 font-mono text-xs">
-                  <div className="bg-white p-2 rounded-lg border border-amber-200">
-                    <span className="text-[10px] text-gray-500 block">Host</span>
-                    <span className="font-bold">{createdCredentials.host}</span>
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50/50 border-2 border-emerald-300 rounded-3xl p-6 shadow-lg space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-200/70 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-extrabold text-emerald-950 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                        🎉 Camera Ready — Wi-Fi / FTP Credentials
+                      </span>
+                      <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-200/80 text-emerald-900 rounded-full">
+                        {createdCameraInfo?.status === "APPROVED" ? "Approved & Ready" : "Pending Approval"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-emerald-800 mt-0.5">
+                      {createdCameraInfo ? `${createdCameraInfo.display_name} (${createdCameraInfo.manufacturer || ""} ${createdCameraInfo.model || ""}) • Connected to: ${eventName}` : `Connected to: ${eventName}`}
+                    </p>
                   </div>
-                  <div className="bg-white p-2 rounded-lg border border-amber-200">
-                    <span className="text-[10px] text-gray-500 block">Port</span>
-                    <span className="font-bold">{createdCredentials.port}</span>
-                  </div>
-                  <div className="bg-white p-2 rounded-lg border border-amber-200">
-                    <span className="text-[10px] text-gray-500 block">Username</span>
-                    <span className="font-bold">{createdCredentials.username}</span>
-                  </div>
-                  <div className="bg-white p-2 rounded-lg border border-amber-200">
-                    <span className="text-[10px] text-gray-500 block">Password</span>
-                    <span className="font-bold text-[#E86A5B]">{createdCredentials.password}</span>
-                  </div>
-                  <div className="bg-white p-2 rounded-lg border border-amber-200">
-                    <span className="text-[10px] text-gray-500 block">Directory</span>
-                    <span className="font-bold text-emerald-800">{createdCredentials.destination_folder}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => copyAllCredentials(createdCredentials, createdCameraInfo)}
+                      className="btn-primary py-1.5 px-3 text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      {copiedField === "all_creds" ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedField === "all_creds" ? "Copied All!" : "Copy All Settings"}</span>
+                    </button>
+                    <button
+                      onClick={() => { setCreatedCredentials(null); setCreatedCameraInfo(null); }}
+                      className="px-3 py-1.5 text-xs text-emerald-800 hover:text-emerald-950 font-bold rounded-xl hover:bg-emerald-100/50 transition-colors"
+                    >
+                      Dismiss
+                    </button>
                   </div>
                 </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 font-mono text-xs">
+                  <div className="bg-white/90 p-3 rounded-2xl border border-emerald-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-gray-500 font-bold uppercase">FTP Host</span>
+                      <button
+                        onClick={() => copyToClipboard(createdCredentials.host, "c_host")}
+                        className="text-gray-400 hover:text-emerald-700"
+                        title="Copy Host"
+                      >
+                        {copiedField === "c_host" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    <span className="font-bold text-gray-900 block mt-1 truncate">{createdCredentials.host}</span>
+                  </div>
+
+                  <div className="bg-white/90 p-3 rounded-2xl border border-emerald-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-gray-500 font-bold uppercase">Port</span>
+                      <button
+                        onClick={() => copyToClipboard(String(createdCredentials.port), "c_port")}
+                        className="text-gray-400 hover:text-emerald-700"
+                        title="Copy Port"
+                      >
+                        {copiedField === "c_port" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    <span className="font-bold text-gray-900 block mt-1">{createdCredentials.port}</span>
+                  </div>
+
+                  <div className="bg-white/90 p-3 rounded-2xl border border-emerald-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-gray-500 font-bold uppercase">Username</span>
+                      <button
+                        onClick={() => copyToClipboard(createdCredentials.username, "c_user")}
+                        className="text-gray-400 hover:text-emerald-700"
+                        title="Copy Username"
+                      >
+                        {copiedField === "c_user" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    <span className="font-bold text-gray-900 block mt-1 truncate">{createdCredentials.username}</span>
+                  </div>
+
+                  <div className="bg-white/90 p-3 rounded-2xl border border-emerald-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-gray-500 font-bold uppercase">Password</span>
+                      <button
+                        onClick={() => copyToClipboard(createdCredentials.password, "c_pass")}
+                        className="text-gray-400 hover:text-[#E86A5B]"
+                        title="Copy Password"
+                      >
+                        {copiedField === "c_pass" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-[#E86A5B]" />}
+                      </button>
+                    </div>
+                    <span className="font-bold text-[#E86A5B] block mt-1 truncate">{createdCredentials.password}</span>
+                  </div>
+
+                  <div className="bg-white/90 p-3 rounded-2xl border border-emerald-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-gray-500 font-bold uppercase">Directory</span>
+                      <button
+                        onClick={() => copyToClipboard(createdCredentials.destination_folder, "c_dir")}
+                        className="text-gray-400 hover:text-emerald-700"
+                        title="Copy Directory"
+                      >
+                        {copiedField === "c_dir" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    <span className="font-bold text-emerald-800 block mt-1 truncate">{createdCredentials.destination_folder}</span>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-emerald-900 font-medium">
+                  💡 <strong>Tip:</strong> Enter these credentials into your camera&apos;s Wi-Fi FTP profile. The password is cryptographically secure and will not be displayed again.
+                </p>
               </div>
             )}
 
@@ -410,10 +527,10 @@ export function WirelessCameraModal({
               </h3>
               <button
                 onClick={() => setShowAddForm(!showAddForm)}
-                className="px-3.5 py-1.5 rounded-xl bg-[#E86A5B] text-white text-xs font-bold hover:bg-[#D35748] transition-all flex items-center gap-1.5 shadow-sm"
+                className="px-3.5 py-1.5 rounded-xl bg-[#E86A5B] text-white text-xs font-bold hover:bg-[#D35748] transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                Add Physical Camera
+                Connect Physical Camera
               </button>
             </div>
 
@@ -421,14 +538,14 @@ export function WirelessCameraModal({
             {showAddForm && (
               <form onSubmit={handleAddCamera} className="neu-card p-5 space-y-4 border border-[#E86A5B]/30">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-[#E86A5B]">
-                  Register New Hardware Camera
+                  Register New Professional Camera
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="text-[11px] font-bold text-[#6B6B6B] block mb-1">Camera Display Name *</label>
+                    <label className="text-[11px] font-bold text-[#6B6B6B] block mb-1">Camera Label / Name *</label>
                     <input
                       type="text"
-                      placeholder="e.g. Main Photographer Camera"
+                      placeholder="e.g. Sony A7 IV - Stage 1"
                       value={cameraName}
                       onChange={(e) => setCameraName(e.target.value)}
                       required
@@ -436,44 +553,56 @@ export function WirelessCameraModal({
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] font-bold text-[#6B6B6B] block mb-1">Manufacturer</label>
+                    <label className="text-[11px] font-bold text-[#6B6B6B] block mb-1">Brand / Manufacturer</label>
                     <select
                       value={cameraManufacturer}
                       onChange={(e) => setCameraManufacturer(e.target.value)}
                       className="w-full text-xs p-2.5 rounded-xl bg-white border border-[#E0DCD3] focus:outline-none focus:border-[#E86A5B]"
                     >
-                      <option value="Sony">Sony Alpha</option>
-                      <option value="Canon">Canon EOS</option>
-                      <option value="Nikon">Nikon Z</option>
-                      <option value="Fujifilm">Fujifilm X/GFX</option>
-                      <option value="Other">Other / Mobile Bridge</option>
+                      <option value="Sony Alpha">Sony Alpha</option>
+                      <option value="Canon EOS">Canon EOS</option>
+                      <option value="Nikon Z">Nikon Z</option>
+                      <option value="Fujifilm X">Fujifilm X</option>
+                      <option value="Pocket Mobile Relay / App">Pocket Mobile Relay / App</option>
+                      <option value="Custom">Custom / Other</option>
                     </select>
                   </div>
                   <div>
-                    <label className="text-[11px] font-bold text-[#6B6B6B] block mb-1">Model (Optional)</label>
+                    <label className="text-[11px] font-bold text-[#6B6B6B] block mb-1">Camera Model (Optional)</label>
                     <input
                       type="text"
-                      placeholder="e.g. A7 IV / EOS R6 II"
+                      placeholder="e.g. A7 IV / EOS R6 II / Z8"
                       value={cameraModel}
                       onChange={(e) => setCameraModel(e.target.value)}
                       className="w-full text-xs p-2.5 rounded-xl bg-white border border-[#E0DCD3] focus:outline-none focus:border-[#E86A5B]"
                     />
                   </div>
                 </div>
+
+                <label className="flex items-center gap-2 cursor-pointer pt-1">
+                  <input
+                    type="checkbox"
+                    checked={cameraAutoApprove}
+                    onChange={(e) => setCameraAutoApprove(e.target.checked)}
+                    className="w-4 h-4 text-[#E86A5B] accent-[#E86A5B] rounded"
+                  />
+                  <span className="text-xs font-bold text-[#1F1F1F]">Auto-approve this camera (Immediately ready for photo synchronization)</span>
+                </label>
+
                 <div className="flex items-center justify-end gap-2 pt-2">
                   <button
                     type="button"
                     onClick={() => setShowAddForm(false)}
-                    className="px-3 py-1.5 rounded-xl text-xs font-bold text-[#6B6B6B] hover:bg-[#EBE8E1]"
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold text-[#6B6B6B] hover:bg-[#EBE8E1] cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={addCameraLoading || !cameraName.trim()}
-                    className="px-4 py-1.5 rounded-xl bg-[#E86A5B] text-white text-xs font-bold hover:bg-[#D35748] disabled:opacity-50"
+                    className="px-4 py-1.5 rounded-xl bg-[#E86A5B] text-white text-xs font-bold hover:bg-[#D35748] disabled:opacity-50 cursor-pointer"
                   >
-                    {addCameraLoading ? "Generating..." : "Generate Camera Credentials"}
+                    {addCameraLoading ? "Generating Credentials..." : "Generate FTP Credentials"}
                   </button>
                 </div>
               </form>
@@ -536,12 +665,12 @@ export function WirelessCameraModal({
 
             {/* Cameras List */}
             {camerasLoading ? (
-              <div className="text-center py-8 text-xs text-[#6B6B6B]">Loading cameras...</div>
+              <div className="text-center py-8 text-xs text-[#6B6B6B]">Loading cameras for this event...</div>
             ) : cameras.length === 0 ? (
               <div className="neu-card p-8 text-center text-xs text-[#6B6B6B]">
                 <Camera className="w-8 h-8 text-[#6B6B6B] mx-auto mb-2 opacity-50" />
                 <p className="font-bold text-[#1F1F1F]">No cameras registered for this event yet.</p>
-                <p className="mt-1">Click &quot;Add Physical Camera&quot; above to create secure Wi-Fi credentials for your DSLR / Mirrorless cameras.</p>
+                <p className="mt-1">Click &quot;Connect Physical Camera&quot; above to create secure Wi-Fi credentials for your DSLR / Mirrorless cameras.</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -596,14 +725,14 @@ export function WirelessCameraModal({
                         <>
                           <button
                             onClick={() => handleApprove(cam.id)}
-                            className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                            className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1 cursor-pointer"
                           >
                             <Check className="w-3.5 h-3.5" />
                             Approve
                           </button>
                           <button
                             onClick={() => handleReject(cam.id)}
-                            className="px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                            className="px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1 cursor-pointer"
                           >
                             <X className="w-3.5 h-3.5" />
                             Reject
@@ -614,7 +743,7 @@ export function WirelessCameraModal({
                       {cam.status === "REJECTED" && (
                         <button
                           onClick={() => handleApprove(cam.id)}
-                          className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm"
+                          className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
                         >
                           Approve
                         </button>
@@ -623,7 +752,7 @@ export function WirelessCameraModal({
                       {cam.status === "APPROVED" && (
                         <button
                           onClick={() => handleRevoke(cam.id)}
-                          className="px-3 py-1 rounded-xl bg-gray-600 hover:bg-gray-700 text-white text-xs font-bold transition-all shadow-sm"
+                          className="px-3 py-1 rounded-xl bg-gray-600 hover:bg-gray-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
                         >
                           Revoke
                         </button>
@@ -631,7 +760,7 @@ export function WirelessCameraModal({
 
                       <button
                         onClick={() => handleStartEdit(cam)}
-                        className="p-1.5 rounded-lg text-gray-600 hover:text-black hover:bg-gray-100"
+                        className="p-1.5 rounded-lg text-gray-600 hover:text-black hover:bg-gray-100 cursor-pointer"
                         title="Edit metadata"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -639,10 +768,18 @@ export function WirelessCameraModal({
 
                       <button
                         onClick={() => handleResetPassword(cam.id)}
-                        className="p-1.5 rounded-lg text-gray-600 hover:text-[#E86A5B] hover:bg-gray-100"
+                        className="p-1.5 rounded-lg text-gray-600 hover:text-[#E86A5B] hover:bg-gray-100 cursor-pointer"
                         title="Reset FTP Password"
                       >
                         <Key className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteCamera(cam.id, cam.display_name)}
+                        className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
+                        title="Permanently Delete Camera"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>

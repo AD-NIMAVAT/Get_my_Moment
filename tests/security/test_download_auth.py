@@ -276,3 +276,19 @@ def test_12_zip_download_photographer_jwt_allowed(sec_download_env):
     res = client.get('/api/v1/events/' + event_a.id + '/download-all-zip', headers={'Authorization': 'Bearer ' + p1_jwt})
     assert res.status_code == 200
     assert res.headers['content-type'] == 'application/zip'
+
+def test_13_photographer_jwt_query_token_allowed(sec_download_env):
+    client = sec_download_env['client']
+    p1_jwt = sec_download_env['p1_jwt']
+    photo_a = sec_download_env['photo_a']
+    res = client.get('/api/v1/photos/' + photo_a.id + '/download?token=' + p1_jwt)
+    assert res.status_code == 200
+    assert len(res.content) > 0
+
+def test_14_zip_download_photographer_jwt_query_token_allowed(sec_download_env):
+    client = sec_download_env['client']
+    p1_jwt = sec_download_env['p1_jwt']
+    event_a = sec_download_env['event_a']
+    res = client.get('/api/v1/events/' + event_a.id + '/download-all-zip?token=' + p1_jwt)
+    assert res.status_code == 200
+    assert res.headers['content-type'] == 'application/zip'

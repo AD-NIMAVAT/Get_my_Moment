@@ -274,16 +274,29 @@ def download_original_photo(
 
     is_authorized = False
 
-    # Path A: Valid Guest or Selection Capability Token
+    # Path A: Valid Guest or Selection Capability Token, or Photographer/Admin JWT via query token
     if token:
         if event.access_token == token or event.selection_token == token:
             if not event.allow_downloads:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Photo downloads are disabled for this event.")
             is_authorized = True
         else:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid download token.")
+            try:
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+                is_admin = payload.get("is_admin", False)
+                user_id = payload.get("sub")
+                if is_admin:
+                    is_authorized = True
+                elif user_id and event.photographer_id == user_id:
+                    is_authorized = True
+                else:
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to download photos from this event.")
+            except HTTPException:
+                raise
+            except Exception:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid download token.")
 
-    # Path B: Authenticated Photographer or Admin JWT
+    # Path B: Authenticated Photographer or Admin JWT via Header
     elif authorization and authorization.startswith("Bearer "):
         bearer_token = authorization.split(" ", 1)[1].strip()
         try:
@@ -345,16 +358,29 @@ def download_all_photos_as_zip(
 
     is_authorized = False
 
-    # Path A: Valid Guest or Selection Capability Token
+    # Path A: Valid Guest or Selection Capability Token, or Photographer/Admin JWT via query token
     if token:
         if event.access_token == token or event.selection_token == token:
             if not event.allow_downloads:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Downloads disabled for this event.")
             is_authorized = True
         else:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid access token.")
+            try:
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+                is_admin = payload.get("is_admin", False)
+                user_id = payload.get("sub")
+                if is_admin:
+                    is_authorized = True
+                elif user_id and event.photographer_id == user_id:
+                    is_authorized = True
+                else:
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to download photos from this event.")
+            except HTTPException:
+                raise
+            except Exception:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid access token.")
 
-    # Path B: Authenticated Photographer or Admin JWT
+    # Path B: Authenticated Photographer or Admin JWT via Header
     elif authorization and authorization.startswith("Bearer "):
         bearer_token = authorization.split(" ", 1)[1].strip()
         try:

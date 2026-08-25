@@ -1176,7 +1176,13 @@ export default function GuestExperiencePage() {
               )}
 
               <img
-                src={`${api.getApiBaseUrl().replace('/api/v1', '')}${matchResult.matched_photos[selectedPhotoIndex].download_url}`}
+                src={
+                  matchResult.matched_photos[selectedPhotoIndex].download_url.startsWith('http')
+                    ? matchResult.matched_photos[selectedPhotoIndex].download_url
+                    : `${api.getApiBaseUrl().replace('/api/v1', '')}${matchResult.matched_photos[selectedPhotoIndex].download_url}${
+                        matchResult.matched_photos[selectedPhotoIndex].download_url.includes('?') ? '&' : '?'
+                      }token=${encodeURIComponent(token)}`
+                }
                 alt={matchResult.matched_photos[selectedPhotoIndex].original_file_name}
                 className="max-h-[72vh] w-auto max-w-full object-contain rounded-2xl shadow-2xl"
               />
@@ -1196,7 +1202,13 @@ export default function GuestExperiencePage() {
             {/* Bottom Actions */}
             <div className="mt-4 flex items-center gap-3">
               <a
-                href={`${api.getApiBaseUrl().replace('/api/v1', '')}${matchResult.matched_photos[selectedPhotoIndex].download_url}`}
+                href={
+                  matchResult.matched_photos[selectedPhotoIndex].download_url.startsWith('http')
+                    ? matchResult.matched_photos[selectedPhotoIndex].download_url
+                    : `${api.getApiBaseUrl().replace('/api/v1', '')}${matchResult.matched_photos[selectedPhotoIndex].download_url}${
+                        matchResult.matched_photos[selectedPhotoIndex].download_url.includes('?') ? '&' : '?'
+                      }token=${encodeURIComponent(token)}`
+                }
                 download={matchResult.matched_photos[selectedPhotoIndex].original_file_name}
                 className="btn-primary py-2.5 px-6 text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-[#E86A5B]/30"
               >

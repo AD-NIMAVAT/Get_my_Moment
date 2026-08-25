@@ -652,7 +652,7 @@ class ApiClient {
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Signup failed');
     }
     return res.json();
@@ -689,7 +689,7 @@ class ApiClient {
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to submit verification');
     }
     return res.json();
@@ -702,7 +702,7 @@ class ApiClient {
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Login failed');
     }
     return res.json();
@@ -1020,8 +1020,11 @@ class ApiClient {
     return res.json();
   }
 
-  getFolderZipDownloadUrl(eventId: string, folderId: string): string {
-    return `${this.baseUrl}/events/${eventId}/folders/${folderId}/download-zip`;
+  getFolderZipDownloadUrl(eventId: string, folderId: string, token?: string): string {
+    const authTok = token || this.getToken();
+    return authTok
+      ? `${this.baseUrl}/events/${eventId}/folders/${folderId}/download-zip?token=${encodeURIComponent(authTok)}`
+      : `${this.baseUrl}/events/${eventId}/folders/${folderId}/download-zip`;
   }
 
   // CRM & Leads
@@ -1434,12 +1437,18 @@ class ApiClient {
     return `${this.baseUrl}/events/${eventId}/qr`;
   }
 
-  getDownloadUrl(photoId: string): string {
-    return `${this.baseUrl}/photos/${photoId}/download`;
+  getDownloadUrl(photoId: string, token?: string): string {
+    const authTok = token || this.getToken();
+    return authTok
+      ? `${this.baseUrl}/photos/${photoId}/download?token=${encodeURIComponent(authTok)}`
+      : `${this.baseUrl}/photos/${photoId}/download`;
   }
 
-  getDownloadAllZipUrl(eventId: string, filterType: 'all' | 'studio' | 'guest' = 'all'): string {
-    return `${this.baseUrl}/events/${eventId}/photos/download-all-zip?filter_type=${filterType}`;
+  getDownloadAllZipUrl(eventId: string, filterType: 'all' | 'studio' | 'guest' = 'all', token?: string): string {
+    const authTok = token || this.getToken();
+    return authTok
+      ? `${this.baseUrl}/events/${eventId}/download-all-zip?filter_type=${filterType}&token=${encodeURIComponent(authTok)}`
+      : `${this.baseUrl}/events/${eventId}/download-all-zip?filter_type=${filterType}`;
   }
 
   // Studio Calendar & Availability
@@ -2148,7 +2157,7 @@ class ApiClient {
 
   async createEventCamera(
     eventId: string,
-    data: { display_name: string; manufacturer?: string; model?: string },
+    data: { display_name: string; manufacturer?: string; model?: string; auto_approve?: boolean },
     token?: string
   ): Promise<any> {
     const authToken = token || this.getToken();
@@ -2163,6 +2172,21 @@ class ApiClient {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to create camera');
+    }
+    return res.json();
+  }
+
+  async deleteEventCamera(eventId: string, cameraId: string, token?: string): Promise<{ message: string; id: string }> {
+    const authToken = token || this.getToken();
+    const res = await fetch(`${this.baseUrl}/wireless/events/${eventId}/cameras/${cameraId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to delete camera');
     }
     return res.json();
   }

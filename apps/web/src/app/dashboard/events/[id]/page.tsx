@@ -46,6 +46,7 @@ export default function EventCommandCenterPage() {
   const [operations, setOperations] = useState<OperationsData | null>(null);
   const [guestReport, setGuestReport] = useState<GuestUploadsReportResponse | null>(null);
   const [health, setHealth] = useState<EventHealthData | null>(null);
+  const [cameraCount, setCameraCount] = useState<number>(0);
   const [togglingGuestUploads, setTogglingGuestUploads] = useState(false);
   
   const [activeTab, setActiveTab] = useState<Tab>('operations');
@@ -104,7 +105,7 @@ export default function EventCommandCenterPage() {
   const loadAllEventData = async () => {
     try {
       setLoading(true);
-      const [eventData, photosData, leadsData, financeData, opsData, guestReportData, foldersData, healthData] = await Promise.all([
+      const [eventData, photosData, leadsData, financeData, opsData, guestReportData, foldersData, healthData, camerasData] = await Promise.all([
         api.getEvent(eventId),
         api.getEventPhotos(eventId),
         api.getEventLeads(eventId),
@@ -113,6 +114,7 @@ export default function EventCommandCenterPage() {
         api.getGuestUploadsReport(eventId).catch(() => null),
         api.getFolders(eventId).catch(() => []),
         api.getEventHealth(eventId).catch(() => null),
+        api.listEventCameras(eventId).catch(() => []),
       ]);
       setEvent(eventData);
       setPhotos(photosData);
@@ -122,6 +124,7 @@ export default function EventCommandCenterPage() {
       setGuestReport(guestReportData);
       setFolders(foldersData);
       setHealth(healthData);
+      setCameraCount(camerasData.length);
       if (foldersData.length > 0 && !uploadTargetFolderId) {
         setUploadTargetFolderId(foldersData[0].id);
       }
@@ -1208,6 +1211,39 @@ export default function EventCommandCenterPage() {
         {/* TAB 1: Operations & Timeline */}
         {activeTab === 'operations' && (
           <div className="space-y-8">
+            {/* Dedicated Photography Cameras Section */}
+            <div className="neu-card p-6 sm:p-7">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white shadow-md shadow-[#E86A5B]/20 shrink-0">
+                    <Camera className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <h3 className="text-lg font-display font-extrabold text-[#1F1F1F]">Photography Cameras</h3>
+                      <span className="px-2.5 py-0.5 text-xs font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 rounded-full flex items-center gap-1">
+                        <Wifi className="w-3 h-3" />
+                        {cameraCount > 0 ? `${cameraCount} Camera${cameraCount > 1 ? 's' : ''} Connected` : 'Wi-Fi / FTP Ingest Ready'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#6B6B6B] mt-1 max-w-xl">
+                      Connect your professional Sony, Canon, Nikon, or Fujifilm cameras for automatic Wi-Fi / FTP photo synchronization in real time.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <button
+                    onClick={() => setShowWirelessModal(true)}
+                    className="btn-primary py-2.5 px-4 text-xs flex items-center gap-2 shadow-sm cursor-pointer"
+                  >
+                    <Wifi className="w-4 h-4" />
+                    <span>{cameraCount > 0 ? 'Manage Cameras' : '📷 Connect Wi-Fi / FTP Camera'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {/* Ceremonies Timeline */}
             <div className="neu-card p-7">
               <div className="flex items-center justify-between mb-4">

@@ -30,6 +30,13 @@ from apps.api.schemas.matching import (
     OTPVerificationResponse,
 )
 
+from apps.api.schemas.camera import (
+    CreateCameraRequest,
+    UpdateCameraRequest,
+    CameraResponse,
+    CameraCreatedResponse,
+)
+
 __all__ = [
     "PhotographerSignupRequest",
     "PhotographerLoginRequest",
@@ -48,4 +55,8 @@ __all__ = [
     "SelfieSearchResponse",
     "OTPVerificationRequest",
     "OTPVerificationResponse",
+    "CreateCameraRequest",
+    "UpdateCameraRequest",
+    "CameraResponse",
+    "CameraCreatedResponse",
 ]

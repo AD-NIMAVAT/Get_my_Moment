@@ -13,7 +13,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { 
   Plus, Camera, Users, Sparkles, Copy, Check, ExternalLink, 
   Calendar, ShieldCheck, ArrowUpRight, Trash2, Crown, Image as ImageIcon,
-  Layers, HardDrive, CheckCircle2, QrCode, Download
+  Layers, HardDrive, CheckCircle2, QrCode, Download, Wifi, Zap
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -29,6 +29,12 @@ export default function DashboardPage() {
   const [newEventName, setNewEventName] = useState('');
   const [allowDownloads, setAllowDownloads] = useState(true);
   const [requireOtp, setRequireOtp] = useState(false);
+  const [enableCamera, setEnableCamera] = useState(false);
+  const [cameraBrand, setCameraBrand] = useState('Sony Alpha');
+  const [cameraName, setCameraName] = useState('Main Camera 1');
+  const [cameraModel, setCameraModel] = useState('');
+  const [createdCameraCreds, setCreatedCameraCreds] = useState<any>(null);
+  const [copiedCredField, setCopiedCredField] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   // Delete Confirm State
@@ -70,9 +76,40 @@ export default function DashboardPage() {
         allow_downloads: allowDownloads,
         require_otp: requireOtp,
       });
+
+      let camCreds = null;
+      if (enableCamera) {
+        try {
+          const camRes = await api.createEventCamera(
+            created.id,
+            {
+              display_name: cameraName.trim() || 'Main Camera 1',
+              manufacturer: cameraBrand,
+              model: cameraModel.trim() || undefined,
+              auto_approve: true,
+            }
+          );
+          camCreds = {
+            ...camRes.credentials,
+            eventName: created.name,
+            cameraName: cameraName.trim() || 'Main Camera 1',
+            brand: cameraBrand,
+          };
+        } catch (camErr: any) {
+          console.error('Camera creation warning:', camErr);
+        }
+      }
+
       setShowCreateModal(false);
       setNewEventName('');
+      setEnableCamera(false);
+      setCameraName('Main Camera 1');
+      setCameraModel('');
       setEvents([created, ...events]);
+
+      if (camCreds) {
+        setCreatedCameraCreds(camCreds);
+      }
       toast.success(`🎉 Event "${created.name}" created successfully!`);
     } catch (err: any) {
       toast.error(err.message || 'Failed to create event workspace');
@@ -387,6 +424,62 @@ export default function DashboardPage() {
                 <span className="text-[11px] text-[#6B6B6B] leading-tight block mt-0.5">Verify guest phone numbers before AI face search</span>
               </div>
             </label>
+
+            {/* Camera Setup Toggle */}
+            <div className="p-3.5 rounded-2xl bg-[#F3EFEA] border border-[#E2DDD5] space-y-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={enableCamera}
+                  onChange={(e) => setEnableCamera(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 text-[#E86A5B] accent-[#E86A5B]"
+                />
+                <div>
+                  <span className="text-xs font-bold text-[#1F1F1F] flex items-center gap-1.5">
+                    <Wifi className="w-3.5 h-3.5 text-[#E86A5B]" />
+                    <span>Connect Photography Camera (Wi-Fi / FTP Ingest)</span>
+                  </span>
+                  <span className="text-[11px] text-[#6B6B6B] leading-tight block mt-0.5">
+                    Auto-generate secure FTP credentials for your Sony, Canon, Nikon, or Fuji camera.
+                  </span>
+                </div>
+              </label>
+
+              {enableCamera && (
+                <div className="pt-2.5 border-t border-[#E8E4DC] grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#1F1F1F] mb-1">
+                      Camera Brand
+                    </label>
+                    <select
+                      value={cameraBrand}
+                      onChange={(e) => setCameraBrand(e.target.value)}
+                      className="gmm-input w-full text-xs"
+                    >
+                      <option value="Sony Alpha">Sony Alpha (Wi-Fi FTP)</option>
+                      <option value="Canon EOS">Canon EOS (WFT / Wi-Fi)</option>
+                      <option value="Nikon Z">Nikon Z / DSLR (WT / FTP)</option>
+                      <option value="Fujifilm X">Fujifilm X Series</option>
+                      <option value="Pocket Mobile Relay">Pocket Mobile Relay / App</option>
+                      <option value="Custom Hardware">Other / Custom Ingest</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#1F1F1F] mb-1">
+                      Camera Name / Tag
+                    </label>
+                    <input
+                      type="text"
+                      value={cameraName}
+                      onChange={(e) => setCameraName(e.target.value)}
+                      placeholder="e.g. Sony A7 IV - Stage"
+                      className="gmm-input w-full text-xs"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-5 border-t border-[#E2DDD5]">
@@ -406,6 +499,73 @@ export default function DashboardPage() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* NEWLY PROVISIONED CAMERA CREDENTIALS MODAL */}
+      <Modal
+        isOpen={!!createdCameraCreds}
+        onClose={() => setCreatedCameraCreds(null)}
+        title="📷 Camera FTP Credentials Ready"
+        subtitle={`Your camera "${createdCameraCreds?.cameraName}" is configured for ${createdCameraCreds?.eventName}.`}
+        icon={<Wifi className="w-5 h-5 text-[#E86A5B]" />}
+        size="md"
+      >
+        {createdCameraCreds && (
+          <div className="space-y-4">
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Camera auto-approved! Enter these settings into your camera's FTP / Wi-Fi menu:</span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2.5">
+              {[
+                { label: 'FTP Server Host / IP', key: 'host', value: createdCameraCreds.host },
+                { label: 'FTP Port', key: 'port', value: String(createdCameraCreds.port) },
+                { label: 'FTP Username', key: 'username', value: createdCameraCreds.username },
+                { label: 'FTP Password', key: 'password', value: createdCameraCreds.password },
+                { label: 'Target Directory', key: 'destination_folder', value: createdCameraCreds.destination_folder },
+              ].map((field) => (
+                <div
+                  key={field.key}
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-[#E2DDD5]"
+                >
+                  <div>
+                    <span className="text-[10px] text-[#6B6B6B] uppercase font-bold block">{field.label}</span>
+                    <span className="text-xs font-mono font-bold text-[#1F1F1F]">{field.value}</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(field.value);
+                      setCopiedCredField(field.key);
+                      setTimeout(() => setCopiedCredField(null), 2000);
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-black/5 text-[#6B6B6B] hover:text-[#1F1F1F] transition-colors"
+                    title="Copy to clipboard"
+                  >
+                    {copiedCredField === field.key ? (
+                      <Check className="w-4 h-4 text-emerald-600" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-[11px] text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+              ⚠️ Save this password now. For security, it will not be shown again.
+            </p>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setCreatedCameraCreds(null)}
+                className="btn-primary py-2.5 px-6 text-xs font-bold"
+              >
+                Done / I have configured my camera
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* QUICK EVENT QR MODAL */}
