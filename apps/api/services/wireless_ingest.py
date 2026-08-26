@@ -212,24 +212,42 @@ def process_incoming_camera_photo(
                     return
 
                 # Gate 2: Camera is strictly bound to its assigned event
-                if camera_device.event_id:
-                    event = db.query(Event).filter(
-                        Event.id == camera_device.event_id,
-                        Event.is_deleted == False
-                    ).first()
+                if not camera_device.event_id:
+                    logger.warning(f"⚠️ [WIRELESS CAMERA] Camera {camera_device.id} is not bound to any event.")
+                    return
 
-                # Nested subfolder resolution (if camera created subfolders inside event or custom paths)
-                if event and len(path_segments) > 1:
-                    for seg in path_segments[:-1]:
+                event = db.query(Event).filter(
+                    Event.id == camera_device.event_id,
+                    Event.is_deleted == False
+                ).first()
+
+                if not event:
+                    logger.warning(f"⚠️ [WIRELESS CAMERA] Destination event {camera_device.event_id} not found or deleted.")
+                    return
+
+                # Path verification: if camera specified an explicit root path
+                if len(path_segments) > 1:
+                    root_dir = path_segments[0]
+                    is_camera_dcim = root_dir.upper() in ["DCIM", "100MSDCF", "1", "2", "3", "4", "5", "100CANON", "100NIKON", "100_FUJI"]
+                    matches_event = (root_dir == event.slug or root_dir == event.access_token or root_dir == str(event.id))
+                    
+                    if not is_camera_dcim and not matches_event:
+                        logger.warning(
+                            f"⚠️ [WIRELESS CAMERA] Ingest DENIED: Path '{root_dir}' does not match bound event '{event.slug}' / '{event.access_token}'. Photo rejected."
+                        )
+                        return
+
+                    # Nested subfolder resolution (if camera created subfolders inside event or custom paths)
+                    if matches_event and len(path_segments) > 2:
+                        subfolder_name = path_segments[1]
                         folder_match = db.query(Folder).filter(
                             Folder.event_id == event.id,
-                            (Folder.slug == seg) | (Folder.name == seg)
+                            (Folder.slug == subfolder_name) | (Folder.name == subfolder_name)
                         ).first()
                         if folder_match:
                             matched_folder_from_path = folder_match
-                            break
 
-            # --- 2. FALLBACK PATH-BASED EVENT RESOLUTION (For HTTP Ingest / Folder-based uploads) ---
+            # --- 2. FALLBACK PATH-BASED EVENT RESOLUTION (For HTTP Ingest / Legacy Folder-based uploads) ---
             if not event and len(path_segments) > 1:
                 # Structure: [root_event_dir, optional_subfolders..., filename]
                 root_dir = path_segments[0]
@@ -301,9 +319,10 @@ def process_incoming_camera_photo(
                 return
 
             # Record upload timestamp
-            camera_device.last_upload_at = datetime.utcnow()
-            db.commit()
-            camera_name = f"[CAMERA] {camera_device.display_name}"
+            if camera_device:
+                camera_device.last_upload_at = datetime.utcnow()
+                db.commit()
+            camera_name = f"[CAMERA] {camera_device.display_name}" if camera_device else "Wireless Camera"
 
             event_id = event.id
             studio_id = event.photographer_id
@@ -368,8 +387,8 @@ def process_incoming_camera_photo(
             reconcile_folder_counters(db, event_id=event.id, folder_id=target_folder.id)
             logger.info(f"📸 ✅ [WIRELESS CAMERA SYNCED] Photo '{filename}' ingested into Folder '{target_folder.name}' in Event '{event.name}'")
 
-            # Dispatch AI face recognition worker
-            dispatch_photo_processing(photo_id=photo.id, event_id=event_id)
+            # Dispatch AI face recognition worker with session context
+            dispatch_photo_processing(photo_id=photo.id, event_id=event_id, db=db)
 
             # Remove from incoming staging directory
             try:
