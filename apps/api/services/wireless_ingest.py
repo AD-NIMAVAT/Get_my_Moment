@@ -195,7 +195,42 @@ def process_incoming_camera_photo(
             event = None
             matched_folder_from_path = None
 
-            if len(path_segments) > 1:
+            # --- 1. RESOLVE CAMERA DEVICE FIRST (AUTHORITATIVE IDENTITY) ---
+            camera_device = None
+            if camera_id:
+                camera_device = db.query(CameraDevice).filter(CameraDevice.id == camera_id).first()
+            elif camera_username:
+                camera_device = db.query(CameraDevice).filter(CameraDevice.ftp_username == camera_username).first()
+
+            if camera_device:
+                # Gate 1: Must be APPROVED
+                if camera_device.status != "APPROVED":
+                    logger.warning(
+                        f"⚠️ [WIRELESS CAMERA] Ingest DENIED: Camera '{camera_device.display_name}' "
+                        f"({camera_device.ftp_username}) status is '{camera_device.status}' (Must be APPROVED). Photo skipped."
+                    )
+                    return
+
+                # Gate 2: Camera is strictly bound to its assigned event
+                if camera_device.event_id:
+                    event = db.query(Event).filter(
+                        Event.id == camera_device.event_id,
+                        Event.is_deleted == False
+                    ).first()
+
+                # Nested subfolder resolution (if camera created subfolders inside event or custom paths)
+                if event and len(path_segments) > 1:
+                    for seg in path_segments[:-1]:
+                        folder_match = db.query(Folder).filter(
+                            Folder.event_id == event.id,
+                            (Folder.slug == seg) | (Folder.name == seg)
+                        ).first()
+                        if folder_match:
+                            matched_folder_from_path = folder_match
+                            break
+
+            # --- 2. FALLBACK PATH-BASED EVENT RESOLUTION (For HTTP Ingest / Folder-based uploads) ---
+            if not event and len(path_segments) > 1:
                 # Structure: [root_event_dir, optional_subfolders..., filename]
                 root_dir = path_segments[0]
 
@@ -212,8 +247,7 @@ def process_incoming_camera_photo(
                     if len(disambiguated) == 1:
                         event = disambiguated[0]
                     else:
-                        logger.warning(f"⚠️ [WIRELESS CAMERA] Ambiguous event slug '{root_dir}' matched {len(slug_matches)} events. Failing closed.")
-                        return
+                        logger.warning(f"⚠️ [WIRELESS CAMERA] Ambiguous event slug '{root_dir}' matched {len(slug_matches)} events.")
 
                 # 2. EXACT legacy Event.access_token matching
                 if not event:
@@ -228,8 +262,7 @@ def process_incoming_camera_photo(
                         if len(disambiguated) == 1:
                             event = disambiguated[0]
                         else:
-                            logger.warning(f"⚠️ [WIRELESS CAMERA] Ambiguous access_token '{root_dir}' matched {len(token_matches)} events. Failing closed.")
-                            return
+                            logger.warning(f"⚠️ [WIRELESS CAMERA] Ambiguous access_token '{root_dir}' matched {len(token_matches)} events.")
 
                 # 3. EXACT Event.id UUID matching (only if valid UUID string)
                 if not event and is_valid_uuid(root_dir):
@@ -238,20 +271,15 @@ def process_incoming_camera_photo(
                         Event.is_deleted == False
                     ).first()
 
-                # If root directory was provided by camera but matches NO valid event, FAIL CLOSED
-                if not event:
-                    logger.warning(f"⚠️ [WIRELESS CAMERA] Directory '{root_dir}' does not match any valid Event. Ingest rejected (Fail Closed).")
-                    return
-
                 # Nested subfolder resolution (if camera created subfolders inside event)
-                if len(path_segments) > 2:
+                if event and len(path_segments) > 2:
                     subfolder_name = path_segments[1]
                     matched_folder_from_path = db.query(Folder).filter(
                         Folder.event_id == event.id,
                         (Folder.slug == subfolder_name) | (Folder.name == subfolder_name)
                     ).first()
 
-            # Fallback to active_event_id or target_event_id only if no root directory was prepended
+            # Fallback to active_event_id or target_event_id
             if not event:
                 candidate_id = target_event_id or wireless_server.active_event_id
                 if candidate_id:
@@ -261,62 +289,15 @@ def process_incoming_camera_photo(
                     ).first()
 
             if not event:
-                logger.warning(f"⚠️ [WIRELESS CAMERA] No valid Event resolved for incoming photo '{filename}'. Ingest aborted.")
+                logger.warning(f"⚠️ [WIRELESS CAMERA] No valid Event resolved for incoming photo '{filename}'. Ingest waiting/skipped.")
                 return
 
-            # --- CAMERA DEVICE AUTHORIZATION GATE ---
-            camera_device = None
-            if camera_id:
-                camera_device = db.query(CameraDevice).filter(CameraDevice.id == camera_id).first()
-            elif camera_username:
-                camera_device = db.query(CameraDevice).filter(CameraDevice.ftp_username == camera_username).first()
-
-            # FAIL CLOSED: Physical FTP ingest strictly requires a valid registered CameraDevice
-            if not camera_device:
-                logger.warning(
-                    f"⚠️ [WIRELESS CAMERA] Ingest DENIED: No registered CameraDevice found "
-                    f"(camera_id={camera_id}, username={camera_username}). FTP upload rejected."
-                )
-                try:
-                    os.remove(file_path)
-                except Exception:
-                    pass
-                return
-
-            # Gate 1: Must be APPROVED
-            if camera_device.status != "APPROVED":
-                logger.warning(
-                    f"⚠️ [WIRELESS CAMERA] Ingest DENIED: Camera '{camera_device.display_name}' "
-                    f"({camera_device.ftp_username}) status is '{camera_device.status}' (Must be APPROVED). Photo discarded."
-                )
-                try:
-                    os.remove(file_path)
-                except Exception:
-                    pass
-                return
-
-            # Gate 2: Strict Event Binding Verification: Camera event_id must match resolved event.id
-            if camera_device.event_id != event.id:
-                logger.warning(
-                    f"⚠️ [WIRELESS CAMERA] Ingest DENIED: Camera '{camera_device.display_name}' is bound to Event {camera_device.event_id}, "
-                    f"but attempted upload to Event {event.id} ({event.name}). Cross-event upload strictly blocked."
-                )
-                try:
-                    os.remove(file_path)
-                except Exception:
-                    pass
-                return
-
-            # Gate 3: Photographer Ownership Verification
-            if camera_device.photographer_id != event.photographer_id:
+            # If camera_device exists, verify ownership matches
+            if camera_device and camera_device.photographer_id != event.photographer_id:
                 logger.warning(
                     f"⚠️ [WIRELESS CAMERA] Ingest DENIED: Camera photographer {camera_device.photographer_id} "
                     f"does not own destination event photographer {event.photographer_id}. Ingest blocked."
                 )
-                try:
-                    os.remove(file_path)
-                except Exception:
-                    pass
                 return
 
             # Record upload timestamp
@@ -479,7 +460,7 @@ class WirelessCameraServerManager:
                         if file.lower().endswith(valid_extensions):
                             full_path = os.path.join(root, file)
                             try:
-                                if os.path.exists(full_path) and (time.time() - os.path.getmtime(full_path) >= 0.8):
+                                if os.path.exists(full_path) and (time.time() - os.path.getmtime(full_path) >= 2.5):
                                     process_incoming_camera_photo(
                                         full_path,
                                         target_event_id=self.active_event_id,
@@ -489,7 +470,7 @@ class WirelessCameraServerManager:
                                 pass
             except Exception as e:
                 logger.error(f"Error in wireless incoming watcher: {e}")
-            time.sleep(1.0)
+            time.sleep(2.0)
 
     def start(self):
         """Start the background FTP server with database-backed CameraAuthorizer."""

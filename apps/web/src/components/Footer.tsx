@@ -1,12 +1,11 @@
-'use client';
+﻿'use client';
 
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
-  Camera, Sparkles, ShieldCheck, Heart, ArrowRight, 
-  ChevronDown, Instagram, Youtube, Mail, 
-  CheckCircle2, HardDrive, Play, Lock
+  Camera, ShieldCheck, HardDrive, ChevronDown, 
+  ArrowRight, Heart, Mail
 } from 'lucide-react';
 import { LiveDemoModal } from '@/components/home/LiveDemoModal';
 
@@ -20,7 +19,7 @@ export function Footer() {
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
   const [openAccordions, setOpenAccordions] = useState<{ [key: string]: boolean }>({});
 
-  // 1. Hide Footer on Guest Galleries, Client Album Selection & Field Crew Portals
+  // Hide Footer on Guest Galleries, Client Album Selection & Field Crew Portals
   if (
     pathname.startsWith('/e/') || 
     pathname.startsWith('/selection/') || 
@@ -39,161 +38,95 @@ export function Footer() {
   };
 
   const footerSections: { [key: string]: FooterAccordionSection } = {
-    platform: {
-      title: 'Platform & AI',
+    product: {
+      title: 'Product & AI',
       links: [
         { label: 'How It Works', href: '/#how-it-works' },
-        { label: 'AI Facial Recognition', href: '/#how-it-works' },
-        { label: 'Camera Wi-Fi FTP Ingest', href: '/#how-it-works' },
+        { label: 'AI Facial Recognition', href: '/#ai-showcase' },
         { label: 'One QR. Every Memory', href: '/#how-it-works' },
-        { label: 'Client Album Selection', href: '/#business-os' },
+        { label: 'Pricing Plans', href: '/#pricing' },
+        { label: 'Security & Privacy', href: '/#security' },
       ]
     },
     studioOs: {
       title: 'Studio Business OS',
       links: [
         { label: 'Events Dashboard', href: '/dashboard' },
-        { label: 'Leads & Inquiries CRM', href: '/dashboard/crm' },
-        { label: 'GST Tax Invoices & UPI', href: '/dashboard/finance' },
-        { label: 'Date Booking Calendar', href: '/dashboard/calendar' },
-        { label: 'Crew Field Mobile Portal', href: '/crew/login' },
+        { label: 'Leads & CRM', href: '/dashboard/crm' },
+        { label: 'GST Invoices & Finance', href: '/dashboard/finance' },
+        { label: 'Booking Calendar', href: '/dashboard/calendar' },
+        { label: 'Crew Mobile Portal', href: '/crew/login' },
       ]
     },
     company: {
-      title: 'Company & Trust',
+      title: 'Company',
       links: [
-        { label: 'About Get My Moment', href: '/about' },
-        { label: 'Pricing Plans', href: '/#pricing' },
-        { label: 'Frequently Asked Questions', href: '/#faq' },
+        { label: 'About Us', href: '/about' },
         { label: 'Contact Studio Support', href: '/contact' },
-        { label: 'Biometric Privacy Policy', href: '/about#privacy' },
+        { label: 'Frequently Asked Questions', href: '/#faq' },
       ]
     },
-    connect: {
-      title: 'Connect & Community',
+    support: {
+      title: 'Support & Community',
       links: [
-        { label: 'Instagram Community', href: 'https://instagram.com', isExternal: true },
-        { label: 'WhatsApp Studio Help', href: 'https://wa.me/919662086550', isExternal: true },
-        { label: 'YouTube Tutorials', href: 'https://youtube.com', isExternal: true },
-        { label: 'getmymoments@gmail.com', href: 'mailto:getmymoments@gmail.com', isExternal: true },
+        { label: 'Photographer Sign In', href: '/login' },
+        { label: 'Start Free Trial', href: '/login?mode=signup' },
+        { label: 'Privacy Policy', href: '/about#privacy' },
+        { label: 'Terms of Service', href: '/about#terms' },
       ]
     }
   };
 
   return (
     <>
-      <footer className="bg-[#F3F1EC] text-[#1F1F1F] relative overflow-hidden border-t border-[#E2DDD5] selection:bg-[#E86A5B] selection:text-white" aria-labelledby="footer-heading">
+      <footer className="bg-white text-[#181818] border-t border-[#E8E4DC] relative overflow-hidden" aria-labelledby="footer-heading">
         <h2 id="footer-heading" className="sr-only">Get My Moment Footer</h2>
 
-        {/* ========================================================================= */}
-        {/* SECTION A: EMOTIONAL BRAND HERO CTA (Warm Neomorphic Card)                */}
-        {/* ========================================================================= */}
-        <div className="border-b border-[#E2DDD5] relative z-10 py-12 sm:py-16">
-          <div className="max-w-6xl 2xl:max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-10">
-            <div className="neu-card p-6 sm:p-12 lg:p-14 rounded-3xl bg-[#FAF9F7] border border-[#E8E5E2] text-center shadow-[9px_9px_18px_#D4D0C7,-9px_-9px_18px_#FFFFFF] relative overflow-hidden">
-              {/* Subtle Warm Amber Light */}
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-40 bg-gradient-to-b from-[#E86A5B]/10 to-transparent blur-3xl pointer-events-none" />
-
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-[#E86A5B]/10 text-[#E86A5B] border border-[#E86A5B]/20 mb-5 shadow-sm neu-pill">
-                <Sparkles className="w-3.5 h-3.5 text-[#E86A5B]" />
-                <span>THE FUTURE OF WEDDING PHOTOGRAPHY DELIVERY</span>
-              </div>
-
-              <h3 className="text-3xl sm:text-5xl lg:text-6xl font-display font-black tracking-tight text-[#1F1F1F] max-w-4xl mx-auto leading-[1.12]">
-                Your moments. <br />
-                Your memories. <br />
-                <span className="text-[#E86A5B]">
-                  Forever.
-                </span>
-              </h3>
-
-              <p className="mt-5 text-xs sm:text-sm lg:text-base text-[#6B6B6B] max-w-2xl mx-auto leading-relaxed font-normal">
-                Stop sharing messy Google Drive folders. Deliver unforgettable client experiences with sub-50ms AI face recognition and complete studio business automation.
-              </p>
-
-              <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3.5">
-                <Link
-                  href="/login?mode=signup"
-                  className="w-full sm:w-auto btn-primary py-3.5 px-8 text-sm font-bold shadow-lg shadow-[#E86A5B]/25 flex items-center justify-center gap-2.5 active:scale-95"
-                >
-                  <Camera className="w-4 h-4" />
-                  <span>Start Free Studio Trial</span>
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
-                <button
-                  onClick={() => setIsDemoModalOpen(true)}
-                  className="w-full sm:w-auto neu-btn-secondary py-3.5 px-7 text-sm font-bold flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                >
-                  <Play className="w-4 h-4 text-[#E86A5B] fill-current" />
-                  <span>Try Live Demo Wedding</span>
-                </button>
-              </div>
-
-              <div className="mt-6 flex items-center justify-center gap-6 text-[11px] sm:text-xs text-[#6B6B6B] flex-wrap">
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>5 GB Free Storage</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>No Credit Card Required</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Setup in 2 Minutes</span>
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* SECTION B: 5-COLUMN DESKTOP GRID / SECTION C: MOBILE ACCORDIONS           */}
-        {/* ========================================================================= */}
-        <div className="max-w-7xl 2xl:max-w-[1500px] 3xl:max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-12 py-12 sm:py-16 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-            {/* Column 1: Brand & Trust Badge */}
+        {/* Main Footer Container */}
+        <div className="max-w-7xl 2xl:max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-18">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12">
+            {/* Column 1: Brand & Trust Badges (Left) */}
             <div className="lg:col-span-4 space-y-4">
               <Link href="/" className="flex items-center gap-2.5 group shrink-0">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-[#EE7E6F] via-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shadow-[3px_3px_8px_#D4D0C7,-3px_-3px_8px_#FFFFFF] group-hover:scale-105 transition-all duration-300 shrink-0">
-                  <Camera className="w-5 h-5 text-white stroke-[2.5]" />
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-[#E86A5B] to-[#C94F43] flex items-center justify-center text-white font-bold shadow-xs group-hover:scale-105 transition-transform duration-200 shrink-0">
+                  <Camera className="w-5 h-5 text-white stroke-[2.2]" />
                 </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="font-display font-extrabold text-lg sm:text-xl tracking-tight text-[#1F1F1F] leading-none">
+                <div className="flex flex-col">
+                  <span className="font-display font-black text-lg sm:text-xl tracking-tight text-[#181818] leading-none">
                     Get My Moment
                   </span>
-                  <span className="text-[9px] font-bold tracking-widest text-[#E86A5B] uppercase mt-0.5">
-                    STUDIO OS &amp; AI DELIVERY
+                  <span className="text-[10px] font-bold tracking-widest text-[#E86A5B] uppercase mt-0.5">
+                    AI Photo Delivery
                   </span>
                 </div>
               </Link>
 
-              <p className="text-xs sm:text-sm text-[#6B6B6B] leading-relaxed max-w-sm">
-                The next-generation AI photo delivery platform and studio business operating system engineered specifically for Indian wedding photographers.
+              <p className="text-xs sm:text-sm text-[#605D58] leading-relaxed max-w-sm">
+                AI-powered wedding photo delivery and studio business management built specifically for Indian wedding photographers.
               </p>
 
-              {/* Trust Badges */}
+              {/* Trust Pillars */}
               <div className="pt-2 flex flex-col gap-2">
-                <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#1F1F1F]">
+                <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#181818]">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>100% Event-Scoped Biometric Privacy</span>
                 </div>
-                <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#1F1F1F]">
+                <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#181818]">
                   <HardDrive className="w-4 h-4 text-[#E86A5B] shrink-0" />
-                  <span>Encrypted Cloud Storage with SHA-256</span>
+                  <span>Secure Cloud Storage</span>
                 </div>
               </div>
             </div>
 
-            {/* Desktop Navigation Columns (hidden on mobile, shown on md/lg) */}
+            {/* Desktop Navigation Columns (4 Columns on md+) */}
             <div className="hidden md:grid md:grid-cols-4 lg:col-span-8 gap-8">
-              {/* Col 2: Platform */}
+              {/* Product */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#1F1F1F]">
-                  {footerSections.platform.title}
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#181818]">
+                  {footerSections.product.title}
                 </h4>
-                <ul className="space-y-2 text-xs text-[#6B6B6B]">
-                  {footerSections.platform.links.map((link, idx) => (
+                <ul className="space-y-2.5 text-xs text-[#605D58]">
+                  {footerSections.product.links.map((link, idx) => (
                     <li key={idx}>
                       <Link href={link.href} className="hover:text-[#E86A5B] transition-colors">
                         {link.label}
@@ -205,19 +138,19 @@ export function Footer() {
                       onClick={() => setIsDemoModalOpen(true)}
                       className="text-xs text-[#E86A5B] font-bold hover:underline flex items-center gap-1 cursor-pointer"
                     >
-                      <span>Try Demo Wedding</span>
+                      <span>Try Live Demo</span>
                       <ArrowRight className="w-3 h-3" />
                     </button>
                   </li>
                 </ul>
               </div>
 
-              {/* Col 3: Studio Business OS */}
+              {/* Studio OS */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#1F1F1F]">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#181818]">
                   {footerSections.studioOs.title}
                 </h4>
-                <ul className="space-y-2 text-xs text-[#6B6B6B]">
+                <ul className="space-y-2.5 text-xs text-[#605D58]">
                   {footerSections.studioOs.links.map((link, idx) => (
                     <li key={idx}>
                       <Link href={link.href} className="hover:text-[#E86A5B] transition-colors">
@@ -228,12 +161,12 @@ export function Footer() {
                 </ul>
               </div>
 
-              {/* Col 4: Company & Trust */}
+              {/* Company */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#1F1F1F]">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#181818]">
                   {footerSections.company.title}
                 </h4>
-                <ul className="space-y-2 text-xs text-[#6B6B6B]">
+                <ul className="space-y-2.5 text-xs text-[#605D58]">
                   {footerSections.company.links.map((link, idx) => (
                     <li key={idx}>
                       <Link href={link.href} className="hover:text-[#E86A5B] transition-colors">
@@ -244,65 +177,48 @@ export function Footer() {
                 </ul>
               </div>
 
-              {/* Col 5: Connect */}
+              {/* Support */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#1F1F1F]">
-                  {footerSections.connect.title}
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#181818]">
+                  {footerSections.support.title}
                 </h4>
-                <ul className="space-y-2 text-xs text-[#6B6B6B]">
-                  {footerSections.connect.links.map((link, idx) => (
+                <ul className="space-y-2.5 text-xs text-[#605D58]">
+                  {footerSections.support.links.map((link, idx) => (
                     <li key={idx}>
-                      <a
-                        href={link.href}
-                        target={link.isExternal ? '_blank' : undefined}
-                        rel={link.isExternal ? 'noopener noreferrer' : undefined}
-                        className="hover:text-[#E86A5B] transition-colors flex items-center gap-1.5"
-                      >
-                        <span>{link.label}</span>
-                      </a>
+                      <Link href={link.href} className="hover:text-[#E86A5B] transition-colors">
+                        {link.label}
+                      </Link>
                     </li>
                   ))}
                 </ul>
               </div>
             </div>
 
-            {/* Mobile Accessible Accordions (shown only on mobile < md) */}
-            <div className="md:hidden space-y-3 pt-2">
+            {/* Mobile Accordion (Mobile < md only) */}
+            <div className="md:hidden space-y-2.5">
               {Object.entries(footerSections).map(([key, section]) => {
                 const isOpen = !!openAccordions[key];
                 return (
-                  <div key={key} className="border border-[#E2DDD5] rounded-2xl overflow-hidden bg-[#FAF9F7] shadow-sm">
+                  <div key={key} className="border border-[#E8E4DC] rounded-2xl overflow-hidden bg-[#FAF8F5]">
                     <button
                       onClick={() => toggleAccordion(key)}
-                      className="w-full p-4 text-left flex items-center justify-between gap-3 text-xs font-bold text-[#1F1F1F] cursor-pointer"
+                      className="w-full p-4 text-left flex items-center justify-between gap-3 text-xs font-bold text-[#181818] cursor-pointer"
                       aria-expanded={isOpen}
-                      aria-controls={`footer-accordion-${key}`}
                     >
                       <span>{section.title}</span>
                       <ChevronDown className={`w-4 h-4 text-[#E86A5B] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                     </button>
                     {isOpen && (
-                      <div id={`footer-accordion-${key}`} className="px-4 pb-4 space-y-2 border-t border-[#E2DDD5] pt-3 bg-[#F3F1EC]/60">
-                        <ul className="space-y-2 text-xs text-[#6B6B6B]">
+                      <div className="px-4 pb-4 space-y-2 border-t border-[#E8E4DC] pt-3 bg-white">
+                        <ul className="space-y-2 text-xs text-[#605D58]">
                           {section.links.map((link, idx) => (
                             <li key={idx}>
-                              {link.isExternal ? (
-                                <a
-                                  href={link.href}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="hover:text-[#E86A5B] transition-colors block py-1 font-medium"
-                                >
-                                  {link.label}
-                                </a>
-                              ) : (
-                                <Link
-                                  href={link.href}
-                                  className="hover:text-[#E86A5B] transition-colors block py-1 font-medium"
-                                >
-                                  {link.label}
-                                </Link>
-                              )}
+                              <Link
+                                href={link.href}
+                                className="hover:text-[#E86A5B] transition-colors block py-0.5"
+                              >
+                                {link.label}
+                              </Link>
                             </li>
                           ))}
                         </ul>
@@ -315,30 +231,22 @@ export function Footer() {
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* SECTION D: LEGAL & COPYRIGHT BAR (Warm Neomorphic Cream)                  */}
-        {/* ========================================================================= */}
-        <div className="border-t border-[#E2DDD5] bg-[#EBE8E1]/70 relative z-10">
-          <div className="max-w-7xl 2xl:max-w-[1500px] 3xl:max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-12 py-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#6B6B6B]">
-            <div className="flex flex-col sm:flex-row items-center gap-2 text-center sm:text-left">
-              <span>© {new Date().getFullYear()} <strong className="text-[#1F1F1F]">Get My Moment</strong>. All rights reserved.</span>
-              <span className="hidden sm:inline text-[#D4D0C7]">•</span>
-              <span className="text-[11px] text-[#8C8C8C]">Developed by Pro_Technologies</span>
+        {/* Legal & Copyright Bar */}
+        <div className="border-t border-[#E8E4DC] bg-[#FAF8F5]">
+          <div className="max-w-7xl 2xl:max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#605D58]">
+            <div className="flex items-center gap-2 text-center sm:text-left">
+              <span>&copy; {new Date().getFullYear()} <strong className="text-[#181818]">Get My Moment</strong>. All rights reserved.</span>
             </div>
 
-            <div className="flex items-center gap-4 text-[11px] sm:text-xs font-medium text-[#6B6B6B] flex-wrap justify-center">
+            <div className="flex items-center gap-4 text-xs font-medium text-[#605D58] flex-wrap justify-center">
               <Link href="/about#privacy" className="hover:text-[#E86A5B] transition-colors">
                 Privacy Policy
               </Link>
-              <span className="text-[#D4D0C7]">•</span>
+              <span>•</span>
               <Link href="/about#terms" className="hover:text-[#E86A5B] transition-colors">
                 Terms of Service
               </Link>
-              <span className="text-[#D4D0C7]">•</span>
-              <Link href="/about#biometric" className="hover:text-[#E86A5B] transition-colors">
-                Biometric Consent
-              </Link>
-              <span className="text-[#D4D0C7]">•</span>
+              <span>•</span>
               <Link href="/contact" className="hover:text-[#E86A5B] transition-colors">
                 Studio Support
               </Link>
