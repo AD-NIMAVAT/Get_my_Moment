@@ -240,12 +240,14 @@ def process_incoming_camera_photo(
                     # Nested subfolder resolution (if camera created subfolders inside event or custom paths)
                     if matches_event and len(path_segments) > 2:
                         subfolder_name = path_segments[1]
-                        folder_match = db.query(Folder).filter(
-                            Folder.event_id == event.id,
-                            (Folder.slug == subfolder_name) | (Folder.name == subfolder_name)
-                        ).first()
-                        if folder_match:
-                            matched_folder_from_path = folder_match
+                        # Ignore camera hardware default numbers / DCIM folder names
+                        if subfolder_name.upper() not in ["DCIM", "100MSDCF", "1", "2", "3", "4", "5", "100CANON", "100NIKON", "100_FUJI"]:
+                            folder_match = db.query(Folder).filter(
+                                Folder.event_id == event.id,
+                                (Folder.slug == subfolder_name) | (Folder.name == subfolder_name)
+                            ).first()
+                            if folder_match:
+                                matched_folder_from_path = folder_match
 
             # --- 2. FALLBACK PATH-BASED EVENT RESOLUTION (For HTTP Ingest / Legacy Folder-based uploads) ---
             if not event and len(path_segments) > 1:
@@ -508,6 +510,8 @@ class WirelessCameraServerManager:
         handler = CameraFTPHandler
         handler.authorizer = authorizer
         handler.banner = "Get My Moment Wireless Camera Ingest Ready"
+        handler.buffer_size = 524288  # 512 KB high-throughput streaming buffer
+        handler.timeout = 300
 
         # Explicitly configure passive ports range matching Docker & UFW firewall
         handler.passive_ports = range(30000, 30101)
