@@ -310,6 +310,14 @@ def process_incoming_camera_photo(
                 logger.warning(f"⚠️ [WIRELESS CAMERA] No valid Event resolved for incoming photo '{filename}'. Ingest waiting/skipped.")
                 return
 
+            # FAIL CLOSED: Physical FTP ingest strictly requires a valid registered CameraDevice if no target_event_id override
+            if not camera_device and not target_event_id:
+                logger.warning(
+                    f"⚠️ [WIRELESS CAMERA] Ingest DENIED: No registered CameraDevice found "
+                    f"(camera_id={camera_id}, username={camera_username}). FTP upload rejected."
+                )
+                return
+
             # If camera_device exists, verify ownership matches
             if camera_device and camera_device.photographer_id != event.photographer_id:
                 logger.warning(
